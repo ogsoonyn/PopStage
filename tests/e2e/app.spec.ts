@@ -1595,7 +1595,36 @@ test('左のメニュー: 表示クリアで編集用の表示をまとめて切
   await expect(page.locator('#pAuto')).toBeChecked({ checked: !au0 });
   await page.locator('#pSwing').click();
   await expect(page.locator('#tSwing')).toBeChecked({ checked: sw0 });
-  // 1手ずつ元に戻せる
+  // 1手ずつ元に戻せ、上のツールバーの表示も戻る
   await page.keyboard.press('Control+z');
   expect(await swing()).toEqual([!sw0, !au0]);
+  await expect(page.locator('#tSwing')).toBeChecked({ checked: !sw0 });
+  // レイヤーを切り替えると、そのレイヤーの揺れを映す
+  await app(a => { a.addLayer(); const l = a.activeLayer; l.physics = { ...l.physics, enabled: false }; a.setActiveLayer(a.doc.layers[0].id); a.setActiveLayer(l.id); });
+  await expect(page.locator('#tSwing')).toBeChecked({ checked: false });
+  await app(a => a.setActiveLayer(a.doc.layers[0].id));
+  await expect(page.locator('#tSwing')).toBeChecked({ checked: !sw0 });
+
+  // 膨らませるのプレビュー中も C は効く
+  await page.locator('#view').focus();
+  await page.keyboard.press('i');
+  await dragOnStage(page, [0.4, 0.35], [0.6, 0.65]);
+  await app(a => { a.view.grid = true; a.syncView(); });
+  await page.locator('#view').focus();
+  await page.keyboard.press('c');
+  expect(await app(a => [a.previewingInflate, a.view.grid])).toEqual([true, false]);
+  await page.locator('#inflCancel').click();
+});
+
+test('左のメニュー: 低い画面でもすべてのボタンに届く', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 620 });
+  await boot(page);
+  for (const sel of ['[data-tool=brush]', '[data-tool=view]', '[data-cmd=cleanView]', '[data-cmd=invert]']) {
+    const el = page.locator(`#toolNav ${sel}`);
+    await el.scrollIntoViewIfNeeded();
+    await expect(el).toBeInViewport();
+  }
+  // ステータスバーに重ならない
+  const nav = (await page.locator('#toolNav').boundingBox())!, status = (await page.locator('#sSave').boundingBox())!;
+  expect(nav.y + nav.height).toBeLessThanOrEqual(status.y + 1);
 });
