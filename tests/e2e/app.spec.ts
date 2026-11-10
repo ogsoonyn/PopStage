@@ -114,6 +114,113 @@ test('全体をぼかす: プレビュー、キャンセル、適用、元に戻
   expect(await snapshot()).toBe(blurred);
 });
 
+test('膨らませる: 範囲をドラッグし、高さを数値で決めて適用し、1手で戻せる', async ({ page }) => {
+  await boot(page);
+  // 関数は直接渡せないので、文字列にして window.popstage を引数に呼ぶ
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  await app(a => a.weightOp('全消去', (wm: any) => wm.clear()));
+  const maxWeight = () => app(a => a.activeLayer.weights.max() as number);
+  expect(await app(a => a.activeLayer.pop)).toBe(140);
+
+  await page.keyboard.press('i');
+  expect(await app(a => a.tool)).toBe('inflate');
+  await dragOnStage(page, [0.4, 0.35], [0.6, 0.65]);
+  const dlg = page.locator('#inflateDialog');
+  await expect(dlg).toHaveJSProperty('open', true);
+  await expect(page.locator('#inflTitle')).toHaveText('範囲を膨らませる');
+  // 高さの初期値はポップ量と同じなので、頂上はウェイト 100%
+  expect(await maxWeight()).toBe(255);
+  // プレビュー中は元に戻すなどを受け付けない
+  await expect(page.locator('#toolOptions button[data-cmd=undo]')).toBeDisabled();
+
+  // 高さを 70px(ポップ量 140px の半分)にする
+  await page.locator('#inflHeightN').fill('70');
+  // プレビューは次のフレームで計算するので、反映されるまで待つ
+  await expect.poll(async () => Math.abs(await maxWeight() - 128)).toBeLessThanOrEqual(1);
+  await expect(page.locator('#inflNote')).toContainText('70px');
+
+  // 数値で大きさを変えると範囲も変わる
+  const w0 = await app(a => a.inflateState.area.w);
+  await page.locator('#inflW').fill(String(w0 + 100));
+  await expect.poll(() => app(a => a.inflateState.area.w)).toBe(w0 + 100);
+
+  // ドラッグし直すと範囲を描き直す(同じプレビューのまま)
+  await dragOnStage(page, [0.3, 0.3], [0.45, 0.5]);
+  expect(await app(a => a.inflateState.area.w)).not.toBe(w0 + 100);
+
+  await page.locator('#inflApply').click();
+  await expect(dlg).toHaveJSProperty('open', false);
+  expect(await app(a => a.history.undoLabel)).toMatch(/^膨らませる\(楕円 \d+×\d+px・高さ 70px\)$/);
+  const applied = await weightSum(page);
+  expect(applied).toBeGreaterThan(0);
+
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+z');
+  expect(await weightSum(page)).toBe(0);
+  await page.keyboard.press('Control+Shift+z');
+  expect(await weightSum(page)).toBe(applied);
+
+  // キャンセルすると元どおりで、何も記録しない
+  await dragOnStage(page, [0.55, 0.55], [0.7, 0.7]);
+  expect(await weightSum(page)).toBeGreaterThan(applied);
+  await page.locator('#inflCancel').click();
+  expect(await weightSum(page)).toBe(applied);
+  expect(await app(a => a.history.undoLabel)).toMatch(/^膨らませる/);
+});
+
+test('膨らませる: 高さがポップ量を超えるとポップ量を上げ、今の塗りの高さは保ったまま1手で戻せる', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  await app(a => { (window as any).__orig = a.activeLayer.weights.data.slice(); });
+  expect(await app(a => a.activeLayer.pop)).toBe(140);
+
+  await page.keyboard.press('i');
+  await dragOnStage(page, [0.3, 0.25], [0.4, 0.35]);
+  await expect(page.locator('#inflateDialog')).toHaveJSProperty('open', true);
+  // ポップ量(140px)より高い 420px を指定すると、プレビューの間からポップ量が 420px になる
+  await page.locator('#inflHeightN').fill('420');
+  await expect.poll(() => app(a => a.activeLayer.pop)).toBe(420);
+  await expect(page.locator('#inflNote')).toContainText('140px → 420px');
+  await expect(page.locator('#pPopN')).toBeDisabled(); // プレビュー中はポップ量を触らせない
+  await expect.poll(() => app(a => a.history.canUndo)).toBe(false); // まだ記録しない
+
+  await page.locator('#inflApply').click();
+  expect(await app(a => a.history.undoLabel)).toMatch(/^膨らませる\(楕円 \d+×\d+px・高さ 420px\)$/);
+  expect(await app(a => a.activeLayer.pop)).toBe(420);
+  expect(await app(a => a.activeLayer.weights.max())).toBe(255); // 新しい膨らみの頂上
+  // 元の塗り(プリン)の高さ(ウェイト × ポップ量)は、ポップ量を上げても変わらない
+  const outside = await app(a => {
+    const wm = a.activeLayer.weights, orig: Uint8Array = (window as any).__orig;
+    let n = 0, bad = 0;
+    for (let i = 0; i < orig.length; i++) {
+      if (orig[i] === 0) continue;
+      const kept = Math.abs(wm.data[i] * 420 - orig[i] * 140) / 255 <= 420 / 255; // 丸めは 1 段まで
+      n++; if (!kept) bad++;
+    }
+    return { n, bad };
+  });
+  expect(outside.n).toBeGreaterThan(1000);
+  // 膨らみと重なった所(元の塗りより高くなった所)を除けば、元の塗りの高さは保たれる
+  expect(outside.bad / outside.n).toBeLessThan(0.05);
+
+  // 1手で戻すと、ポップ量もウェイトも元どおり
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+z');
+  expect(await app(a => a.activeLayer.pop)).toBe(140);
+  expect(await app(a => { const o: Uint8Array = (window as any).__orig, d: Uint8Array = a.activeLayer.weights.data; return o.every((v, i) => v === d[i]); })).toBe(true);
+  await page.keyboard.press('Control+Shift+z');
+  expect(await app(a => a.activeLayer.pop)).toBe(420);
+
+  // キャンセルすると、プレビューで上げたポップ量も元に戻る
+  await dragOnStage(page, [0.6, 0.25], [0.7, 0.35]);
+  await page.locator('#inflHeightN').fill('900');
+  await expect.poll(() => app(a => a.activeLayer.pop)).toBe(900);
+  await page.locator('#inflCancel').click();
+  expect(await app(a => a.activeLayer.pop)).toBe(420);
+  await expect(page.locator('#pPopN')).toBeEnabled();
+  await expect(page.locator('#pPopN')).toHaveValue('420');
+});
+
 test('画像を薄く・ポップを一時OFF: 画面だけが変わり、書き出しには影響しない', async ({ page }) => {
   await boot(page);
   await dragOnStage(page, [0.5, 0.5], [0.65, 0.45], 'right'); // 斜めから見て持ち上がりを分かるようにする
@@ -654,7 +761,7 @@ test('保存して開き直すと同じ状態に戻る', async ({ page }) => {
   const result = await page.evaluate(async () => {
     const a = (window as any).popstage;
     a.addLayer();
-    a.store.patchLayer(a.activeLayerId, { pop: -42, name: '二枚目' });
+    a.store.patchLayer(a.activeLayerId, { pop: 1234, name: '二枚目' });
     a.activeLayer.weights.data.fill(33);
     a.store.patchProject({ background: '#336699' });
     const before = JSON.stringify(a.doc.layers.map((l: any) => [l.name, l.pop, l.physics, l.weights.data.reduce((s: number, v: number) => s + v, 0)]));

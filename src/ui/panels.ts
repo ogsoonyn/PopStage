@@ -4,6 +4,7 @@ import { PRESETS, PRESET_ORDER, MOTIONS, MOTION_PARAMS, LIMITS, applyPreset, mot
 import { PatchLayer, PatchDocument, PatchProject, Batch, SetFov } from '../commands/commands';
 import { $, toast } from './dom';
 import { drawWeightThumb } from './imageio';
+import { popToSlider, sliderToPop } from './popSlider';
 
 type Target = 'layer' | 'doc' | 'project';
 
@@ -59,8 +60,9 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   /* ---------- レイヤーのプロパティ ---------- */
 
-  bindRange('pPop', { target: 'layer', keys: ['pop'], label: 'ポップ量', toPatch: v => ({ pop: v }) });
-  $<HTMLInputElement>('pPop').addEventListener('input', e => { $<HTMLInputElement>('pPopN').value = (e.target as HTMLInputElement).value; });
+  // ポップ量のスライダーは目盛りと px が比例しない(後半ほど粗い。popSlider.ts)
+  bindRange('pPop', { target: 'layer', keys: ['pop'], label: 'ポップ量', toPatch: v => ({ pop: sliderToPop(v) }) });
+  $<HTMLInputElement>('pPop').addEventListener('input', e => { $<HTMLInputElement>('pPopN').value = String(sliderToPop(+(e.target as HTMLInputElement).value)); });
   $<HTMLInputElement>('pPopN').addEventListener('change', e => {
     const v = Math.max(LIMITS.pop.min, Math.min(LIMITS.pop.max, Math.round(+(e.target as HTMLInputElement).value || 0)));
     exec('layer', 'ポップ量', { pop: v });
@@ -331,9 +333,11 @@ export function bindPanels(app: App): { refresh: () => void } {
     const l = app.activeLayer, d = app.doc, p = app.project;
     const disabled = !l;
     document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('#props input, #props select').forEach(el => { if (!el.id.startsWith('v')) el.disabled = disabled; });
+    // 膨らませるのプレビュー中は、高さに合わせてポップ量を上げることがあるので、ポップ量は触らせない
+    if (app.previewingInflate) { $<HTMLInputElement>('pPop').disabled = true; $<HTMLInputElement>('pPopN').disabled = true; }
     $('activeLayerName').textContent = l?.name ?? '-';
     if (l) {
-      setRange('pPop', l.pop);
+      setRange('pPop', popToSlider(l.pop));
       if (document.activeElement !== $('pPopN')) $<HTMLInputElement>('pPopN').value = String(l.pop);
       $<HTMLInputElement>('pSwing').checked = l.physics.enabled;
       presetSel.value = l.physics.preset;
@@ -378,6 +382,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   store.on('project', refresh);
   app.on('active', () => { updateSelection(); refresh(); });
   app.on('view', refresh);
+  app.on('inflate', refresh); // プレビュー中はポップ量を触らせない
 
   renderList(); refresh();
   return { refresh };

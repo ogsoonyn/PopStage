@@ -275,13 +275,13 @@ export class Stage {
     return this.mainRect ?? { x: 0, y: 0, w: this.canvas.clientWidth, h: this.canvas.clientHeight };
   }
 
-  /** ポップの奥行きの範囲(画像のローカル z)。ウェイトは 0〜1 なので、正負のポップ量をそれぞれ足した範囲に収まる */
+  /** ポップの奥行きの範囲(画像のローカル z)。ウェイトは 0〜1、ポップ量は 0 以上なので、0 からポップ量の合計までに収まる */
   private depthRange(): { min: number; max: number } {
     const pops = this.uniforms.uPop.value as number[], n = this.uniforms.uLayerCount.value as number;
     const k = 1 - (this.uniforms.uFlat.value as number);
-    let min = 0, max = 0;
-    for (let i = 0; i < n; i++) { if (pops[i] > 0) max += pops[i] * k; else min += pops[i] * k; }
-    return { min, max };
+    let max = 0;
+    for (let i = 0; i < n; i++) max += Math.max(0, pops[i]) * k;
+    return { min: 0, max };
   }
 
   /**

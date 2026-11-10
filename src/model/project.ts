@@ -163,7 +163,7 @@ export interface Project {
 
 export const LIMITS = {
   maxLayers: 8,
-  pop: { min: -500, max: 500, def: 80 },
+  pop: { min: 0, max: 1500, def: 80 },
   density: { min: 16, max: 512, def: 128 },
   fov: { min: 10, max: 90, def: 40 },
   period: { min: 0.3, max: 10, def: 1.2 },

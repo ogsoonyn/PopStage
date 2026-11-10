@@ -62,7 +62,7 @@ describe('.popstage', () => {
     const doc = createDocument({ bytes: new Uint8Array([9, 8, 7, 6]), mime: 'image/jpeg', ext: 'jpg', width: 300, height: 200 }, 'プリン');
     const l1 = doc.layers[0];
     for (let i = 0; i < l1.weights.data.length; i += 3) l1.weights.data[i] = i & 0xff;
-    l1.pop = -123; l1.physics = { enabled: false, preset: 'bain', hardness: 0.1, mass: 0.9, weight: 0.3, damping: 0.05, motion: 'stretch', motionParams: { 'stretch.amp': 1.5, 'stretch.dir': 3, 'charge.depth': 0.9 } };
+    l1.pop = 1234; l1.physics = { enabled: false, preset: 'bain', hardness: 0.1, mass: 0.9, weight: 0.3, damping: 0.05, motion: 'stretch', motionParams: { 'stretch.amp': 1.5, 'stretch.dir': 3, 'charge.depth': 0.9 } };
     const l2 = createLayer(doc, '顔'); l2.visible = false; l2.weights.data.fill(77);
     doc.layers.push(l2);
     doc.meshDensity = 256;
@@ -99,13 +99,18 @@ describe('.popstage', () => {
     const json = {
       formatVersion: 1, app: 'PopStage', project: { camera: { fov: 999 } },
       documents: [{ name: 'x', image: { path: 'images/doc-0.png', width: 10, height: 10 }, meshDensity: 99999,
-        layers: [{ name: 'L', pop: 99999, physics: { hardness: 5, preset: 'zzz' }, weights: { path: 'none.png' } }] }],
+        layers: [
+          { name: 'L', pop: 99999, physics: { hardness: 5, preset: 'zzz' }, weights: { path: 'none.png' } },
+          // 以前はマイナスのポップ量(へこみ)を保存できた。今は 0 にする
+          { name: 'M', pop: -120, weights: { path: 'none.png' } },
+        ] }],
     };
     const zip = zipSync({ 'project.json': strToU8(JSON.stringify(json)), 'images/doc-0.png': new Uint8Array([1]) });
     const { project } = await deserializeProject(zip);
     expect(project.camera.fov).toBe(90);
     expect(project.documents[0].meshDensity).toBe(512);
-    expect(project.documents[0].layers[0].pop).toBe(500);
+    expect(project.documents[0].layers[0].pop).toBe(1500);
+    expect(project.documents[0].layers[1].pop).toBe(0);
     expect(project.documents[0].layers[0].physics.hardness).toBe(1);
     expect(project.documents[0].layers[0].physics.preset).toBe('custom');
   });

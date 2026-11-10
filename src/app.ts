@@ -5,11 +5,12 @@
 import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultMultiCamera, defaultOrthoView, LIMITS, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
 import type { Rect } from './model/weightmap';
-import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from './commands/commands';
+import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, PatchLayer, Batch, weightOperation, diffTiles } from './commands/commands';
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld } from './physics/world';
 import { MotionRecorder } from './physics/recorder';
 import { Stroke, type PaintMode } from './paint/stroke';
+import { inflateShape, popForHeight, rescaleForPop, type InflateProfile, type InflateBlend } from './paint/inflate';
 import { serializeProject, serializeProjectBlob, deserializeProject, FILE_EXTENSION, type PngCacheEntry } from './storage/popstage';
 import { autosave } from './storage/autosave';
 import { recent, type RecentKind } from './storage/recent';
@@ -19,10 +20,30 @@ import { decodeForDisplay, canvasAlpha, browserDecodeGray, fileToAsset, rgbaToPn
 import { createSampleDocument } from './ui/sample';
 import { ask, saveFile, setBusy, toast } from './ui/dom';
 
-export type Tool = 'brush' | 'erase' | 'smooth' | 'grab' | 'shake' | 'view';
+export type Tool = 'brush' | 'erase' | 'smooth' | 'inflate' | 'grab' | 'shake' | 'view';
 export type PressureMode = 'strength' | 'size' | 'none';
 
 export interface BrushOptions { size: number; strength: number; hardness: number; pressure: PressureMode }
+
+/** 「膨らませる」の範囲。中心と幅・縦は元画像のピクセル単位(中心が原点、y は上向き) */
+export interface InflateArea { x: number; y: number; w: number; h: number }
+export interface InflateSettings {
+  shape: 'ellipse' | 'rect';
+  /** 頂上の高さ(元画像のピクセル)。null はレイヤーのポップ量と同じ */
+  height: number | null;
+  softness: number; // 0〜1
+  profile: InflateProfile;
+  blend: InflateBlend;
+}
+export interface InflateState {
+  readonly layerId: string;
+  readonly area: InflateArea;
+  readonly settings: InflateSettings & { height: number };
+  /** 始めたときのレイヤーのポップ量 */
+  readonly originalPop: number;
+  /** 高さに合わせて上げたポップ量(上げないときは originalPop と同じ) */
+  readonly pop: number;
+}
 
 type AppEvents = {
   tool: Tool;
@@ -30,6 +51,8 @@ type AppEvents = {
   view: void;
   status: void;
   file: void;
+  /** 膨らませるプレビューの開始・変更・終了 */
+  inflate: 'begin' | 'change' | 'end';
 };
 
 /**
@@ -69,6 +92,8 @@ export class App extends Emitter<AppEvents> {
    */
   shake: Vec3 = { x: 0, y: 0, z: 0 };
   brush: BrushOptions = { size: 64, strength: 0.3, hardness: 0, pressure: 'strength' };
+  /** 前回の「膨らませる」の設定(次に範囲を描いたときの初期値) */
+  inflateSettings: InflateSettings = { shape: 'ellipse', height: null, softness: 1, profile: 'dome', blend: 'max' };
   imageCanvas: HTMLCanvasElement | null = null;
   /** 表示用の画像の一辺の上限 */
   private get displaySize(): number { return Math.min(4096, this.stage.maxTextureSize); }
@@ -280,7 +305,7 @@ export class App extends Emitter<AppEvents> {
   }
 
   /** 書き出し・塗り・ぼかしのプレビュー・別のファイルの読み込みの最中は、ファイルを開かない */
-  get busy(): boolean { return this.exporting || this.stroking || this.previewingBlur || this.opening; }
+  get busy(): boolean { return this.exporting || this.stroking || this.previewingBlur || this.previewingInflate || this.opening; }
   private opening = false;
 
   /** confirmed: 未保存の変更を捨ててよいか、呼ぶ側で確かめ済み */
@@ -420,7 +445,7 @@ export class App extends Emitter<AppEvents> {
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = window.setTimeout(() => {
       // 塗りの最中・ぼかしのプレビュー中は、確定していない状態を保存しないよう後に回す
-      const unsettled = !!this.stroke || this.previewingBlur;
+      const unsettled = !!this.stroke || this.previewingBlur || this.previewingInflate;
       if (!this.dirty || !this.doc || unsettled) { if (unsettled) this.scheduleAutosave(); return; }
       const fail = (e: unknown) => {
         console.warn('autosave failed', e);
@@ -430,7 +455,7 @@ export class App extends Emitter<AppEvents> {
       // 直列化は重いので、操作の合間(アイドル時間)に行う
       idle(() => {
         if (!this.dirty || !this.doc) return;
-        if (this.stroke || this.previewingBlur) { this.scheduleAutosave(); return; }
+        if (this.stroke || this.previewingBlur || this.previewingInflate) { this.scheduleAutosave(); return; }
         try {
           const t = performance.now();
           const bytes = serializeProjectBlob(this.project, { pngCache: this.pngCache });
@@ -455,6 +480,7 @@ export class App extends Emitter<AppEvents> {
     const doc = this.doc, layer = this.activeLayer;
     if (!doc || !layer) return false;
     if (!layer.visible) { toast('非表示のレイヤーには塗れません。', 'warning'); return false; }
+    if (this.previewingInflate) { toast('「膨らませる」を適用するかキャンセルしてから塗ってください。', 'warning'); return false; }
     const wm = layer.weights, k = wm.width / doc.image.width;
     this.stroke = {
       stroke: new Stroke(wm, mode, { size: this.brush.size * k, strength: this.brush.strength, hardness: this.brush.hardness }),
@@ -531,6 +557,98 @@ export class App extends Emitter<AppEvents> {
   }
 
   get previewingBlur(): boolean { return !!this.blurPreview; }
+
+  /* 膨らませる: 範囲(楕円・矩形)を、指定した高さと断面で一括して膨らませる。
+     プレビューしながら数値を決め、適用で1手として記録する。
+     高さがポップ量を超えるときは、ポップ量を高さまで上げ、今の塗りの高さが変わらないようウェイトを縮める(同じ1手) */
+
+  private inflateSession: {
+    layerId: string; original: Uint8Array; area: InflateArea; settings: InflateSettings & { height: number };
+    originalPop: number; pop: number;
+    /** pop に合わせて縮めた元のウェイト(pop が originalPop と同じなら original と同じ中身) */
+    base: Uint8Array;
+  } | null = null;
+
+  get previewingInflate(): boolean { return !!this.inflateSession; }
+  get inflateState(): InflateState | null { return this.inflateSession; }
+
+  /** 範囲を描き始める(ドラッグの最初の動きで呼ぶ) */
+  beginInflateArea(area: InflateArea): boolean {
+    const layer = this.activeLayer;
+    if (!layer || !this.doc || this.busy) return false;
+    if (!layer.visible) { toast('非表示のレイヤーには塗れません。', 'warning'); return false; }
+    const st = this.inflateSettings, original = layer.weights.data.slice();
+    this.inflateSession = {
+      layerId: layer.id, original, area: { ...area },
+      // 高さの初期値は前回の値、初めてならポップ量と同じ(ポップ量が 0 なら既定のポップ量)
+      settings: { ...st, height: st.height ?? (layer.pop > 0 ? layer.pop : LIMITS.pop.def) },
+      originalPop: layer.pop, pop: layer.pop, base: original,
+    };
+    this.renderInflate();
+    this.emit('inflate', 'begin');
+    return true;
+  }
+
+  updateInflate(patch: { area?: Partial<InflateArea>; settings?: Partial<InflateSettings> }): void {
+    const s = this.inflateSession; if (!s) return;
+    if (patch.area) s.area = { ...s.area, ...patch.area };
+    if (patch.settings) s.settings = { ...s.settings, ...patch.settings, height: patch.settings.height ?? s.settings.height };
+    this.renderInflate();
+    this.emit('inflate', 'change');
+  }
+
+  /** プレビュー中だけレイヤーのポップ量を差し替える(アンドゥには積まず、「未保存」にもしない) */
+  private setPreviewPop(layerId: string, pop: number): void {
+    const layer = this.store.findLayer(layerId)?.layer;
+    if (!layer || layer.pop === pop) return;
+    layer.pop = pop;
+    this.store.emit('layer', { layerId, keys: ['pop'] });
+  }
+
+  private renderInflate(): void {
+    const s = this.inflateSession, doc = this.doc; if (!s || !doc) return;
+    const layer = this.store.findLayer(s.layerId)?.layer; if (!layer) return;
+    const wm = layer.weights, st = s.settings;
+    const pop = Math.min(LIMITS.pop.max, popForHeight(st.height, s.originalPop));
+    if (pop !== s.pop) {
+      s.pop = pop;
+      s.base = rescaleForPop(s.original, s.originalPop, pop);
+      this.setPreviewPop(s.layerId, pop);
+    }
+    wm.data.set(s.base);
+    const a = s.area, kx = wm.width / doc.image.width, ky = wm.height / doc.image.height;
+    const level = pop > 0 ? Math.min(1, st.height / pop) : 0;
+    inflateShape(wm, s.base, {
+      kind: st.shape, cx: (a.x / doc.image.width + 0.5) * wm.width, cy: (0.5 - a.y / doc.image.height) * wm.height, rx: a.w / 2 * kx, ry: a.h / 2 * ky,
+    }, { level, softness: st.softness, profile: st.profile, blend: st.blend });
+    this.store.weightsChanged(s.layerId, wm.fullRect, false);
+  }
+
+  endInflate(apply: boolean): void {
+    const s = this.inflateSession; if (!s) return;
+    this.inflateSession = null;
+    const layer = this.store.findLayer(s.layerId)?.layer;
+    if (layer) {
+      const wm = layer.weights, st = s.settings;
+      if (!apply) {
+        wm.data.set(s.original);
+        this.store.weightsChanged(s.layerId, wm.fullRect, false);
+        this.setPreviewPop(s.layerId, s.originalPop);
+      } else {
+        this.inflateSettings = { ...st }; // 次に描くときも同じ設定で始める
+        const tiles = diffTiles(s.original, wm), popChanged = s.pop !== s.originalPop;
+        if (!tiles.length && !popChanged) toast('変化はありませんでした。');
+        else {
+          const label = `膨らませる(${st.shape === 'ellipse' ? '楕円' : '矩形'} ${Math.round(s.area.w)}×${Math.round(s.area.h)}px・高さ ${st.height}px)`;
+          const edit = new WeightEdit(label, s.layerId, tiles);
+          // ポップ量を上げたときは、ポップ量とウェイトをまとめて1手にする(戻すと両方が元に戻る)
+          this.history.push(popChanged ? new Batch(label, [new PatchLayer(label, s.layerId, { pop: s.originalPop }, { pop: s.pop }), edit]) : edit);
+          this.store.emit('change', undefined);
+        }
+      }
+    }
+    this.emit('inflate', 'end');
+  }
 
   fromAlpha(): void {
     const c = this.imageCanvas, layer = this.activeLayer; if (!c || !layer) return;

@@ -4,6 +4,7 @@ import { bindStageInput, isTyping } from './ui/input';
 import { bindPanels } from './ui/panels';
 import { bindExportDialog } from './ui/exportDialog';
 import { bindBlurDialog } from './ui/blurDialog';
+import { bindInflateDialog } from './ui/inflateDialog';
 import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
 import { $, ask, toast } from './ui/dom';
@@ -34,6 +35,7 @@ bindPanels(app);
 const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
 const recentDialog = bindRecentDialog(app);
+bindInflateDialog(app);
 
 /* ---------- ファイルを開く ---------- */
 
@@ -88,9 +90,18 @@ const commands: Record<string, { run: () => unknown; enabled?: () => boolean }> 
   about: { run: () => { $('aboutVersion').textContent = `バージョン ${__APP_VERSION__} ・ .popstage 形式 v1`; $<HTMLDialogElement>('aboutDialog').showModal(); } },
 };
 
+/** 膨らませるのプレビュー中は、表示の切り替え以外はできない(プレビュー中のウェイトを元に戻すなどしないように) */
+const SAFE_WHILE_INFLATING = new Set(['toggleOverlay', 'toggleGrid', 'toggleFade', 'toggleFlat', 'togglePause', 'toggleMulti', 'resetView', 'help', 'about']);
+const commandEnabled = (name: string): boolean => {
+  const c = commands[name];
+  if (!c) return false;
+  if (app.previewingInflate && !SAFE_WHILE_INFLATING.has(name)) return false;
+  return !c.enabled || c.enabled();
+};
+
 function runCommand(name: string): void {
   const c = commands[name];
-  if (!c || (c.enabled && !c.enabled())) return;
+  if (!c || !commandEnabled(name)) return;
   void Promise.resolve(c.run()).catch(e => { console.error(e); toast(String(e instanceof Error ? e.message : e), 'error'); });
 }
 
@@ -102,8 +113,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-cmd]').forEach(b => b.addEve
 
 function refreshCommands(): void {
   document.querySelectorAll<HTMLButtonElement>('[data-cmd]').forEach(b => {
-    const c = commands[b.dataset.cmd!];
-    b.disabled = !!c?.enabled && !c.enabled();
+    b.disabled = !commandEnabled(b.dataset.cmd!);
   });
   document.querySelector('[data-label=undo]')!.textContent = app.history.undoLabel ? `(${app.history.undoLabel})` : '';
   document.querySelector('[data-label=redo]')!.textContent = app.history.redoLabel ? `(${app.history.redoLabel})` : '';
@@ -115,6 +125,7 @@ app.on('active', refreshCommands);
 app.on('view', refreshCommands);
 app.store.on('layers', refreshCommands);
 app.store.on('replace', refreshCommands);
+app.on('inflate', refreshCommands);
 
 /* ---------- ツール ---------- */
 
@@ -122,6 +133,7 @@ const TOOL_HINTS: Record<Tool, string> = {
   brush: 'ドラッグで塗る(Alt で消しゴム)/ 右ドラッグで回転 / ホイールでズーム',
   erase: 'ドラッグでウェイトを消す',
   smooth: 'ドラッグで段差をならす',
+  inflate: 'ドラッグした範囲を一括で膨らませる(Shift で正円・正方形)/ 高さや断面は下のパネルで調整',
   grab: 'ドラッグで引っ張って離すと揺れる',
   shake: 'ドラッグで画像を振る(カメラが付いてくるので画像は動かず、揺れだけが見える)/ 中ドラッグで画像を動かす / 右ドラッグで回転',
   view: 'ドラッグで視点を回す / Space+ドラッグで平行移動',
@@ -156,7 +168,7 @@ window.addEventListener('keydown', e => {
   if (e.shiftKey && k === 'g') return hit('toggleGrid');
   if (e.shiftKey && k === 'w') return hit('toggleFade');
   if (e.key === 'Home') return hit('resetView');
-  const tools: Record<string, Tool> = { b: 'brush', e: 'erase', s: 'smooth', g: 'grab', y: 'shake', v: 'view' };
+  const tools: Record<string, Tool> = { b: 'brush', e: 'erase', s: 'smooth', i: 'inflate', g: 'grab', y: 'shake', v: 'view' };
   if (!e.shiftKey && tools[k]) { e.preventDefault(); app.setTool(tools[k]); return; }
   if (k === 'w') return hit('toggleOverlay');
   if (k === 'f') return hit('toggleFlat');

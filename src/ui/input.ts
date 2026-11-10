@@ -2,16 +2,18 @@
  * 3Dビュー上のポインタ操作。
  *   右ドラッグ: 回転 / 中ドラッグ・Space+左ドラッグ: 平行移動 / ホイール: ズーム
  *   (平行移動で画像が画面上を動くと、塗った部分がその勢いで揺れる。physics/world.ts)
- *   左ドラッグ: 選択中のツール(ブラシ中に Alt で一時的に消しゴム)
+ *   左ドラッグ: 選択中のツール(ブラシ中に Alt で一時的に消しゴム。膨らませるでは範囲を描き、Shift で正円・正方形)
  *   「揺らす」の左ドラッグ: カメラを画像に付けたまま振る。画面上は動かず、平行移動と同じ揺れだけが出る
  */
 import type { App } from '../app';
 import type { PaintMode } from '../paint/stroke';
 
-type DragMode = 'orbit' | 'pan' | 'shake' | 'grab' | 'paint' | null;
+type DragMode = 'orbit' | 'pan' | 'shake' | 'grab' | 'paint' | 'area' | null;
 
 export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDown: () => boolean } {
   const drag = { mode: null as DragMode, id: -1, lx: 0, ly: 0, sx: 0, sy: 0 };
+  /** 膨らませる範囲を描き始めた点(元画像のローカル座標) */
+  let areaStart: { x: number; y: number } | null = null;
   let space = false, alt = false, hover: { x: number; y: number } | null = null;
   /** ポインタがキャンバスの上にあるか。Space の平行移動はフォーカスの場所ではなくこれで決める */
   let pointerInside = false;
@@ -43,6 +45,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     // 振る向きは主ビューの画面の向きで決まるので、主ビューの中から始めたときだけ振る
     else if (e.button === 0 && app.tool === 'shake') { if (app.stage.inMainView(e.clientX, e.clientY)) drag.mode = 'shake'; }
     else if (e.button === 0 && app.tool === 'grab') startGrab(e);
+    else if (e.button === 0 && app.tool === 'inflate') startArea(e);
     else if (e.button === 0 && isPaintTool()) {
       const p = app.stage.pick(e.clientX, e.clientY);
       if (p && app.beginStroke(paintMode(), p.x, p.y, pressureOf(e))) drag.mode = 'paint';
@@ -69,6 +72,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
         t.z += -dx * k * right.z + dy * k * up.z;
       } else if (drag.mode === 'grab') {
         moveGrab(e);
+      } else if (drag.mode === 'area') {
+        moveArea(e);
       } else if (drag.mode === 'paint') {
         // 速い動きでも線が途切れないよう、まとめられたイベントも使う
         const events = e.getCoalescedEvents?.() ?? [e];
@@ -85,6 +90,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (e.pointerId !== drag.id) return;
     if (drag.mode === 'paint') app.endStroke();
     if (drag.mode === 'grab') { app.world.grab = null; app.world.grabGains.clear(); }
+    if (drag.mode === 'area') areaStart = null;
     if ((drag.mode === 'orbit' || drag.mode === 'pan') && (e.clientX !== drag.sx || e.clientY !== drag.sy)) app.cameraChanged();
     drag.mode = null; drag.id = -1;
     updateCursor();
@@ -125,6 +131,26 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
       y: (right.y * dx + up.y * dy) * norm,
       z: (right.z * dx + up.z * dy) * norm,
     };
+  }
+
+  /** 膨らませる: ドラッグした矩形(Shift で正方形)に収まる楕円・矩形を描く。プレビュー中なら描き直す */
+  function startArea(e: PointerEvent): void {
+    const p = app.stage.pick(e.clientX, e.clientY);
+    if (!p) return;
+    areaStart = { x: p.x, y: p.y };
+    drag.mode = 'area';
+  }
+
+  function moveArea(e: PointerEvent): void {
+    const p = app.stage.pick(e.clientX, e.clientY);
+    if (!p || !areaStart) return;
+    const dx = p.x - areaStart.x, dy = p.y - areaStart.y;
+    let w = Math.abs(dx), h = Math.abs(dy);
+    if (e.shiftKey) w = h = Math.max(w, h);
+    if (w < 2 || h < 2) return;
+    const area = { x: areaStart.x + Math.sign(dx || 1) * w / 2, y: areaStart.y + Math.sign(dy || 1) * h / 2, w: Math.round(w), h: Math.round(h) };
+    if (app.previewingInflate) app.updateInflate({ area });
+    else if (!app.beginInflateArea(area)) { drag.mode = null; areaStart = null; }
   }
 
   window.addEventListener('keydown', e => {

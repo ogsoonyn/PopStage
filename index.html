@@ -101,6 +101,7 @@
     <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="brush" title="ブラシ (B)"><span class="text-base leading-none">🖌</span><span class="text-xs">ブラシ</span></button>
     <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="erase" title="消しゴム (E、ブラシ中は Alt)"><span class="text-base leading-none">⌫</span><span class="text-xs">消しゴム</span></button>
     <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="smooth" title="ぼかし (S)"><span class="text-base leading-none">◌</span><span class="text-xs">ぼかし</span></button>
+    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="inflate" title="膨らませる (I): 範囲をドラッグして、指定した高さと断面で一括して膨らませる"><span class="text-base leading-none">◓</span><span class="text-xs">膨らみ</span></button>
     <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="grab" title="つかむ (G)"><span class="text-base leading-none">✋</span><span class="text-xs">つかむ</span></button>
     <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="shake" title="揺らす (Y):カメラを画像に付けたまま振る。画像は動かず、揺れだけが見える"><span class="text-base leading-none">〰</span><span class="text-xs">揺らす</span></button>
     <div class="divider my-0"></div>
@@ -145,7 +146,7 @@
           <button class="btn btn-xs" data-cmd="normalize" title="最大値が100%になるよう全体を拡大">正規化</button>
           <button class="btn btn-xs" data-cmd="invert">反転</button>
         </div>
-        <div class="prop"><label for="pPop">ポップ量</label><input id="pPop" type="range" min="-500" max="500" class="range range-xs"><input id="pPopN" type="number" min="-500" max="500" class="input input-xs w-16 text-right"></div>
+        <div class="prop"><label for="pPop">ポップ量</label><input id="pPop" type="range" min="0" max="1000" class="range range-xs" title="前半は 0〜500px を細かく、後半は 500〜1500px を粗く動かします"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-16 text-right"></div>
         <label class="flex items-center justify-between">揺れ <input id="pSwing" type="checkbox" class="toggle toggle-sm"></label>
         <div class="prop"><label for="pPreset">プリセット</label>
           <select id="pPreset" class="select select-xs col-span-2 w-full"></select></div>
@@ -280,6 +281,35 @@
   </div>
 </dialog>
 
+<!-- 膨らませる。視点を回して確かめられるよう、ほかの操作を止めないダイアログとして開く(show) -->
+<dialog id="inflateDialog" class="bg-base-100 text-base-content rounded-box shadow-2xl border border-base-300 p-4">
+  <h3 id="inflTitle" class="font-bold text-lg">範囲を膨らませる</h3>
+  <p id="inflTarget" class="text-sm opacity-70 pt-1 pb-3"></p>
+  <div class="flex flex-col gap-2">
+    <div class="prop2"><span>形</span>
+      <select id="inflKind" class="select select-sm w-40"><option value="ellipse">楕円</option><option value="rect">矩形</option></select></div>
+    <div class="prop2"><span>大きさ</span>
+      <div class="flex items-center gap-1">幅 <input id="inflW" type="number" min="2" max="8192" class="input input-sm w-20 text-right"> × 縦 <input id="inflH" type="number" min="2" max="8192" class="input input-sm w-20 text-right"> px</div></div>
+    <div class="prop2"><span>高さ</span>
+      <div class="flex items-center gap-2"><input id="inflHeight" type="range" min="0" max="1000" class="range range-sm range-primary flex-1"><input id="inflHeightN" type="number" min="0" max="1500" class="input input-sm w-20 text-right"> px</div></div>
+    <div class="prop2"><span title="0% で縁が切り立った平らな台、100% で中心までずっと傾く">縁のなだらかさ</span>
+      <div class="flex items-center gap-2"><input id="inflSoft" type="range" min="0" max="100" class="range range-sm range-primary flex-1"><input id="inflSoftN" type="number" min="0" max="100" class="input input-sm w-20 text-right"> %</div></div>
+    <div class="prop2"><span>断面</span>
+      <div class="join">
+        <input class="join-item btn btn-sm" type="radio" name="inflProfile" value="dome" aria-label="ドーム" title="断面が円弧。丸く膨らむ">
+        <input class="join-item btn btn-sm" type="radio" name="inflProfile" value="cushion" aria-label="クッション" title="縁も頂上もなめらか">
+        <input class="join-item btn btn-sm" type="radio" name="inflProfile" value="cone" aria-label="直線" title="まっすぐな斜面(台形・円すい)">
+      </div></div>
+    <div class="prop2"><span>重ね方</span>
+      <select id="inflBlend" class="select select-sm w-40"><option value="max">重ねる(高い方)</option><option value="add">足す</option><option value="replace">置き換える</option></select></div>
+  </div>
+  <p id="inflNote" class="text-xs opacity-80 pt-3 leading-snug"></p>
+  <div class="flex justify-end gap-2 mt-3">
+    <button id="inflCancel" class="btn btn-sm">キャンセル</button>
+    <button id="inflApply" class="btn btn-sm btn-primary">適用</button>
+  </div>
+</dialog>
+
 <!-- 汎用ダイアログ(確認・数値入力) -->
 <dialog id="askDialog" class="modal">
   <div class="modal-box max-w-md">
@@ -324,8 +354,9 @@
       <span>平行移動(揺れる)</span><span>中ドラッグ / Space + 左ドラッグ</span>
       <span>ズーム</span><span>ホイール</span>
       <span>視点リセット(正面に戻す)</span><span>Home</span>
-      <span>ブラシ / 消しゴム / ぼかし / つかむ / 揺らす / 視点</span><span>B / E / S / G / Y / V</span>
+      <span>ブラシ / 消しゴム / ぼかし / 膨らみ / つかむ / 揺らす / 視点</span><span>B / E / S / I / G / Y / V</span>
       <span>揺らす(カメラ固定で振る)</span><span>「揺らす」で左ドラッグ</span>
+      <span>膨らませる範囲を正円・正方形に</span><span>膨らみで Shift + ドラッグ</span>
       <span>一時的に消しゴム</span><span>ブラシ中に Alt</span>
       <span>ブラシサイズ</span><span>[ と ]</span>
       <span>元に戻す / やり直す</span><span>Ctrl+Z / Ctrl+Shift+Z</span>
