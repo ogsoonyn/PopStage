@@ -243,6 +243,11 @@ export function defaultCamera(): CameraState {
   return { fov: LIMITS.fov.def, yaw: -0.35, pitch: 0.25, zoom: 1, target: { x: 0, y: 0, z: 0 } };
 }
 
+/** 視点リセットで戻す正面の視点(回転・平行移動なし、等倍) */
+export function frontCamera(fov: number = LIMITS.fov.def): CameraState {
+  return { fov, yaw: 0, pitch: 0, zoom: 1, target: { x: 0, y: 0, z: 0 } };
+}
+
 /** 3面図の「自由角度」の初期視点。膨らみが分かるよう斜め上から見る */
 export function defaultMultiCamera(): CameraState {
   return { fov: LIMITS.fov.def, yaw: 0.7, pitch: 0.45, zoom: 1.5, target: { x: 0, y: 0, z: 0 } };

@@ -310,15 +310,17 @@ test('1フレームの間の塗りは、まとめて1回だけ GPU へ送る', a
   expect(r.after).toBeLessThanOrEqual(2);
 });
 
-test('右ドラッグで視点が回り、Home で戻る', async ({ page }) => {
+test('右ドラッグで視点が回り、Home で正面に戻る', async ({ page }) => {
   await boot(page);
-  const yaw0 = await page.evaluate(() => (window as any).popstage.project.camera.yaw);
-  await dragOnStage(page, [0.5, 0.5], [0.7, 0.5], 'right');
-  const yaw1 = await page.evaluate(() => (window as any).popstage.project.camera.yaw);
-  expect(yaw1).not.toBeCloseTo(yaw0);
+  const cam = () => page.evaluate(() => (window as any).popstage.project.camera);
+  const yaw0 = (await cam()).yaw;
+  await dragOnStage(page, [0.5, 0.5], [0.7, 0.6], 'right');
+  await page.evaluate(() => { const c = (window as any).popstage.project.camera; c.zoom = 2.5; c.target = { x: 40, y: -20, z: 5 }; c.fov = 50; });
+  expect((await cam()).yaw).not.toBeCloseTo(yaw0);
   await page.locator('#view').focus();
   await page.keyboard.press('Home');
-  expect(await page.evaluate(() => (window as any).popstage.project.camera.yaw)).toBeCloseTo(yaw0);
+  // 画角はそのまま、回転・平行移動・ズームは正面の等倍へ
+  expect(await cam()).toEqual({ fov: 50, yaw: 0, pitch: 0, zoom: 1, target: { x: 0, y: 0, z: 0 } });
 });
 
 test('つかんでドラッグすると揺れる', async ({ page }) => {

@@ -2,7 +2,7 @@
  * アプリ本体。モデル・コマンド・描画・物理・保存・書き出しをつなぐ。
  * 画面の部品(ui/)はここを経由して状態を読み書きする。
  */
-import { Store, createProject, createDocument, createLayer, cloneLayer, defaultCamera, defaultMultiCamera, LIMITS, type CameraState, type Project, type Document, type Layer } from './model/project';
+import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultMultiCamera, LIMITS, type CameraState, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
 import type { Rect } from './model/weightmap';
 import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from './commands/commands';
@@ -183,8 +183,7 @@ export class App extends Emitter<AppEvents> {
   }
 
   resetView(): void {
-    const fov = this.project.camera.fov;
-    this.project.camera = { ...defaultCamera(), fov };
+    this.project.camera = frontCamera(this.project.camera.fov);
     this.world.cutView(); // 視点が飛ぶだけなので揺らさない
     this.cameraChanged();
   }
