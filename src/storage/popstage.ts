@@ -4,7 +4,7 @@
  */
 import { zipSync, unzipSync, strToU8, strFromU8, type Zippable } from 'fflate';
 import {
-  LIMITS, PRESETS, MOTIONS, createProject, defaultCamera, newId,
+  LIMITS, PRESETS, MOTIONS, MOTION_PARAMS, createProject, defaultCamera, newId,
   type Project, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern,
 } from '../model/project';
 import { WeightMap, weightSizeFor } from '../model/weightmap';
@@ -66,7 +66,7 @@ export function serializeProject(project: Project, opts: { thumbnail?: Uint8Arra
         const path = `weights/doc-${di}-layer-${li}.png`;
         files[path] = [encodeGrayPng(layer.weights.width, layer.weights.height, layer.weights.data), { level: 0 }];
         return {
-          id: layer.id, name: layer.name, visible: layer.visible, pop: layer.pop, physics: { ...layer.physics },
+          id: layer.id, name: layer.name, visible: layer.visible, pop: layer.pop, physics: { ...layer.physics, motionParams: { ...layer.physics.motionParams } },
           weights: { path, width: layer.weights.width, height: layer.weights.height },
         };
       }),
@@ -100,6 +100,20 @@ const vec = (v: unknown) => {
   return { x: num(o.x, -1e6, 1e6, 0), y: num(o.y, -1e6, 1e6, 0), z: num(o.z, -1e6, 1e6, 0) };
 };
 
+/** 揺らし方の固有設定。知らない項目は捨て、範囲外は丸め、選択式は選択肢に無い値を捨てる。 */
+function motionParamsFrom(v: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!v || typeof v !== 'object') return out;
+  for (const [key, raw] of Object.entries(v as Record<string, unknown>)) {
+    const [m, k] = key.split('.');
+    const def = MOTION_PARAMS[m as MotionPattern]?.find(d => d.key === k);
+    if (!def || typeof raw !== 'number' || !Number.isFinite(raw)) continue;
+    if (def.options) { if (def.options.some(([val]) => val === raw)) out[key] = raw; }
+    else out[key] = Math.max(def.min, Math.min(def.max, raw));
+  }
+  return out;
+}
+
 function physicsFrom(v: unknown): PhysicsParams {
   const o = (v ?? {}) as Record<string, unknown>;
   const preset: PresetName = o.preset === 'custom' || (typeof o.preset === 'string' && o.preset in PRESETS) ? (o.preset as PresetName) : 'custom';
@@ -111,6 +125,7 @@ function physicsFrom(v: unknown): PhysicsParams {
     enabled: o.enabled !== false, preset,
     hardness: unit(o.hardness, base.hardness), mass: unit(o.mass, base.mass),
     weight: unit(o.weight, 0.15), damping: unit(o.damping, base.damping), motion,
+    motionParams: motionParamsFrom(o.motionParams),
   };
 }
 

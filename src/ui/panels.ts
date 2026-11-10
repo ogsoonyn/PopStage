@@ -1,6 +1,6 @@
 /** 右パネル(レイヤー一覧とプロパティ)とツールオプション。 */
 import type { App } from '../app';
-import { PRESETS, PRESET_ORDER, MOTIONS, LIMITS, applyPreset, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type Project, type Document } from '../model/project';
+import { PRESETS, PRESET_ORDER, MOTIONS, MOTION_PARAMS, LIMITS, applyPreset, motionParam, type MotionParamDef, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type Project, type Document } from '../model/project';
 import { PatchLayer, PatchDocument, PatchProject, Batch } from '../commands/commands';
 import { $, toast } from './dom';
 import { drawWeightThumb } from './imageio';
@@ -95,6 +95,64 @@ export function bindPanels(app: App): { refresh: () => void } {
   details.addEventListener('toggle', () => {
     try { localStorage.setItem('popstage.physDetails', details.open ? 'open' : 'closed'); } catch { /* 無視 */ }
   });
+  /* ---------- 揺らし方の固有設定(選んだ揺らし方に合わせて作り直す) ---------- */
+
+  const paramBox = $('motionParams');
+  let paramKey = '';
+  const fmtParam = (d: MotionParamDef, v: number) => (d.unit === '%' ? `${Math.round(v * 100)}%` : d.unit === 'Hz' ? `${v.toFixed(1)}Hz` : '');
+  const paramPatch = (key: string, v: number) => {
+    const p = physics()!;
+    return { physics: { ...p, preset: 'custom' as PresetName, motionParams: { ...p.motionParams, [key]: v } } };
+  };
+
+  function buildMotionParams(l: Layer): void {
+    const motion = l.physics.motion, defs = MOTION_PARAMS[motion];
+    paramBox.replaceChildren();
+    paramBox.classList.toggle('hidden', defs.length === 0);
+    for (const d of defs) {
+      const key = `${motion}.${d.key}`, row = document.createElement('div');
+      row.className = 'prop';
+      if (d.hint) row.title = d.hint;
+      const label = document.createElement('label');
+      label.textContent = d.label; label.htmlFor = `mp-${d.key}`;
+      if (d.options) {
+        const sel = document.createElement('select');
+        sel.id = `mp-${d.key}`; sel.className = 'select select-xs col-span-2 w-full'; sel.dataset.param = key;
+        sel.append(...d.options.map(([v, text]) => new Option(text, String(v))));
+        sel.addEventListener('change', () => exec('layer', `${MOTIONS[motion].label}: ${d.label}`, paramPatch(key, +sel.value)));
+        row.append(label, sel);
+      } else {
+        const input = document.createElement('input'), out = document.createElement('output');
+        input.id = `mp-${d.key}`; input.type = 'range'; input.className = 'range range-xs'; input.dataset.param = key;
+        input.min = String(d.min); input.max = String(d.max); input.step = String(d.step);
+        let before: Record<string, unknown> | null = null;
+        input.addEventListener('input', () => {
+          before ??= snapshot('layer', ['physics']);
+          patchNow('layer', paramPatch(key, +input.value));
+          out.textContent = fmtParam(d, +input.value);
+        });
+        input.addEventListener('change', () => {
+          if (before) record('layer', `${MOTIONS[motion].label}: ${d.label}`, before, snapshot('layer', ['physics']));
+          before = null;
+        });
+        row.append(label, input, out);
+      }
+      paramBox.append(row);
+    }
+  }
+
+  function refreshMotionParams(l: Layer): void {
+    const k = `${l.id}/${l.physics.motion}`;
+    if (k !== paramKey) { paramKey = k; buildMotionParams(l); }
+    for (const d of MOTION_PARAMS[l.physics.motion]) {
+      const el = paramBox.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-param="${l.physics.motion}.${d.key}"]`);
+      if (!el) continue;
+      const v = motionParam(l.physics.motionParams, l.physics.motion, d.key);
+      if (!(el instanceof HTMLInputElement && el.matches(':active'))) el.value = String(v);
+      if (el instanceof HTMLInputElement) (el.nextElementSibling as HTMLElement).textContent = fmtParam(d, v);
+    }
+  }
+
   bindRange('pHard', { target: 'layer', keys: ['physics'], label: '硬さ', toPatch: v => physPatch('hardness', v), fmt: pct });
   bindRange('pMass', { target: 'layer', keys: ['physics'], label: '質量', toPatch: v => physPatch('mass', v), fmt: pct });
   bindRange('pDamp', { target: 'layer', keys: ['physics'], label: 'おさまり', toPatch: v => physPatch('damping', v), fmt: pct });
@@ -236,6 +294,7 @@ export function bindPanels(app: App): { refresh: () => void } {
       presetSel.value = l.physics.preset;
       motionSel.value = l.physics.motion;
       $('pPresetDesc').textContent = l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
+      refreshMotionParams(l);
       $('physSummary').textContent = `— ${MOTIONS[l.physics.motion].label}`;
       setRange('pHard', Math.round(l.physics.hardness * 100), pct(l.physics.hardness * 100));
       setRange('pMass', Math.round(l.physics.mass * 100), pct(l.physics.mass * 100));

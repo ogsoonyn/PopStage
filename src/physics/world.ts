@@ -74,8 +74,8 @@ export class PhysicsWorld {
       // 土台の位置と速度(速度は1刻み前との差から求める)
       if (on) {
         const pop = layer.pop / this.unitPx;
-        motionAnchor(layer.physics.motion, this.time + dt, auto.period, auto.strength, b, pop);
-        motionAnchor(layer.physics.motion, this.time, auto.period, auto.strength, bp, pop);
+        motionAnchor(layer.physics.motion, this.time + dt, auto.period, auto.strength, b, pop, layer.physics.motionParams);
+        motionAnchor(layer.physics.motion, this.time, auto.period, auto.strength, bp, pop, layer.physics.motionParams);
       } else { zero(b); zero(bp); }
       const bvx = (b.x - bp.x) / dt, bvy = (b.y - bp.y) / dt, bvz = (b.z - bp.z) / dt;
       const gain = grab ? (this.grabGains.get(layer.id) ?? 1) * GRAB_GAIN : 0;

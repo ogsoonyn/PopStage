@@ -143,11 +143,14 @@
           <div class="collapse-content px-3 flex flex-col gap-2">
             <div class="prop"><label for="pMotion">揺らし方</label>
               <select id="pMotion" class="select select-xs col-span-2 w-full"></select></div>
+            <!-- 選んだ揺らし方の固有設定(panels.ts が作る) -->
+            <div id="motionParams" class="flex flex-col gap-2 border-l-2 border-primary/40 pl-2 ml-1"></div>
+            <div class="divider my-0 text-xs opacity-60">材質</div>
             <div class="prop"><label for="pHard">硬さ</label><input id="pHard" type="range" min="0" max="100" class="range range-xs"><output id="pHardO"></output></div>
             <div class="prop"><label for="pMass">質量</label><input id="pMass" type="range" min="0" max="100" class="range range-xs"><output id="pMassO"></output></div>
             <div class="prop"><label for="pDamp">おさまり</label><input id="pDamp" type="range" min="0" max="100" class="range range-xs"><output id="pDampO"></output></div>
             <div class="prop"><label for="pWeight">重さ</label><input id="pWeight" type="range" min="0" max="100" class="range range-xs"><output id="pWeightO"></output></div>
-            <p class="text-xs opacity-60 leading-snug">揺らし方・硬さ・質量・おさまりはプリセットの中身です。変えるとプリセットは「カスタム」になります。重さ(下に垂れる量)はプリセットに含まれません。</p>
+            <p class="text-xs opacity-60 leading-snug">揺らし方とその設定・硬さ・質量・おさまりはプリセットの中身です。変えるとプリセットは「カスタム」になります。重さ(下に垂れる量)はプリセットに含まれません。</p>
           </div>
         </details>
       </section>

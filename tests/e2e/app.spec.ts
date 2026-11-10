@@ -199,6 +199,35 @@ test('プリセットで材質・揺らし方・周期が変わり、1手で元�
   expect(await state()).toMatchObject({ preset: 'custom', motion: 'heartbeat', hardness: before.hardness });
 });
 
+test('揺らし方の固有設定: 選んだ揺らし方の項目が出て、変えると1手で戻せる', async ({ page }) => {
+  await boot(page);
+  const params = () => page.evaluate(() => { const p = (window as any).popstage.activeLayer.physics; return { preset: p.preset, mp: p.motionParams }; });
+  await page.locator('#physDetails summary').click();
+  // 既定(ぷるぷる = 上下に小刻み)の項目
+  await expect(page.locator('#motionParams label')).toHaveText(['振れ幅', '2回目の強さ', 'つつく長さ']);
+  await page.selectOption('#pPreset', 'tame');
+  await expect(page.locator('#motionParams label')).toHaveText(['ためる深さ', 'ためる時間', '膨らみの強さ']);
+  await expect(page.locator('#mp-depth + output')).toHaveText('70%');
+
+  await page.locator('#mp-depth').fill('0.95');
+  await page.locator('#mp-depth').dispatchEvent('change');
+  await expect(page.locator('#mp-depth + output')).toHaveText('95%');
+  expect(await params()).toEqual({ preset: 'custom', mp: { 'charge.depth': 0.95 } });
+  expect(await page.evaluate(() => (window as any).popstage.history.undoLabel)).toBe('ためて膨らむ: ためる深さ');
+
+  // 選択式の項目(伸びて戻るの向き)
+  await page.selectOption('#pMotion', 'stretch');
+  await page.selectOption('#mp-dir', '2');
+  expect((await params()).mp).toEqual({ 'charge.depth': 0.95, 'stretch.dir': 2 });
+
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  expect(await params()).toEqual({ preset: 'tame', mp: {} });
+  await expect(page.locator('#mp-depth + output')).toHaveText('70%');
+});
+
 test('保存して開き直すと同じ状態に戻る', async ({ page }) => {
   await boot(page);
   const result = await page.evaluate(async () => {

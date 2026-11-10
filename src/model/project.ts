@@ -28,6 +28,74 @@ export const MOTIONS: Record<MotionPattern, { label: string; desc: string }> = {
   none: { label: 'なし(つかむ操作だけ)', desc: '自動では揺らさない' },
 };
 
+/**
+ * 揺らし方ごとの固有の設定。値は unit が '%' のとき割合(1 = 100%)、'Hz' は周波数、'select' は options の値。
+ * 「〜の長さ」「〜の時間」は周期に対する割合。
+ */
+export interface MotionParamDef {
+  key: string;
+  label: string;
+  unit: '%' | 'Hz' | 'select';
+  min: number;
+  max: number;
+  step: number;
+  def: number;
+  options?: [number, string][];
+  hint?: string;
+}
+
+const pct = (key: string, label: string, def: number, max = 3, min = 0, hint?: string): MotionParamDef =>
+  ({ key, label, unit: '%', min, max, step: 0.01, def, hint });
+
+export const MOTION_PARAMS: Record<MotionPattern, MotionParamDef[]> = {
+  charge: [
+    pct('depth', 'ためる深さ', 0.7, 1, 0, 'ポップ量をどこまで縮めるか(100% で平らになる)'),
+    pct('time', 'ためる時間', 0.6, 0.9, 0.2, '周期のうち、縮めている時間の割合'),
+    pct('bulge', '膨らみの強さ', 0.3, 2, 0, '離した瞬間に、さらに押し出す量(ポップ量に対する割合)。0% でもバネの勢いで少し膨らむ'),
+  ],
+  jump: [
+    pct('height', '高さ', 1),
+    pct('crouch', '沈み込み', 0.15, 1, 0, '踏み切る前に沈む深さ(高さに対する割合)'),
+    pct('air', '滞空時間', 0.42, 0.85, 0.15, '周期のうち、跳んでいる時間の割合'),
+  ],
+  bounce: [
+    pct('height', '高さ', 1),
+    pct('ground', '接地の長さ', 0.3, 0.6, 0.05, '周期のうち、着地している時間の割合'),
+  ],
+  jiggle: [
+    pct('amp', '振れ幅', 1),
+    pct('second', '2回目の強さ', 0.6, 1.5),
+    pct('width', 'つつく長さ', 0.1, 0.3, 0.04, '1回のつつきにかける時間(周期に対する割合)。短いほど鋭い'),
+  ],
+  shiver: [
+    pct('amp', '振れ幅', 1),
+    { key: 'freq', label: '細かさ', unit: 'Hz', min: 2, max: 20, step: 0.5, def: 9, hint: '1秒あたりの震えの回数' },
+    pct('vertical', '縦の揺れ', 0.6, 2),
+    pct('wave', 'むら', 0.4, 1, 0, '震えの強弱の波'),
+  ],
+  float: [pct('amp', '振れ幅', 1), pct('side', '横の揺れ', 0.4, 2)],
+  sway: [pct('amp', '振れ幅', 1)],
+  shake: [pct('amp', '振れ幅', 1), pct('hop', '跳ね上がり', 0.3, 2), pct('width', '振る長さ', 0.12, 0.4, 0.04)],
+  circle: [
+    pct('radius', '半径', 1),
+    { key: 'dir', label: '向き', unit: 'select', min: -1, max: 1, step: 2, def: 1, options: [[1, '反時計回り'], [-1, '時計回り']] },
+  ],
+  heartbeat: [pct('amp', '膨らみ', 1), pct('second', '2拍目の強さ', 0.7, 1.5), pct('gap', '拍の間隔', 0.2, 0.45, 0.08)],
+  stretch: [
+    pct('amp', '伸ばす量', 1),
+    pct('time', '伸ばす時間', 0.65, 0.9, 0.2),
+    { key: 'dir', label: '向き', unit: 'select', min: 0, max: 4, step: 1, def: 0, options: [[0, '上'], [1, '下'], [2, '左'], [3, '右'], [4, '手前']] },
+  ],
+  none: [],
+};
+
+/** 揺らし方の固有設定の値(未設定なら既定値)。保存時のキーは「揺らし方.項目」。 */
+export function motionParam(values: Record<string, number> | undefined, motion: MotionPattern, key: string): number {
+  const v = values?.[`${motion}.${key}`];
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  return MOTION_PARAMS[motion].find(d => d.key === key)?.def ?? 0;
+}
+
 export type PresetName = 'puru' | 'bain' | 'poyo' | 'buru' | 'fuwa' | 'yura' | 'furi' | 'guru' | 'doki' | 'tame' | 'biyo' | 'custom';
 
 /** 揺れのパラメータ。数値はすべて 0〜1 の正規化値。 */
@@ -39,6 +107,7 @@ export interface PhysicsParams {
   weight: number;   // 重さ → 重力の係数
   damping: number;  // おさまり → 減衰係数 c
   motion: MotionPattern; // 揺らし方
+  motionParams: Record<string, number>; // 揺らし方ごとの固有設定(キーは「揺らし方.項目」、未設定は既定値)
 }
 
 export interface Layer {
@@ -108,6 +177,7 @@ export interface Preset {
   damping: number;
   motion: MotionPattern;
   period: number; // おすすめの自動揺らしの周期(秒)
+  params?: Record<string, number>; // 揺らし方の固有設定(項目名だけで書く。省略時は既定値)
 }
 
 /** 揺れのプリセット(7章)。材質(硬さ・質量・おさまり)と揺らし方の組み合わせ。 */
@@ -130,7 +200,9 @@ export const PRESET_ORDER = Object.keys(PRESETS) as Exclude<PresetName, 'custom'
 /** プリセットの値を物理パラメータに当てはめる(重さと有効/無効はそのまま)。 */
 export function applyPreset(p: PhysicsParams, name: Exclude<PresetName, 'custom'>): PhysicsParams {
   const pr = PRESETS[name];
-  return { ...p, preset: name, hardness: pr.hardness, mass: pr.mass, damping: pr.damping, motion: pr.motion };
+  const motionParams: Record<string, number> = {};
+  for (const [k, v] of Object.entries(pr.params ?? {})) motionParams[`${pr.motion}.${k}`] = v;
+  return { ...p, preset: name, hardness: pr.hardness, mass: pr.mass, damping: pr.damping, motion: pr.motion, motionParams };
 }
 
 let idSeq = 0;
@@ -138,7 +210,7 @@ export const newId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(
 
 export function defaultPhysics(): PhysicsParams {
   const p = PRESETS.puru;
-  return { enabled: true, preset: 'puru', hardness: p.hardness, mass: p.mass, weight: 0.15, damping: p.damping, motion: p.motion };
+  return { enabled: true, preset: 'puru', hardness: p.hardness, mass: p.mass, weight: 0.15, damping: p.damping, motion: p.motion, motionParams: {} };
 }
 
 export function createLayer(doc: Pick<Document, 'image' | 'layers'>, name?: string): Layer {
@@ -154,7 +226,7 @@ export function createLayer(doc: Pick<Document, 'image' | 'layers'>, name?: stri
 }
 
 export function cloneLayer(layer: Layer, name: string): Layer {
-  return { ...layer, id: newId('L'), name, physics: { ...layer.physics }, weights: layer.weights.clone() };
+  return { ...layer, id: newId('L'), name, physics: { ...layer.physics, motionParams: { ...layer.physics.motionParams } }, weights: layer.weights.clone() };
 }
 
 export function createDocument(image: ImageAsset, name: string): Document {
