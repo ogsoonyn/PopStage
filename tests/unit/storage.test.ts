@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { zlibSync, zipSync, strToU8 } from 'fflate';
 import { encodeGrayPng, decodePngToGray } from '../../src/storage/png';
 import { serializeProject, deserializeProject, migrate, FORMAT_VERSION, UNZIP_LIMITS } from '../../src/storage/popstage';
-import { createDocument, createProject, createLayer } from '../../src/model/project';
+import { createDocument, createProject, createLayer, defaultMultiCamera } from '../../src/model/project';
 
 describe('PNG', () => {
   it('グレースケールの往復', () => {
@@ -113,6 +113,24 @@ describe('.popstage', () => {
     expect(project.documents[0].layers[1].pop).toBe(0);
     expect(project.documents[0].layers[0].physics.hardness).toBe(1);
     expect(project.documents[0].layers[0].physics.preset).toBe('custom');
+  });
+
+  it('3面図の自由角度の視点を保存して戻す。古いファイルや不正な値では初めの視点・範囲内にする', async () => {
+    const p = makeProject();
+    p.multiCamera = { fov: 30, yaw: -1.2, pitch: 0.3, zoom: 2.5, target: { x: 12, y: -4, z: 7 } };
+    const { project: q } = await deserializeProject(serializeProject(p));
+    expect(q.multiCamera).toEqual(p.multiCamera);
+    // 項目の無い古いファイル
+    const doc = { name: 'x', image: { path: 'images/doc-0.png', width: 10, height: 10 }, layers: [{ name: 'L', weights: { path: 'none.png' } }] };
+    const old = zipSync({ 'project.json': strToU8(JSON.stringify({ formatVersion: 1, app: 'PopStage', project: {}, documents: [doc] })), 'images/doc-0.png': new Uint8Array([1]) });
+    expect((await deserializeProject(old)).project.multiCamera).toEqual(defaultMultiCamera());
+    // 不正な値
+    const bad = zipSync({ 'project.json': strToU8(JSON.stringify({ formatVersion: 1, app: 'PopStage', project: { multiCamera: { fov: 999, pitch: 9, zoom: 'x', target: { x: 'a' } } }, documents: [doc] })), 'images/doc-0.png': new Uint8Array([1]) });
+    const m = (await deserializeProject(bad)).project.multiCamera;
+    expect(m.fov).toBe(90);
+    expect(m.pitch).toBe(1.5);
+    expect(m.zoom).toBe(defaultMultiCamera().zoom);
+    expect(m.target).toEqual({ x: 0, y: 0, z: 0 });
   });
 
   it('揺らし方の項目が無い古いファイルは、プリセットから補う', async () => {

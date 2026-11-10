@@ -1628,3 +1628,26 @@ test('左のメニュー: 低い画面でもすべてのボタンに届く', asy
   const nav = (await page.locator('#toolNav').boundingBox())!, status = (await page.locator('#sSave').boundingBox())!;
   expect(nav.y + nav.height).toBeLessThanOrEqual(status.y + 1);
 });
+
+test('3面図の自由角度の視点はプロジェクトに保存し、「未保存」になる。復元すると戻る', async ({ page }) => {
+  await boot(page);
+  await page.locator('#view').focus();
+  await page.keyboard.press('m');
+  const free = page.locator('#multiView [data-kind=free]'), vb = (await free.boundingBox())!;
+  expect(await page.evaluate(() => (window as any).popstage.dirty)).toBe(false);
+  await page.mouse.move(vb.x + vb.width * 0.3, vb.y + vb.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(vb.x + vb.width * 0.7, vb.y + vb.height * 0.4, { steps: 5 });
+  await page.mouse.up();
+  await page.mouse.wheel(0, -300);
+  await expect.poll(() => page.evaluate(() => (window as any).popstage.dirty)).toBe(true);
+  const cam = await page.evaluate(() => JSON.stringify((window as any).popstage.multiCam));
+  // 自動保存から復元すると、同じ視点に戻る
+  await expect.poll(() => autosaveOp(page, 'get'), { timeout: 10000 }).not.toBeNull();
+  await page.waitForTimeout(1500);
+  await page.goto('/?e2e&restore');
+  await expect(page.locator('#askTitle')).toHaveText('前回の作業を復元しますか?');
+  await page.locator('#askYes').click();
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  expect(await page.evaluate(() => JSON.stringify((window as any).popstage.multiCam))).toBe(cam);
+});

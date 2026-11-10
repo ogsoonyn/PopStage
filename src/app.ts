@@ -2,7 +2,7 @@
  * アプリ本体。モデル・コマンド・描画・物理・保存・書き出しをつなぐ。
  * 画面の部品(ui/)はここを経由して状態を読み書きする。
  */
-import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultMultiCamera, defaultOrthoView, LIMITS, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
+import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultOrthoView, LIMITS, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
 import type { Rect } from './model/weightmap';
 import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from './commands/commands';
@@ -86,7 +86,8 @@ export class App extends Emitter<AppEvents> {
   activeLayerId: string | null = null;
   view: ViewOptions = { overlay: true, grid: false, fade: false, flat: false, multi: false };
   /** 3面図の「自由角度」の視点(画面だけの設定で保存しない) */
-  multiCam: CameraState = defaultMultiCamera();
+  get multiCam(): CameraState { return this.project.multiCamera; }
+  set multiCam(c: CameraState) { this.project.multiCamera = c; }
   /** 3面図の正面・右から・下からの拡大率と平行移動(3つで共有。画面だけの設定で保存しない) */
   multiOrtho: OrthoView = defaultOrthoView();
   paused = false;
@@ -286,7 +287,6 @@ export class App extends Emitter<AppEvents> {
       this.world.reset();
       this.recorder.clear();
       // 3面図の視点は前の画像の大きさで動かしてあるので、新しい画像では初めの表示に戻す
-      this.multiCam = defaultMultiCamera();
       this.multiOrtho = defaultOrthoView();
       this.activeLayerId = null;
       this.setActiveLayer(project.documents[0]?.layers[0]?.id ?? null);

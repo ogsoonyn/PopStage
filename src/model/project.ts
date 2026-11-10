@@ -156,6 +156,8 @@ export interface AutoSwing {
 export interface Project {
   background: string | null; // null で透過
   camera: CameraState;
+  /** 3面図の「自由角度」の視点(保存する。正面・右・下の拡大と平行移動は画面だけの設定で保存しない) */
+  multiCamera: CameraState;
   fps: number;
   autoSwing: AutoSwing;
   documents: Document[];
@@ -269,6 +271,7 @@ export function createProject(doc?: Document): Project {
   return {
     background: null,
     camera: defaultCamera(),
+    multiCamera: defaultMultiCamera(),
     fps: 60,
     autoSwing: { enabled: true, period: LIMITS.period.def, strength: 0.5 },
     documents: doc ? [doc] : [],

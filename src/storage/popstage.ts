@@ -5,8 +5,8 @@
 import { unzipSync, strToU8, strFromU8 } from 'fflate';
 import { zipParts, concatParts, type ZipEntry } from './zip';
 import {
-  LIMITS, PRESETS, MOTIONS, MOTION_PARAMS, createProject, createLayer, defaultCamera, newId,
-  type Project, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern,
+  LIMITS, PRESETS, MOTIONS, MOTION_PARAMS, createProject, createLayer, defaultCamera, defaultMultiCamera, newId,
+  type Project, type CameraState, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern,
 } from '../model/project';
 import { WeightMap, weightSizeFor } from '../model/weightmap';
 import { encodeGrayPng, decodePngToGray, readPngSize, MAX_PNG_SIDE, type GrayImage } from './png';
@@ -42,7 +42,8 @@ export interface ProjectJson {
   formatVersion: number;
   app: 'PopStage';
   savedAt: string;
-  project: Pick<Project, 'background' | 'camera' | 'fps' | 'autoSwing'>;
+  /** multiCamera は後から足した項目なので、古いファイルには無い */
+  project: Pick<Project, 'background' | 'camera' | 'fps' | 'autoSwing'> & { multiCamera?: Project['multiCamera'] };
   documents: DocumentJson[];
 }
 
@@ -124,7 +125,7 @@ function projectParts(project: Project, opts: SerializeOptions): Uint8Array[] {
   });
   const json: ProjectJson = {
     formatVersion: FORMAT_VERSION, app: 'PopStage', savedAt: new Date().toISOString(),
-    project: { background: project.background, camera: structuredClone(project.camera), fps: project.fps, autoSwing: { ...project.autoSwing } },
+    project: { background: project.background, camera: structuredClone(project.camera), multiCamera: structuredClone(project.multiCamera), fps: project.fps, autoSwing: { ...project.autoSwing } },
     documents: docs,
   };
   files.push({ name: 'project.json', data: strToU8(JSON.stringify(json, null, 2)), level: 6 });
@@ -203,12 +204,17 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
 
   const project = createProject();
   const p = json.project ?? {} as ProjectJson['project'];
-  const cam = defaultCamera(), c = (p.camera ?? {}) as Partial<typeof cam>;
-  project.background = typeof p.background === 'string' && HEX_COLOR.test(p.background) ? p.background : null;
-  project.camera = {
-    fov: num(c.fov, LIMITS.fov.min, LIMITS.fov.max, cam.fov), yaw: num(c.yaw, -1e3, 1e3, cam.yaw),
-    pitch: num(c.pitch, -1.5, 1.5, cam.pitch), zoom: num(c.zoom, 0.05, 20, cam.zoom), target: vec(c.target),
+  const cameraOf = (v: unknown, def: CameraState): CameraState => {
+    const c = (isObj(v) ? v : {}) as Partial<CameraState>;
+    return {
+      fov: num(c.fov, LIMITS.fov.min, LIMITS.fov.max, def.fov), yaw: num(c.yaw, -1e3, 1e3, def.yaw),
+      pitch: num(c.pitch, -1.5, 1.5, def.pitch), zoom: num(c.zoom, 0.05, 20, def.zoom), target: vec(c.target),
+    };
   };
+  project.background = typeof p.background === 'string' && HEX_COLOR.test(p.background) ? p.background : null;
+  project.camera = cameraOf(p.camera, defaultCamera());
+  // 3面図の自由角度の視点(古いファイルには無いので、そのときは初めの視点)
+  project.multiCamera = cameraOf(p.multiCamera, defaultMultiCamera());
   project.fps = 60;
   project.autoSwing = {
     enabled: p.autoSwing?.enabled !== false,
