@@ -8,7 +8,7 @@ import type { Rect } from '../model/weightmap';
 import { vertexShader, fragmentShader, MAX_LAYERS } from './shaders';
 
 export interface ViewOptions {
-  overlay: boolean; grid: boolean; shade: boolean;
+  overlay: boolean; grid: boolean;
   /** 画像を薄くして塗りを見やすくする */
   fade: boolean;
   /** ポップ(持ち上げと揺れ)を一時的に消して平らに表示する */
@@ -53,10 +53,10 @@ export class Stage {
       uMap: { value: null }, uW: { value: null }, uLayerCount: { value: 0 },
       uPop: { value: new Array(MAX_LAYERS).fill(0) },
       uSwing: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector3()) },
-      uActive: { value: -1 }, uOverlay: { value: 1 }, uGrid: { value: 0 }, uShade: { value: 0 },
+      uActive: { value: -1 }, uOverlay: { value: 1 }, uGrid: { value: 0 },
       uBrushOn: { value: 0 }, uBrush: { value: new THREE.Vector3() }, uOpacity: { value: 1 },
       uFade: { value: 0 }, uFlat: { value: 0 },
-      uGridN: { value: this.gridN }, uSize: { value: new THREE.Vector2(1, 1) }, uWTexel: { value: new THREE.Vector2(1, 1) },
+      uGridN: { value: this.gridN },
     };
     this.material = new THREE.ShaderMaterial({
       uniforms: this.uniforms, vertexShader, fragmentShader,
@@ -80,7 +80,6 @@ export class Stage {
     this.mapTex = tex;
     this.uniforms.uMap.value = tex;
     this.imageSize = { w: imageW, h: imageH };
-    (this.uniforms.uSize.value as THREE.Vector2).set(imageW, imageH);
   }
 
   rebuildMesh(density: number): void {
@@ -115,7 +114,6 @@ export class Stage {
       tex.generateMipmaps = false; tex.unpackAlignment = 1;
       this.weightTex = tex; this.weightSize = { w, h };
       this.uniforms.uW.value = tex;
-      (this.uniforms.uWTexel.value as THREE.Vector2).set(1 / w, 1 / h);
     }
     const data = this.weightTex.image.data as Uint8Array;
     data.fill(0);
@@ -183,7 +181,6 @@ export class Stage {
   setView(o: ViewOptions, activeIndex: number): void {
     this.uniforms.uOverlay.value = o.overlay ? 1 : 0;
     this.uniforms.uGrid.value = o.grid ? 1 : 0;
-    this.uniforms.uShade.value = o.shade ? 1 : 0;
     this.uniforms.uFade.value = o.fade ? 1 : 0;
     this.uniforms.uFlat.value = o.flat ? 1 : 0;
     this.uniforms.uActive.value = activeIndex;

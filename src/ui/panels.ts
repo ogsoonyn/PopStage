@@ -183,7 +183,6 @@ export function bindPanels(app: App): { refresh: () => void } {
   $<HTMLInputElement>('vFade').addEventListener('change', e => app.setViewOption('fade', (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>('vFlat').addEventListener('change', e => app.setViewOption('flat', (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>('vGrid').addEventListener('change', e => app.setViewOption('grid', (e.target as HTMLInputElement).checked));
-  $<HTMLInputElement>('vShade').addEventListener('change', e => app.setViewOption('shade', (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>('vPause').addEventListener('change', e => app.setPaused((e.target as HTMLInputElement).checked));
 
   /* ---------- ツールオプション ---------- */
@@ -317,7 +316,6 @@ export function bindPanels(app: App): { refresh: () => void } {
     $<HTMLInputElement>('vFade').checked = app.view.fade;
     $<HTMLInputElement>('vFlat').checked = app.view.flat;
     $<HTMLInputElement>('vGrid').checked = app.view.grid;
-    $<HTMLInputElement>('vShade').checked = app.view.shade;
     $<HTMLInputElement>('vPause').checked = app.paused;
   }
 

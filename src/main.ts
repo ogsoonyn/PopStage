@@ -60,7 +60,6 @@ const commands: Record<string, { run: () => unknown; enabled?: () => boolean }> 
   clearWeights: { run: () => app.weightOp('全消去', wm => wm.clear()), enabled: () => !!app.activeLayer },
   toggleOverlay: { run: () => app.setViewOption('overlay', !app.view.overlay) },
   toggleGrid: { run: () => app.setViewOption('grid', !app.view.grid) },
-  toggleShade: { run: () => app.setViewOption('shade', !app.view.shade) },
   toggleFade: { run: () => app.setViewOption('fade', !app.view.fade) },
   toggleFlat: { run: () => app.setViewOption('flat', !app.view.flat) },
   togglePause: { run: () => app.setPaused(!app.paused) },
@@ -93,7 +92,7 @@ function refreshCommands(): void {
   });
   document.querySelector('[data-label=undo]')!.textContent = app.history.undoLabel ? `(${app.history.undoLabel})` : '';
   document.querySelector('[data-label=redo]')!.textContent = app.history.redoLabel ? `(${app.history.redoLabel})` : '';
-  const checks: Record<string, boolean> = { overlay: app.view.overlay, grid: app.view.grid, shade: app.view.shade, fade: app.view.fade, flat: app.view.flat, pause: app.paused };
+  const checks: Record<string, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, pause: app.paused };
   document.querySelectorAll<HTMLElement>('[data-check]').forEach(el => { el.textContent = checks[el.dataset.check!] ? '✓' : ''; });
 }
 app.history.on('change', refreshCommands);

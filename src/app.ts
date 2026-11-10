@@ -42,7 +42,7 @@ export class App extends Emitter<AppEvents> {
 
   tool: Tool = 'brush';
   activeLayerId: string | null = null;
-  view: ViewOptions = { overlay: true, grid: false, shade: false, fade: false, flat: false };
+  view: ViewOptions = { overlay: true, grid: false, fade: false, flat: false };
   paused = false;
   brush: BrushOptions = { size: 64, strength: 0.3, hardness: 0, pressure: 'strength' };
   imageCanvas: HTMLCanvasElement | null = null;
