@@ -167,6 +167,8 @@ window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => {
   e.preventDefault(); dragDepth = 0; showDrop(false);
   const f = [...(e.dataTransfer?.files ?? [])].find(f => isImageFile(f) || isProjectFile(f));
+  // ダイアログ(確認・書き出しなど)の表示中は、裏で別のファイルを開かない
+  if (f && anyDialogOpen()) { toast('ダイアログを閉じてから、もう一度ドロップしてください。', 'warning'); return; }
   if (f) void app.openFile(f);
   else if (e.dataTransfer?.files.length) toast('PNG / JPEG / WebP の画像か、.popstage ファイルをドロップしてください。', 'warning');
 });

@@ -348,6 +348,37 @@ test('保存して開き直すと同じ状態に戻る', async ({ page }) => {
   expect(result.size).toBeGreaterThan(1000);
 });
 
+test('ドロップで画像を開ける。ダイアログ表示中・書き出し中は開かない', async ({ page }) => {
+  await boot(page);
+  const drop = () => page.evaluate(async () => {
+    const a = (window as any).popstage;
+    const c = document.createElement('canvas'); c.width = 40; c.height = 30;
+    c.getContext('2d')!.fillRect(0, 0, 40, 30);
+    const blob: Blob = await new Promise(r => c.toBlob(b => r(b!), 'image/png'));
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'dropped.png', { type: 'image/png' }));
+    window.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    await new Promise(r => setTimeout(r, 300));
+    return a.doc.name as string;
+  });
+  const name0 = await page.evaluate(() => (window as any).popstage.doc.name);
+
+  // ダイアログの表示中
+  await page.evaluate(() => (document.getElementById('helpDialog') as HTMLDialogElement).showModal());
+  expect(await drop()).toBe(name0);
+  await expect(page.locator('#toasts')).toContainText('ダイアログを閉じてから');
+  await page.evaluate(() => (document.getElementById('helpDialog') as HTMLDialogElement).close());
+
+  // 書き出しの最中
+  await page.evaluate(() => { (window as any).popstage.exporting = true; });
+  expect(await drop()).toBe(name0);
+  await expect(page.locator('#toasts')).toContainText('いまはファイルを開けません');
+  await page.evaluate(() => { (window as any).popstage.exporting = false; });
+
+  // ふだんは開ける
+  expect(await drop()).toBe('dropped.png');
+});
+
 test('上書き保存の最中に変更すると、保存後も「未保存」のまま残る', async ({ page }) => {
   await boot(page);
   const r = await page.evaluate(async () => {

@@ -216,7 +216,17 @@ export class App extends Emitter<AppEvents> {
     return r.ok;
   }
 
+  /** 書き出し・塗り・ぼかしのプレビュー・別のファイルの読み込みの最中は、ファイルを開かない */
+  get busy(): boolean { return this.exporting || this.stroking || this.previewingBlur || this.opening; }
+  private opening = false;
+
   async openFile(file: File, handle?: FileSystemFileHandle): Promise<void> {
+    if (this.busy) { toast('いまはファイルを開けません。処理が終わってからもう一度お試しください。', 'warning'); return; }
+    this.opening = true;
+    try { await this.openFileNow(file, handle); } finally { this.opening = false; }
+  }
+
+  private async openFileNow(file: File, handle?: FileSystemFileHandle): Promise<void> {
     if (isProjectFile(file)) {
       if (!(await this.confirmDiscard())) return;
       await this.openProjectBytes(new Uint8Array(await file.arrayBuffer()), file.name, handle ?? null);
