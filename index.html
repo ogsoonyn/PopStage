@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PopStage</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M6 26 Q8 8 16 6 Q24 8 26 26 Z%22 fill=%22%23f2b63c%22/%3E%3Cpath d=%22M10 10 Q16 4 22 10 Q20 14 16 12 Q12 14 10 10Z%22 fill=%22%237a3d10%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body class="bg-base-200 text-base-content text-sm h-dvh flex flex-col overflow-hidden">
+
+<!-- メニューバー -->
+<header class="flex items-center gap-1 px-2 h-10 bg-base-100 border-b border-base-300 shrink-0" id="menubar">
+  <span class="font-bold px-2 select-none">PopStage</span>
+  <div class="dropdown">
+    <div tabindex="0" role="button" class="btn btn-ghost btn-sm">ファイル</div>
+    <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
+      <li><button data-cmd="openImage">画像を開く…<kbd class="kbd kbd-xs ml-auto">Ctrl+Shift+O</kbd></button></li>
+      <li><button data-cmd="open">プロジェクトを開く…<kbd class="kbd kbd-xs ml-auto">Ctrl+O</kbd></button></li>
+      <li><button data-cmd="save">保存<kbd class="kbd kbd-xs ml-auto">Ctrl+S</kbd></button></li>
+      <li><button data-cmd="saveAs">名前を付けて保存…<kbd class="kbd kbd-xs ml-auto">Ctrl+Shift+S</kbd></button></li>
+      <li class="menu-title pt-2">書き出し</li>
+      <li><button data-cmd="export">動画 / GIF / 連番PNG…<kbd class="kbd kbd-xs ml-auto">Ctrl+E</kbd></button></li>
+      <li class="menu-title pt-2">その他</li>
+      <li><button data-cmd="sample">サンプルを開く</button></li>
+    </ul>
+  </div>
+  <div class="dropdown">
+    <div tabindex="0" role="button" class="btn btn-ghost btn-sm">編集</div>
+    <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
+      <li><button data-cmd="undo"><span>元に戻す <span data-label="undo" class="opacity-60"></span></span><kbd class="kbd kbd-xs ml-auto">Ctrl+Z</kbd></button></li>
+      <li><button data-cmd="redo"><span>やり直す <span data-label="redo" class="opacity-60"></span></span><kbd class="kbd kbd-xs ml-auto">Ctrl+Shift+Z</kbd></button></li>
+      <li class="menu-title pt-2">選択中のレイヤーのウェイト</li>
+      <li><button data-cmd="smoothAll">全体をなめらかに…</button></li>
+      <li><button data-cmd="normalize">正規化(最大を100%に)</button></li>
+      <li><button data-cmd="invert">反転</button></li>
+      <li><button data-cmd="fromAlpha">アルファから生成</button></li>
+      <li><button data-cmd="clearWeights">全消去</button></li>
+    </ul>
+  </div>
+  <div class="dropdown">
+    <div tabindex="0" role="button" class="btn btn-ghost btn-sm">表示</div>
+    <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
+      <li><button data-cmd="toggleOverlay">ウェイトの重ね表示 <span data-check="overlay" class="ml-auto"></span><kbd class="kbd kbd-xs">W</kbd></button></li>
+      <li><button data-cmd="toggleGrid">グリッド <span data-check="grid" class="ml-auto"></span><kbd class="kbd kbd-xs">Shift+G</kbd></button></li>
+      <li><button data-cmd="toggleShade">陰影(試験的) <span data-check="shade" class="ml-auto"></span></button></li>
+      <li><button data-cmd="togglePause">揺れの一時停止 <span data-check="pause" class="ml-auto"></span><kbd class="kbd kbd-xs">P</kbd></button></li>
+      <li><button data-cmd="resetView">視点リセット<kbd class="kbd kbd-xs ml-auto">Home</kbd></button></li>
+    </ul>
+  </div>
+  <div class="dropdown">
+    <div tabindex="0" role="button" class="btn btn-ghost btn-sm">レイヤー</div>
+    <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-64 p-2 shadow-lg">
+      <li><button data-cmd="addLayer">新規レイヤー</button></li>
+      <li><button data-cmd="duplicateLayer">複製</button></li>
+      <li><button data-cmd="deleteLayer">削除</button></li>
+      <li><button data-cmd="layerUp">上へ</button></li>
+      <li><button data-cmd="layerDown">下へ</button></li>
+    </ul>
+  </div>
+  <div class="dropdown">
+    <div tabindex="0" role="button" class="btn btn-ghost btn-sm">ヘルプ</div>
+    <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-56 p-2 shadow-lg">
+      <li><button data-cmd="help">操作方法</button></li>
+      <li><button data-cmd="about">PopStage について</button></li>
+    </ul>
+  </div>
+  <span id="docTitle" class="ml-auto opacity-70 truncate px-2"></span>
+</header>
+
+<!-- ツールオプション -->
+<div class="flex flex-wrap items-center gap-x-5 gap-y-1 px-3 py-1.5 bg-base-100 border-b border-base-300 shrink-0" id="toolOptions">
+  <div class="join">
+    <button class="btn btn-xs join-item" data-cmd="undo" title="元に戻す (Ctrl+Z)">↶ 戻す</button>
+    <button class="btn btn-xs join-item" data-cmd="redo" title="やり直す (Ctrl+Shift+Z)">↷ やり直す</button>
+  </div>
+  <label class="flex items-center gap-2" data-brush-opt>サイズ
+    <input id="brushSize" type="range" min="4" max="512" value="64" class="range range-xs w-32">
+    <output id="brushSizeO" class="w-12 tabular-nums"></output></label>
+  <label class="flex items-center gap-2" data-brush-opt>強さ
+    <input id="brushStrength" type="range" min="1" max="100" value="30" class="range range-xs w-28">
+    <output id="brushStrengthO" class="w-10 tabular-nums"></output></label>
+  <label class="flex items-center gap-2" data-brush-opt>硬さ
+    <input id="brushHardness" type="range" min="0" max="100" value="0" class="range range-xs w-24">
+    <output id="brushHardnessO" class="w-10 tabular-nums"></output></label>
+  <label class="flex items-center gap-2" data-brush-opt>筆圧
+    <select id="brushPressure" class="select select-xs w-24">
+      <option value="strength">強さ</option><option value="size">サイズ</option><option value="none">無効</option>
+    </select></label>
+  <span id="toolHint" class="opacity-70 hidden md:inline"></span>
+</div>
+
+<main class="flex-1 min-h-0 flex">
+  <!-- ツールバー -->
+  <nav class="flex flex-col gap-1 p-1.5 bg-base-100 border-r border-base-300 shrink-0" aria-label="ツール">
+    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="brush" title="ブラシ (B)"><span class="text-base leading-none">🖌</span><span class="text-xs">ブラシ</span></button>
+    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="erase" title="消しゴム (E、ブラシ中は Alt)"><span class="text-base leading-none">⌫</span><span class="text-xs">消しゴム</span></button>
+    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="smooth" title="ぼかし (S)"><span class="text-base leading-none">◌</span><span class="text-xs">ぼかし</span></button>
+    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="grab" title="つかむ (G)"><span class="text-base leading-none">✋</span><span class="text-xs">つかむ</span></button>
+    <div class="divider my-0"></div>
+    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="view" title="視点 (V)"><span class="text-base leading-none">⟲</span><span class="text-xs">視点</span></button>
+  </nav>
+
+  <!-- 3Dビュー -->
+  <section class="flex-1 min-w-0 relative" id="stageWrap">
+    <div id="stage" class="absolute inset-0"><canvas id="view" tabindex="0"></canvas></div>
+    <div id="dropHint" class="absolute inset-3 border-4 border-dashed border-primary rounded-box bg-base-100/70 hidden items-center justify-center text-lg font-bold pointer-events-none">
+      ここに画像か .popstage ファイルをドロップ
+    </div>
+    <div id="busy" class="absolute inset-0 bg-base-100/60 hidden items-center justify-center"><span class="loading loading-spinner loading-lg"></span></div>
+  </section>
+
+  <!-- レイヤー一覧とプロパティ -->
+  <aside class="w-80 shrink-0 bg-base-100 border-l border-base-300 flex flex-col min-h-0">
+    <section class="p-3 border-b border-base-300 flex flex-col gap-2 max-h-[40%] min-h-0">
+      <div class="flex items-center gap-1">
+        <h2 class="font-bold mr-auto">レイヤー <span id="layerCount" class="opacity-60 font-normal"></span></h2>
+        <button class="btn btn-xs btn-square" data-cmd="addLayer" title="新規レイヤー">＋</button>
+        <button class="btn btn-xs btn-square" data-cmd="duplicateLayer" title="複製">⧉</button>
+        <button class="btn btn-xs btn-square" data-cmd="layerUp" title="上へ">▲</button>
+        <button class="btn btn-xs btn-square" data-cmd="layerDown" title="下へ">▼</button>
+        <button class="btn btn-xs btn-square" data-cmd="deleteLayer" title="削除">🗑</button>
+      </div>
+      <ul id="layerList" class="flex flex-col gap-1 overflow-y-auto min-h-0" role="listbox" aria-label="レイヤー一覧"></ul>
+    </section>
+
+    <div class="overflow-y-auto flex-1 p-3 flex flex-col gap-4" id="props">
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold">レイヤー: <span id="activeLayerName"></span></h2>
+        <div class="prop"><label for="pPop">ポップ量</label><input id="pPop" type="range" min="-500" max="500" class="range range-xs"><input id="pPopN" type="number" min="-500" max="500" class="input input-xs w-16 text-right"></div>
+        <label class="flex items-center justify-between">揺れ <input id="pSwing" type="checkbox" class="toggle toggle-sm"></label>
+        <div class="prop"><label for="pPreset">プリセット</label>
+          <select id="pPreset" class="select select-xs col-span-2 w-full">
+            <option value="puru">ぷるぷる</option><option value="bain">ばいんばいん</option>
+            <option value="buru">ぶるぶる</option><option value="fuwa">ふわふわ</option><option value="custom">カスタム</option>
+          </select></div>
+        <div class="prop"><label for="pHard">硬さ</label><input id="pHard" type="range" min="0" max="100" class="range range-xs"><output id="pHardO"></output></div>
+        <div class="prop"><label for="pMass">質量</label><input id="pMass" type="range" min="0" max="100" class="range range-xs"><output id="pMassO"></output></div>
+        <div class="prop"><label for="pWeight">重さ</label><input id="pWeight" type="range" min="0" max="100" class="range range-xs"><output id="pWeightO"></output></div>
+        <div class="prop"><label for="pDamp">おさまり</label><input id="pDamp" type="range" min="0" max="100" class="range range-xs"><output id="pDampO"></output></div>
+      </section>
+
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold">画像</h2>
+        <div class="prop"><label for="pDensity">メッシュ密度</label><input id="pDensity" type="range" min="16" max="512" step="16" class="range range-xs"><output id="pDensityO"></output></div>
+        <div class="prop"><label for="pOpacity">不透明度</label><input id="pOpacity" type="range" min="0" max="100" class="range range-xs"><output id="pOpacityO"></output></div>
+      </section>
+
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold">カメラと背景</h2>
+        <div class="prop"><label for="pFov">画角</label><input id="pFov" type="range" min="10" max="90" class="range range-xs"><output id="pFovO"></output></div>
+        <div class="flex items-center gap-2">
+          <span class="w-[5.5rem]">背景</span>
+          <label class="flex items-center gap-1"><input id="pBgTransparent" type="checkbox" class="checkbox checkbox-xs"> 透過</label>
+          <input id="pBgColor" type="color" class="w-10 h-6 rounded cursor-pointer ml-auto" value="#20242c">
+        </div>
+      </section>
+
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold">自動揺らし</h2>
+        <label class="flex items-center justify-between">自動で揺らす <input id="pAuto" type="checkbox" class="toggle toggle-sm"></label>
+        <div class="prop"><label for="pPeriod">周期</label><input id="pPeriod" type="range" min="3" max="100" class="range range-xs"><output id="pPeriodO"></output></div>
+        <div class="prop"><label for="pAutoStr">強さ</label><input id="pAutoStr" type="range" min="0" max="100" class="range range-xs"><output id="pAutoStrO"></output></div>
+      </section>
+
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold">表示</h2>
+        <label class="flex items-center justify-between">ウェイトを重ねて表示 <input id="vOverlay" type="checkbox" class="toggle toggle-sm"></label>
+        <label class="flex items-center justify-between">グリッド <input id="vGrid" type="checkbox" class="toggle toggle-sm"></label>
+        <label class="flex items-center justify-between">陰影(試験的) <input id="vShade" type="checkbox" class="toggle toggle-sm"></label>
+        <label class="flex items-center justify-between">揺れを止める <input id="vPause" type="checkbox" class="toggle toggle-sm"></label>
+      </section>
+    </div>
+  </aside>
+</main>
+
+<!-- ステータスバー -->
+<footer class="flex items-center gap-4 px-3 h-7 bg-base-100 border-t border-base-300 text-xs tabular-nums shrink-0 opacity-90">
+  <span id="sFps">- fps</span>
+  <span id="sVerts">- 頂点</span>
+  <span id="sZoom">-</span>
+  <span id="sImage">-</span>
+  <span id="sRec" class="ml-auto"></span>
+  <span id="sSave"></span>
+</footer>
+
+<input id="fileImage" type="file" accept="image/png,image/jpeg,image/webp" class="hidden">
+<input id="fileProject" type="file" accept=".popstage,application/zip,image/png,image/jpeg,image/webp" class="hidden">
+
+<!-- 書き出しダイアログ -->
+<dialog id="exportDialog" class="modal">
+  <div class="modal-box max-w-lg">
+    <h3 class="font-bold text-lg mb-3">書き出し</h3>
+    <form id="exportForm" class="flex flex-col gap-3" method="dialog">
+      <div class="prop2"><span>形式</span><select id="exFormat" class="select select-sm w-full"></select></div>
+      <div class="prop2"><span>サイズ</span>
+        <div class="flex items-center gap-1 flex-wrap">
+          <input id="exW" type="number" min="16" max="3840" step="2" class="input input-sm w-20"> ×
+          <input id="exH" type="number" min="16" max="3840" step="2" class="input input-sm w-20">
+          <select id="exSizePreset" class="select select-sm w-36">
+            <option value="">プリセット…</option>
+            <option value="view">表示中のサイズ</option>
+            <option value="1280x720">1280×720</option><option value="1920x1080">1920×1080</option>
+            <option value="1080x1080">1080×1080</option><option value="1080x1920">1080×1920(縦)</option>
+            <option value="480x360">480×360(GIF向け)</option>
+          </select>
+        </div></div>
+      <div class="prop2"><span>フレームレート</span>
+        <div class="join"><input class="join-item btn btn-sm" type="radio" name="exFps" value="60" aria-label="60fps" checked><input class="join-item btn btn-sm" type="radio" name="exFps" value="30" aria-label="30fps"></div></div>
+      <div class="prop2"><span>長さ</span>
+        <div class="flex items-center gap-2"><input id="exDur" type="number" min="0.5" max="60" step="0.1" class="input input-sm w-24"> 秒
+          <label class="flex items-center gap-1 ml-2"><input id="exLoop" type="checkbox" class="checkbox checkbox-xs" checked> 周期に合わせてループ</label></div></div>
+      <div class="prop2"><span>背景</span>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-1"><input type="radio" name="exBg" value="color" class="radio radio-xs" checked> 単色 <input id="exBgColor" type="color" class="w-9 h-6 rounded" value="#ffffff"></label>
+          <label class="flex items-center gap-1" id="exBgAlphaLabel"><input type="radio" name="exBg" value="alpha" class="radio radio-xs"> 透過</label>
+        </div></div>
+      <div class="prop2"><span>動きの元</span>
+        <div class="flex flex-col gap-1">
+          <label class="flex items-center gap-1"><input type="radio" name="exMotion" value="auto" class="radio radio-xs" checked> 自動揺らし</label>
+          <label class="flex items-center gap-1"><input type="radio" name="exMotion" value="replay" class="radio radio-xs"> 直前の操作を再生 <span id="exRecLen" class="opacity-60"></span></label>
+        </div></div>
+      <p id="exNote" class="text-xs opacity-70 leading-relaxed"></p>
+      <progress id="exProgress" class="progress progress-primary w-full hidden" value="0" max="100"></progress>
+      <p id="exStatus" class="text-xs tabular-nums min-h-4"></p>
+      <div class="modal-action mt-0">
+        <button type="button" id="exCancel" class="btn btn-sm">閉じる</button>
+        <button type="button" id="exStart" class="btn btn-sm btn-primary">書き出す</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<!-- 汎用ダイアログ(確認・数値入力) -->
+<dialog id="askDialog" class="modal">
+  <div class="modal-box max-w-md">
+    <h3 id="askTitle" class="font-bold text-lg"></h3>
+    <p id="askBody" class="py-3 leading-relaxed whitespace-pre-line"></p>
+    <div id="askInputWrap" class="hidden pb-2"><label class="flex items-center gap-2"><span id="askInputLabel"></span><input id="askInput" type="number" class="input input-sm w-28"></label></div>
+    <div class="modal-action mt-0">
+      <button id="askNo" class="btn btn-sm">キャンセル</button>
+      <button id="askYes" class="btn btn-sm btn-primary">OK</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 操作方法 -->
+<dialog id="helpDialog" class="modal">
+  <div class="modal-box max-w-2xl">
+    <h3 class="font-bold text-lg mb-2">操作方法</h3>
+    <ol class="list-decimal pl-5 leading-relaxed mb-3">
+      <li>画像をウィンドウへドロップする(PNG / JPEG / WebP)。</li>
+      <li>ブラシで動かしたい所を塗る。塗った所がその場で持ち上がる。</li>
+      <li>右ドラッグで視点を回し、ポップ量を調整する。</li>
+      <li>「つかむ」で画像をドラッグして揺らし、プリセットを選ぶ。</li>
+      <li>ファイル → 書き出しで、形式と長さを決めて保存する。</li>
+    </ol>
+    <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+      <span>回転(オービット)</span><span>右ドラッグ</span>
+      <span>平行移動</span><span>中ドラッグ / Space + 左ドラッグ</span>
+      <span>ズーム</span><span>ホイール</span>
+      <span>視点リセット</span><span>Home</span>
+      <span>ブラシ / 消しゴム / ぼかし / つかむ / 視点</span><span>B / E / S / G / V</span>
+      <span>一時的に消しゴム</span><span>ブラシ中に Alt</span>
+      <span>ブラシサイズ</span><span>[ と ]</span>
+      <span>元に戻す / やり直す</span><span>Ctrl+Z / Ctrl+Shift+Z</span>
+      <span>保存 / 開く</span><span>Ctrl+S / Ctrl+O</span>
+      <span>書き出し</span><span>Ctrl+E</span>
+      <span>ウェイト表示 / グリッド</span><span>W / Shift+G</span>
+      <span>揺れの一時停止</span><span>P</span>
+    </div>
+    <div class="modal-action"><form method="dialog"><button class="btn btn-sm">閉じる</button></form></div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<dialog id="aboutDialog" class="modal">
+  <div class="modal-box">
+    <h3 class="font-bold text-lg">PopStage(仮称)</h3>
+    <p class="py-3 leading-relaxed">画像を3D空間に置き、塗った所を平面から持ち上げ、揺らせるWebアプリです。「塗って膨らませて揺らす」タイプの懐かしいツールの手触りを、ブラウザで作り直しています。<br>画像とプロジェクトはこのブラウザ内だけで処理され、サーバーへは送られません。</p>
+    <p class="text-xs opacity-70" id="aboutVersion"></p>
+    <div class="modal-action"><form method="dialog"><button class="btn btn-sm">閉じる</button></form></div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<div id="toasts" class="toast toast-end toast-bottom z-50 mb-8"></div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

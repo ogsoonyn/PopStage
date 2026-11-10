@@ -1,0 +1,24 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+}
+
+:root { --stage-a: #dfe6ee; --stage-b: #eef2f6; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --stage-a: #1b2028; --stage-b: #232a34; } }
+:root[data-theme="dark"] { --stage-a: #1b2028; --stage-b: #232a34; }
+
+/* 透過の背景は市松模様で示す */
+#stage { background: repeating-conic-gradient(var(--stage-a) 0 25%, var(--stage-b) 0 50%) 0 0 / 28px 28px; touch-action: none; }
+#stage.solid { background: var(--stage-bg); }
+#view { display: block; width: 100%; height: 100%; outline: none; }
+
+.prop { display: grid; grid-template-columns: 5.5rem 1fr 3.25rem; align-items: center; gap: .5rem; }
+.prop output { text-align: right; font-variant-numeric: tabular-nums; }
+.prop2 { display: grid; grid-template-columns: 6.5rem 1fr; align-items: center; gap: .5rem; }
+
+.tool[aria-pressed="true"] { background: var(--color-primary); color: var(--color-primary-content); border-color: transparent; }
+
+#layerList li[aria-selected="true"] { background: color-mix(in oklab, var(--color-primary) 18%, transparent); outline: 1px solid var(--color-primary); }
+#layerList canvas { image-rendering: auto; background: #000; border-radius: 3px; }
+
+.menu button:disabled { opacity: .4; pointer-events: none; }

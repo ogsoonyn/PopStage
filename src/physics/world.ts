@@ -68,10 +68,10 @@ export class PhysicsWorld {
   reset(): void { this.states.clear(); this.acc = 0; }
 
   /** 実時間で進める(描画フレームから呼ぶ)。1フレームの上限は 0.1 秒。 */
-  advance(dt: number, layers: readonly Layer[]): void {
+  advance(dt: number, layers: readonly Layer[], beforeStep?: () => void): void {
     if (this.paused) return;
     this.acc = Math.min(this.acc + dt, 0.1);
-    while (this.acc >= PHYSICS_DT) { this.step(layers); this.acc -= PHYSICS_DT; }
+    while (this.acc >= PHYSICS_DT) { beforeStep?.(); this.step(layers); this.acc -= PHYSICS_DT; }
   }
 
   /** 固定刻みで1回進める。 */
