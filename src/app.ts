@@ -170,7 +170,18 @@ export class App extends Emitter<AppEvents> {
   resetView(): void {
     const fov = this.project.camera.fov;
     this.project.camera = { ...defaultCamera(), fov };
+    this.cameraChanged();
   }
+
+  /**
+   * 視点(回転・平行移動・ズーム)を変えたことを知らせる。視点は保存される項目なので「未保存」にして
+   * 自動保存を予約するが、アンドゥには積まない。ホイールのように続けて来るものは間引く。
+   */
+  cameraChanged(): void {
+    clearTimeout(this.cameraTimer);
+    this.cameraTimer = window.setTimeout(() => this.store.emit('change', undefined), 300);
+  }
+  private cameraTimer = 0;
 
   /* ---------- 読み込み ---------- */
 
@@ -187,6 +198,7 @@ export class App extends Emitter<AppEvents> {
     // デコード中に別の読み込みが始まっていたら、こちらは捨てる
     if (token !== this.syncToken) return false;
     this.loading = true;
+    clearTimeout(this.cameraTimer); // 前の作業の視点変更を、新しく開いた作業の変更として数えない
     try {
       this.store.replace(project);
       this.history.clear();

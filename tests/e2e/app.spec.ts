@@ -213,6 +213,26 @@ for (const target of ['[data-tool=brush]', '#pPreset']) test(`${target} にフ�
   expect(Math.hypot(after.t.x - before.t.x, after.t.y - before.t.y, after.t.z - before.t.z)).toBeGreaterThan(1);
 });
 
+test('視点を変えると「未保存」になる。変化の無い一括処理では「未保存」にならない', async ({ page }) => {
+  await boot(page);
+  const dirty = () => page.evaluate(() => (window as any).popstage.dirty as boolean);
+  expect(await dirty()).toBe(false);
+
+  // 空のレイヤーを足して保存済みにし、全消去しても(変化が無いので)未保存にならない
+  await page.evaluate(async () => {
+    const a = (window as any).popstage;
+    a.addLayer();
+    a.fileHandle = { name: 'x.popstage', createWritable: async () => ({ write: async () => {}, close: async () => {} }) };
+    await a.save();
+    a.weightOp('全消去', (wm: any) => wm.clear());
+  });
+  await page.waitForTimeout(400);
+  expect(await dirty()).toBe(false);
+
+  await dragOnStage(page, [0.5, 0.5], [0.7, 0.5], 'right');
+  await expect.poll(dirty).toBe(true);
+});
+
 test('右ドラッグで視点が回り、Home で戻る', async ({ page }) => {
   await boot(page);
   const yaw0 = await page.evaluate(() => (window as any).popstage.project.camera.yaw);

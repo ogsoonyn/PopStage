@@ -155,7 +155,8 @@ export function weightOperation(store: Store, layerId: string, label: string, op
   op(f.layer.weights);
   const tiles = diffTiles(before, f.layer.weights);
   // op で書き換え済みなので、表示を更新する。アンドゥ記録は呼び出し側で push する。
-  store.weightsChanged(layerId, f.layer.weights.fullRect);
+  // 何も変わらなかったときは「未保存」にしない
+  store.weightsChanged(layerId, f.layer.weights.fullRect, tiles.length > 0);
   return tiles.length ? new WeightEdit(label, layerId, tiles) : null;
 }
 

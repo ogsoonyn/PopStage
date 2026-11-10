@@ -79,6 +79,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (e.pointerId !== drag.id) return;
     if (drag.mode === 'paint') app.endStroke();
     if (drag.mode === 'grab') { app.world.grab = null; app.world.grabGains.clear(); }
+    if ((drag.mode === 'orbit' || drag.mode === 'pan') && (e.clientX !== drag.sx || e.clientY !== drag.sy)) app.cameraChanged();
     drag.mode = null; drag.id = -1;
     updateCursor();
   };
@@ -92,6 +93,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     const cam = app.project.camera;
     cam.zoom = Math.max(0.05, Math.min(10, cam.zoom * Math.exp(e.deltaY * 0.0012)));
     app.emit('status', undefined);
+    app.cameraChanged();
   }, { passive: false });
 
   function startGrab(e: PointerEvent): void {
