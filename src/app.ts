@@ -214,7 +214,7 @@ export class App extends Emitter<AppEvents> {
     // デコード中に別の読み込みが始まっていたら、こちらは捨てる
     if (token !== this.syncToken) return false;
     this.loading = true;
-    clearTimeout(this.cameraTimer); // 前の作業の視点変更を、新しく開いた作業の変更として数えない
+    clearTimeout(this.cameraTimer); this.cameraTimer = 0; // 前の作業の視点変更を、新しく開いた作業の変更として数えない
     try {
       this.store.replace(project);
       this.history.clear();
