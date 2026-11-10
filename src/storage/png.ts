@@ -9,8 +9,8 @@ const SIG = [137, 80, 78, 71, 13, 10, 26, 10];
 
 /** 読み込めるウェイト PNG の一辺の上限。ウェイトは 1024 までに縮めるので、余裕をみてもこれで足りる */
 export const MAX_PNG_SIDE = 4096;
-/** 展開後の画像データの上限(バイト)。確保する前にこれで弾く */
-export const MAX_PNG_RAW = 64 << 20;
+/** 展開後の画像データの上限(バイト)。確保する前にこれで弾く。4096×4096 の RGBA 8bit(各行のフィルタ1バイト込み)までは読める */
+export const MAX_PNG_RAW = (4096 * 4 + 1) * 4096;
 
 /** PNG のヘッダ(IHDR)から寸法を読む。PNG でなければ null */
 export function readPngSize(bytes: Uint8Array): { width: number; height: number } | null {

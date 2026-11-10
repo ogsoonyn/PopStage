@@ -173,6 +173,22 @@ describe('.popstage', () => {
     await expect(deserializeProject(zip)).rejects.toThrow(/合計/);
   });
 
+  it('無圧縮のエントリで展開後のサイズを小さく偽っても、実際の大きさで上限を判定する', async () => {
+    const json = oneLayer({}) as any;
+    json.documents[0].layers[0].weights.path = 'w.png';
+    const zip = declareSize(zipSync({
+      'project.json': strToU8(JSON.stringify(json)), 'images/doc-0.png': new Uint8Array([1]),
+      'w.png': [new Uint8Array(UNZIP_LIMITS.weights + 1), { level: 0 }], // 無圧縮で格納し、展開後は 1 バイトと偽る
+    }), 'w.png', 1);
+    await expect(deserializeProject(zip)).rejects.toThrow(/大きすぎます/);
+  });
+
+  it('ZIP の中のパスにプロトタイプの名前(constructor など)を書いても、ファイルがあるとは見なさない', async () => {
+    const json = oneLayer({}) as any;
+    json.documents[0].image.path = 'constructor';
+    await expect(deserializeProject(zipOf(json))).rejects.toThrow(/見つかりません/);
+  });
+
   it('使わないファイルは展開しない。サムネイルが大きすぎるときは捨てて読み込みは続ける', async () => {
     // 展開しようとすれば 4GB を確保して失敗するエントリ
     let zip: Uint8Array = declareSize(zipOf(oneLayer({}), { 'junk.bin': new Uint8Array([1]), 'thumbnail.png': new Uint8Array([2]) }), 'junk.bin', 0xfffffff0);

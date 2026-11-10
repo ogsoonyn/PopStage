@@ -178,7 +178,7 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
   };
 
   for (const dj of docsJson) {
-    const imgBytes = files[dj.image?.path];
+    const imgBytes = own(files, dj.image?.path) ? files[dj.image.path] : undefined;
     if (!imgBytes) throw new Error(`画像 ${dj.image?.path} が見つかりません`);
     const ext = dj.image.path.split('.').pop() ?? 'png';
     const width = Math.round(num(dj.image.width, 1, 1 << 15, 1)), height = Math.round(num(dj.image.height, 1, 1 << 15, 1));
@@ -191,7 +191,7 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
     };
     const ws = weightSizeFor(width, height);
     for (const lj of layersOf(dj)) {
-      const wb = files[lj.weights?.path];
+      const wb = own(files, lj.weights?.path) ? files[lj.weights.path] : undefined;
       let weights = new WeightMap(ws.w, ws.h);
       if (wb) {
         let g: GrayImage;
@@ -230,11 +230,13 @@ function unzipEntries(bytes: Uint8Array, wanted: Map<string, number>, optional =
     unzipSync(bytes, {
       filter: f => {
         const must = wanted.get(f.name), opt = optional.get(f.name);
+        // 無圧縮のエントリは宣言サイズに関係なく圧縮後のサイズ分をコピーするので、大きい方で数える
+        const size = Math.max(f.size, f.originalSize);
         if (must !== undefined) {
-          if (f.originalSize > must) tooLarge.push(f.name);
-          total += f.originalSize;
+          if (size > must) tooLarge.push(f.name);
+          total += size;
         } else if (opt !== undefined) {
-          if (f.originalSize > opt) skip.add(f.name); else total += f.originalSize;
+          if (size > opt) skip.add(f.name); else total += size;
         }
         return false;
       },
