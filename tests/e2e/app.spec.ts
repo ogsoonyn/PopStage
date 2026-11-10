@@ -348,6 +348,37 @@ test('保存して開き直すと同じ状態に戻る', async ({ page }) => {
   expect(result.size).toBeGreaterThan(1000);
 });
 
+test('上書き保存の最中に変更すると、保存後も「未保存」のまま残る', async ({ page }) => {
+  await boot(page);
+  const r = await page.evaluate(async () => {
+    const a = (window as any).popstage;
+    let release!: () => void;
+    const gate = new Promise<void>(res => { release = res; });
+    let written = false;
+    // 書き込みに時間がかかる保存先(上書き保存のハンドル)の代わり
+    a.fileHandle = { name: 'slow.popstage', createWritable: async () => ({ write: async () => { written = true; await gate; }, close: async () => {} }) };
+    const clean = async () => { const p = a.save(); await new Promise(r => setTimeout(r, 0)); release(); return p; };
+
+    // 変更しないで保存すると「保存済み」になる
+    a.store.patchLayer(a.activeLayerId, { pop: 10 });
+    const ok1 = await clean();
+    const dirty1 = a.dirty;
+
+    // 書き込みを待っている間に変更すると「未保存」のまま
+    let release2!: () => void;
+    const gate2 = new Promise<void>(res => { release2 = res; });
+    a.fileHandle = { name: 'slow.popstage', createWritable: async () => ({ write: async () => { await gate2; }, close: async () => {} }) };
+    a.store.patchLayer(a.activeLayerId, { pop: 20 });
+    const p = a.save();
+    await new Promise(r => setTimeout(r, 50)); // 直列化が済み、書き込みを待っているところ
+    a.store.patchLayer(a.activeLayerId, { pop: 30 });
+    release2();
+    const ok2 = await p;
+    return { ok1, dirty1, written, ok2, dirty2: a.dirty };
+  });
+  expect(r).toEqual({ ok1: true, dirty1: false, written: true, ok2: true, dirty2: true });
+});
+
 test('中の画像が壊れた .popstage を開いても、今の状態は何も変わらない', async ({ page }) => {
   await boot(page);
   const good = await page.evaluate(async () => Array.from((window as any).popstage.serialize() as Uint8Array));

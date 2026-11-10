@@ -52,6 +52,8 @@ export class App extends Emitter<AppEvents> {
   fileHandle: FileSystemFileHandle | null = null;
   fileName: string | null = null;
   dirty = false;
+  /** 変更のたびに増える番号。保存中に変更があったかを見分けるのに使う */
+  private revision = 0;
   exporting = false;
   lastSaved: Date | null = null;
   lastAutosave: Date | null = null;
@@ -103,6 +105,7 @@ export class App extends Emitter<AppEvents> {
       this.emit('status', undefined);
     });
     s.on('change', () => {
+      this.revision++;
       if (this.loading) return;
       this.lastAutosave = null;
       if (!this.dirty) { this.dirty = true; this.emit('file', undefined); }
@@ -269,16 +272,23 @@ export class App extends Emitter<AppEvents> {
 
   async save(saveAs = false): Promise<boolean> {
     if (!this.doc) return false;
-    const bytes = this.serialize(await this.thumbnail());
+    // 書き込みを待つ間に変更されたら、その変更は保存されていないので「未保存」のまま残す
+    const thumb = await this.thumbnail();
+    const revision = this.revision;
+    const bytes = this.serialize(thumb);
     const blob = new Blob([bytes as BlobPart], { type: 'application/zip' });
     try {
       const h = await saveFile(blob, this.suggestedName(), PROJECT_TYPES, saveAs ? null : this.fileHandle);
       if (h === undefined) return false;
       this.fileHandle = h;
       if (h) this.fileName = h.name; else this.fileName ??= this.suggestedName();
-      this.dirty = false;
       this.lastSaved = new Date();
-      void autosave.clear();
+      if (this.revision === revision) {
+        this.dirty = false;
+        void autosave.clear();
+      } else {
+        this.scheduleAutosave();
+      }
       this.emit('file', undefined);
       toast(h ? `「${h.name}」に保存しました。` : `「${this.fileName}」をダウンロードしました。`, 'success');
       return true;
