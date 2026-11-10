@@ -347,6 +347,7 @@ test('3面図: 正面・右・下はホイールでズーム・ドラッグで�
   await page.keyboard.press('m');
   await expect(page.locator('#multiView')).toBeVisible();
   await page.waitForTimeout(1500); // 重さで垂れた所で落ち着かせる
+  await page.evaluate(() => { (window as any).popstage.dirty = false; }); // 自動揺らしを切った分の「未保存」を消す
   const state = () => page.evaluate(() => {
     const a = (window as any).popstage;
     return {
@@ -415,6 +416,10 @@ test('3面図: 正面・右・下はホイールでズーム・ドラッグで�
   await front.dblclick();
   expect((await state()).ortho).toEqual({ zoom: 1, pan: { x: 0, y: 0, z: 0 } });
 
+  // 正面・右から・下からの操作では「未保存」にならない(画面だけの設定)
+  await page.waitForTimeout(400);
+  expect((await state()).dirty).toBe(false);
+
   // 自由角度: 中ドラッグで平行移動する。回転とズームは変わらない
   const free = page.locator('#multiView [data-kind=free]'), vb = (await free.boundingBox())!;
   await page.mouse.move(vb.x + vb.width * 0.3, vb.y + vb.height * 0.5);
@@ -445,13 +450,13 @@ test('3面図: 正面・右・下はホイールでズーム・ドラッグで�
   await page.mouse.up();
   expect((await state()).free.yaw).not.toBeCloseTo(s0.free.yaw);
 
-  // 主ビューの視点・揺れの計算・未保存の印・アンドゥには何も起きない
+  // 主ビューの視点・揺れの計算・アンドゥには何も起きない。自由角度は保存するので「未保存」になる
   const [lo, hi] = await watching;
   expect(Math.max(Math.abs(lo - before), Math.abs(hi - before))).toBeLessThan(0.005);
   const s4 = await state();
   expect(s4.main).toBe(s0.main);
   expect(s4.viewTarget).toBe(s0.viewTarget);
-  expect(s4.dirty).toBe(s0.dirty);
+  await expect.poll(async () => (await state()).dirty).toBe(true); // 「未保存」は少し間引いてから付く
   expect(s4.undo).toBe(s0.undo);
 
   // ダブルクリックで回転・ズーム・平行移動がすべて初期の視点に戻る

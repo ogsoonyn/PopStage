@@ -85,7 +85,7 @@ export class App extends Emitter<AppEvents> {
   tool: Tool = 'brush';
   activeLayerId: string | null = null;
   view: ViewOptions = { overlay: true, grid: false, fade: false, flat: false, multi: false };
-  /** 3面図の「自由角度」の視点(画面だけの設定で保存しない) */
+  /** 3面図の「自由角度」の視点。project.multiCamera に置き、ファイルにも保存する */
   get multiCam(): CameraState { return this.project.multiCamera; }
   set multiCam(c: CameraState) { this.project.multiCamera = c; }
   /** 3面図の正面・右から・下からの拡大率と平行移動(3つで共有。画面だけの設定で保存しない) */

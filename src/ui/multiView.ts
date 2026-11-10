@@ -1,7 +1,9 @@
 /**
  * 3面図(正面・右から・下から・自由角度)。キャンバスは画面全体に敷いたまま、
  * 右側に並べたセルの位置を Stage へ渡して、その矩形に別のカメラで描かせる。
- * 各セルの視点(拡大率・平行移動・回転)は画面だけの設定で、保存もアンドゥもしない。
+ * 正面・右から・下からの拡大率と平行移動は画面だけの設定で、保存も「未保存」の印も付けない。
+ * 自由角度の視点はプロジェクトに保存するので、主ビューの視点と同じく動かすと「未保存」になる。
+ * どちらもアンドゥには積まない。
  * 主ビューの平行移動と違って揺れの計算にも渡さない。
  */
 import type { App } from '../app';
@@ -33,7 +35,7 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
 
   /**
    * セルの上のドラッグ。どのボタンで何をするかは modeOf が決め、null なら受け付けない。
-   * 視点は画面だけの設定なので、未保存の印もアンドゥも付けない
+   * アンドゥには積まない(自由角度だけは move の中で「未保存」にする)
    */
   function bindDrag<M extends string>(el: HTMLElement, modeOf: (e: PointerEvent) => M | null, cursor: (m: M) => string,
     move: (m: M, dx: number, dy: number) => void): void {
