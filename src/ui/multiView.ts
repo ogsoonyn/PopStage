@@ -10,7 +10,7 @@ import type { App } from '../app';
 import { defaultMultiCamera, defaultOrthoView } from '../model/project';
 import type { SubViewKind, ViewRect } from '../stage/stage';
 import { $ } from './dom';
-import { fineFactor, wheelDelta } from './fine';
+import { fineFactor, wheelFineFactor, wheelDelta } from './fine';
 
 export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: () => void } {
   const panel = $('multiView');
@@ -74,7 +74,8 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
     el.addEventListener('lostpointercapture', end); // ドラッグ中にセルが隠れたときも終える
   }
 
-  // 自由角度: 左・右ドラッグで回転、中ドラッグ・Shift+左ドラッグで平行移動、ホイールでズーム、ダブルクリックで戻す
+  // 自由角度: 左・右ドラッグで回転、中ドラッグ・Shift+左ドラッグで平行移動、ホイールでズーム、ダブルクリックで戻す。
+  // Ctrl(⌘)で細かく動かす(Shift+左は平行移動なので、そのときの Shift は細かくする意味に取らない)
   const free = cells.find(el => el.dataset.kind === 'free')!;
   bindDrag(free,
     e => (e.button === 1 || (e.button === 0 && e.shiftKey) ? 'pan' : e.button === 0 || e.button === 2 ? 'orbit' : null),
@@ -90,7 +91,7 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
   free.addEventListener('wheel', e => {
     e.preventDefault();
     const cam = app.multiCam;
-    cam.zoom = Math.max(0.2, Math.min(10, cam.zoom * Math.exp(wheelDelta(e) * 0.0012 * fineFactor(e))));
+    cam.zoom = Math.max(0.2, Math.min(10, cam.zoom * Math.exp(wheelDelta(e) * 0.0012 * wheelFineFactor(e))));
     app.cameraChanged();
   }, { passive: false });
 
@@ -106,7 +107,7 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
     el.addEventListener('wheel', e => {
       e.preventDefault();
       const r = el.getBoundingClientRect();
-      app.stage.zoomOrtho(app.multiOrtho, kind, Math.exp(-wheelDelta(e) * 0.0012 * fineFactor(e)),
+      app.stage.zoomOrtho(app.multiOrtho, kind, Math.exp(-wheelDelta(e) * 0.0012 * wheelFineFactor(e)),
         e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
     }, { passive: false });
   }

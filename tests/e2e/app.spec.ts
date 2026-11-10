@@ -1692,6 +1692,22 @@ test('Ctrl か Shift を押しながらだと、回転・平行移動・ズー�
   expect(zCtrl / zFull).toBeCloseTo(0.2, 1);
   z0 = await zoom(); await page.keyboard.down('Shift'); await page.mouse.wheel(0, 200); await page.keyboard.up('Shift');
   await expect.poll(zoom).not.toBe(z0);
+  expect(Math.log((await zoom()) / z0) / zFull).toBeCloseTo(0.2, 1);
+  // タッチパッドのピンチ(ctrlKey 付きのホイール。Ctrl キーは押していない)は細かくしない
+  z0 = await zoom();
+  await page.evaluate(() => document.getElementById('view')!.dispatchEvent(new WheelEvent('wheel', { deltaY: 200, ctrlKey: true, bubbles: true, cancelable: true })));
+  expect(Math.log((await zoom()) / z0) / zFull).toBeCloseTo(1, 1);
+
+  // ドラッグの途中で Ctrl を押しても跳ばない(半分は普通、残り半分は 1/5)
+  y0 = await yaw();
+  await page.mouse.move(...at(0.5, 0.5));
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(...at(0.55, 0.5), { steps: 3 });
+  await page.keyboard.down('Control');
+  await page.mouse.move(...at(0.6, 0.5), { steps: 3 });
+  await page.keyboard.up('Control');
+  await page.mouse.up({ button: 'right' });
+  expect(((await yaw()) - y0) / full).toBeCloseTo(0.6, 1);
 
   // つかむ: 引っ張る量が 1/5
   await page.keyboard.press('g');
@@ -1724,6 +1740,14 @@ test('Ctrl か Shift を押しながらだと、回転・平行移動・ズー�
   let o0 = await ox(); await cellDrag('front', null, 'left'); const oFull = (await ox()) - o0;
   o0 = await ox(); await cellDrag('front', 'Shift', 'left'); const oFine = (await ox()) - o0;
   expect(oFine / oFull).toBeCloseTo(0.2, 1);
+  // 3面図のホイールも Ctrl で細かく
+  const oz = () => app(a => a.multiOrtho.zoom as number);
+  const fb = (await page.locator('#multiView [data-kind=front]').boundingBox())!;
+  await page.mouse.move(fb.x + fb.width / 2, fb.y + fb.height / 2);
+  let q0 = await oz(); await page.mouse.wheel(0, -200); await expect.poll(oz).not.toBe(q0); const ozFull = Math.log((await oz()) / q0);
+  q0 = await oz(); await page.keyboard.down('Control'); await page.mouse.wheel(0, -200); await page.keyboard.up('Control');
+  await expect.poll(oz).not.toBe(q0);
+  expect(Math.log((await oz()) / q0) / ozFull).toBeCloseTo(0.2, 1);
   const free = () => app(a => ({ yaw: a.multiCam.yaw as number, x: a.multiCam.target.x as number, y: a.multiCam.target.y as number, z: a.multiCam.target.z as number }));
   let f0 = await free(); await cellDrag('free', null, 'middle'); let f1 = await free();
   const panLen = Math.hypot(f1.x - f0.x, f1.y - f0.y, f1.z - f0.z);

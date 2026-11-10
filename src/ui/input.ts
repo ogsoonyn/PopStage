@@ -4,10 +4,11 @@
  *   (平行移動で画像が画面上を動くと、塗った部分がその勢いで揺れる。physics/world.ts)
  *   左ドラッグ: 選択中のツール(ブラシ中に Alt で一時的に消しゴム。膨らませるでは範囲を描き、Shift で正円・正方形)
  *   「揺らす」の左ドラッグ: カメラを画像に付けたまま振る。画面上は動かず、平行移動と同じ揺れだけが出る
+ *   Ctrl(⌘)か Shift を押している間は、回転・平行移動・ズーム・つかむ・揺らすの動きを 1/5 にする(ui/fine.ts)
  */
 import type { App } from '../app';
 import type { PaintMode } from '../paint/stroke';
-import { fineFactor, wheelDelta } from './fine';
+import { fineFactor, wheelFineFactor, wheelDelta } from './fine';
 
 type DragMode = 'orbit' | 'pan' | 'shake' | 'grab' | 'paint' | 'area' | null;
 
@@ -108,7 +109,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
     const cam = app.project.camera;
-    cam.zoom = Math.max(0.05, Math.min(10, cam.zoom * Math.exp(wheelDelta(e) * 0.0012 * fineFactor(e))));
+    cam.zoom = Math.max(0.05, Math.min(10, cam.zoom * Math.exp(wheelDelta(e) * 0.0012 * wheelFineFactor(e))));
     app.emit('status', undefined);
     app.cameraChanged();
   }, { passive: false });
