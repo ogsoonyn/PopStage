@@ -747,7 +747,7 @@ test('プリセットで材質・揺らし方・周期が変わり、1手で元�
   });
   const before = await state();
   expect(before).toMatchObject({ preset: 'puru', motion: 'jiggle' });
-  await expect(page.locator('#pPreset option')).toHaveCount(13); // 12 種類 + カスタム
+  await expect(page.locator('#pPreset option')).toHaveCount(14); // 13 種類 + カスタム
 
   await page.selectOption('#pPreset', 'bain');
   expect(await state()).toEqual({ preset: 'bain', motion: 'jump', hardness: 0.25, period: 1.8 });
@@ -854,6 +854,59 @@ test('揺らし方「ピストン」: 画像全体が上下に動き、塗った
   await page.keyboard.press('p');
   const paused = await sample(0.5);
   for (const x of paused) { expect(x.g).toBe(0); expect(x.mesh).toBe(0); expect(x.s).toBe(0); }
+});
+
+test('揺らし方「ためて膨らむ2」: 離した直後に、塗った範囲が画像の面内でも外へ広がる', async ({ page }) => {
+  await boot(page);
+  // 透明な背景に半径 80px の円を描いた画像。円より広く(半径 130px まで)塗り、ポップ量は 0 にして横の広がりだけを見る
+  await page.evaluate(async () => {
+    const c = document.createElement('canvas'); c.width = 400; c.height = 400;
+    const g = c.getContext('2d')!; g.fillStyle = '#e33'; g.beginPath(); g.arc(200, 200, 80, 0, Math.PI * 2); g.fill();
+    const b: Blob = await new Promise(r => c.toBlob(x => r(x!), 'image/png'));
+    const a = (window as any).popstage;
+    a.dirty = false;
+    await a.openFile(new File([b], 'disc.png', { type: 'image/png' }));
+    a.weightOp('円を塗る', (wm: any) => {
+      for (let y = 0; y < wm.height; y++) for (let x = 0; x < wm.width; x++) {
+        const d = Math.hypot((x + 0.5) / wm.width * 400 - 200, (y + 0.5) / wm.height * 400 - 200);
+        wm.data[y * wm.width + x] = d < 130 ? 255 : d < 160 ? Math.round(255 * (160 - d) / 30) : 0;
+      }
+    });
+    a.store.patchLayer(a.activeLayer.id, { pop: 0 });
+    a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: true, period: 2 } });
+  });
+  await page.locator('#physDetails summary').click();
+  await page.selectOption('#pMotion', 'charge2');
+  await expect(page.locator('#physSummary')).toContainText('ためて膨らむ2');
+  await expect(page.locator('#motionParams label')).toHaveText(['ためる深さ', 'ためる時間', '膨らみの強さ', '横の広がり', '横の縮み']);
+  await page.evaluate(() => (window as any).popstage.setPaused(false));
+
+  // 描画フレームごとに、広がり r と、正面から書き出した絵の円の幅(px)を記録する
+  const samples = await page.evaluate(() => new Promise<{ r: number; width: number }[]>(resolve => {
+    const a = (window as any).popstage, id = a.activeLayer.id, out: { r: number; width: number }[] = [], N = 200;
+    const cam = { fov: 40, yaw: 0, pitch: 0, zoom: 1, target: { x: 0, y: 0, z: 0 } };
+    const t0 = performance.now();
+    const tick = () => {
+      const px: Uint8ClampedArray = a.stage.renderFrame(N, N, cam, null);
+      let lo = N, hi = -1;
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (px[(y * N + x) * 4 + 3] > 128) { lo = Math.min(lo, x); hi = Math.max(hi, x); }
+      out.push({ r: a.world.spread(id), width: hi - lo + 1 });
+      if (performance.now() - t0 < 4500) requestAnimationFrame(tick); else resolve(out);
+    };
+    requestAnimationFrame(tick);
+  }));
+  expect(samples.length).toBeGreaterThan(10);
+  const by = (f: (s: { r: number }) => number) => samples.reduce((b, s) => (f(s) < f(b) ? s : b));
+  const peak = by(s => -s.r), trough = by(s => s.r), rest = by(s => Math.abs(s.r));
+  expect(peak.r).toBeGreaterThan(0.1);
+  expect(trough.r).toBeLessThan(-0.05);
+  expect(Math.abs(rest.r)).toBeLessThan(0.03);
+  // 円の幅は広がり r に合わせて変わる(円の縁は塗りの内側なので、幅 × (1 + r) になる)
+  expect(peak.width).toBeGreaterThan(rest.width * (1 + 0.7 * peak.r));
+  expect(trough.width).toBeLessThan(rest.width * (1 + 0.5 * trough.r));
+  // 一時停止すると元の大きさに戻る
+  await page.evaluate(() => (window as any).popstage.setPaused(true));
+  expect(await page.evaluate(() => (window as any).popstage.world.spread((window as any).popstage.activeLayer.id))).toBe(0);
 });
 
 test('保存して開き直すと同じ状態に戻る', async ({ page }) => {

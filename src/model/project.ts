@@ -11,8 +11,9 @@ export interface Vec3 { x: number; y: number; z: number }
  * 揺らし方。自動揺らしのとき、塗った部分を支える土台(アンカー)をどう動かすか。
  * 塗った部分はバネで土台に繋がっていて、遅れて付いてくる(physics/motion.ts)。
  * ピストンだけは土台ではなく画像全体を動かし、塗った部分はその動きに慣性で遅れて付いてくる。
+ * ためて膨らむ2 は手前への動きに加えて、塗った範囲を中心から外へ広げる(縮める)。
  */
-export type MotionPattern = 'charge' | 'jiggle' | 'jump' | 'bounce' | 'piston' | 'shiver' | 'float' | 'sway' | 'shake' | 'circle' | 'heartbeat' | 'stretch' | 'none';
+export type MotionPattern = 'charge' | 'charge2' | 'jiggle' | 'jump' | 'bounce' | 'piston' | 'shiver' | 'float' | 'sway' | 'shake' | 'circle' | 'heartbeat' | 'stretch' | 'none';
 
 export const MOTIONS: Record<MotionPattern, { label: string; desc: string }> = {
   jiggle: { label: '上下に小刻み', desc: '上下に軽くつついて揺らす' },
@@ -26,6 +27,7 @@ export const MOTIONS: Record<MotionPattern, { label: string; desc: string }> = {
   circle: { label: '回転', desc: '円を描いて回る' },
   heartbeat: { label: '鼓動', desc: 'ドクン、ドクンと手前にふくらむ' },
   charge: { label: 'ためて膨らむ', desc: 'ポップ量をぐーっと縮めてから、いっきにぼよんと膨らませる' },
+  charge2: { label: 'ためて膨らむ2', desc: '塗った範囲ごと内へ縮めてから、手前にも横にもいっきにぼよんと広げる' },
   stretch: { label: '伸びて戻る', desc: 'ゆっくり引き伸ばして、ぱっと離す' },
   none: { label: 'なし(つかむ操作だけ)', desc: '自動では揺らさない' },
 };
@@ -54,6 +56,13 @@ export const MOTION_PARAMS: Record<MotionPattern, MotionParamDef[]> = {
     pct('depth', 'ためる深さ', 0.7, 1, 0, 'ポップ量をどこまで縮めるか(100% で平らになる)'),
     pct('time', 'ためる時間', 0.6, 0.9, 0.2, '周期のうち、縮めている時間の割合'),
     pct('bulge', '膨らみの強さ', 0.3, 2, 0, '離した瞬間に、さらに押し出す量(ポップ量に対する割合)。0% でもバネの勢いで少し膨らむ'),
+  ],
+  charge2: [
+    pct('depth', 'ためる深さ', 0.7, 1, 0, 'ポップ量をどこまで縮めるか(100% で平らになる)'),
+    pct('time', 'ためる時間', 0.6, 0.9, 0.2, '周期のうち、縮めている時間の割合'),
+    pct('bulge', '膨らみの強さ', 0.3, 2, 0, '離した瞬間に、さらに手前へ押し出す量(ポップ量に対する割合)'),
+    pct('spread', '横の広がり', 0.2, 0.5, 0, '離した瞬間に、塗った範囲を中心から外へ広げる量(中心からの距離に対する割合)'),
+    pct('pinch', '横の縮み', 0.5, 1, 0, 'ためている間に、塗った範囲を内へ縮める量(横の広がりに対する割合)'),
   ],
   jump: [
     pct('height', '高さ', 1),
@@ -105,7 +114,7 @@ export function motionParam(values: Record<string, number> | undefined, motion: 
   return MOTION_PARAMS[motion].find(d => d.key === key)?.def ?? 0;
 }
 
-export type PresetName = 'puru' | 'bain' | 'poyo' | 'zun' | 'buru' | 'fuwa' | 'yura' | 'furi' | 'guru' | 'doki' | 'tame' | 'biyo' | 'custom';
+export type PresetName = 'puru' | 'bain' | 'poyo' | 'zun' | 'buru' | 'fuwa' | 'yura' | 'furi' | 'guru' | 'doki' | 'tame' | 'puku' | 'biyo' | 'custom';
 
 /** 揺れのパラメータ。数値はすべて 0〜1 の正規化値。 */
 export interface PhysicsParams {
@@ -204,6 +213,7 @@ export const PRESETS: Record<Exclude<PresetName, 'custom'>, Preset> = {
   guru: { label: 'ぐるぐる', desc: '円を描いて回る', hardness: 0.2, mass: 0.3, damping: 0.3, motion: 'circle', period: 2 },
   doki: { label: 'どきどき', desc: 'ドクン、ドクンと手前にふくらむ', hardness: 0.55, mass: 0.1, damping: 0.35, motion: 'heartbeat', period: 1 },
   tame: { label: 'ためてぼよん', desc: 'ぐーっと縮んでから、いっきにぼよんと膨らんで弾む', hardness: 0.3, mass: 0.2, damping: 0.1, motion: 'charge', period: 2 },
+  puku: { label: 'ぷっくり', desc: '塗った範囲ごとぐーっと縮んでから、手前にも横にもいっきにぼよんと広がって弾む', hardness: 0.3, mass: 0.2, damping: 0.1, motion: 'charge2', period: 2 },
   biyo: { label: 'びよーん', desc: 'ゆっくり引き伸ばされて、離すと大きく弾む', hardness: 0.35, mass: 0.2, damping: 0.08, motion: 'stretch', period: 2.4 },
 };
 

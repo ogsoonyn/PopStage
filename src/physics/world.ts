@@ -8,20 +8,25 @@
  * 視点の平行移動で画像が画面上を動いたときも、その加速度を慣性力として加える(F_inertia)。
  * 揺らし方「ピストン」で画像全体が動くときも、その加速度を同じく慣性力として、揺れが有効なすべてのレイヤーに加える。
  * s は画像に対する変位なので、画面上の位置は「画像全体の位置(baseOffset)+ w·s」になる。
+ * ためて膨らむ2 の塗った範囲の広がり r(中心からの距離に対する割合)は、同じ材質のバネで土台(motionSpread)に付いてくる
+ * 1次元のばねとして別に持つ。つかむ・平行移動・重さは効かない。
  * 単位は「画像の長辺 = 2」の正規化座標。描画側で (長辺 / 2) を掛けてピクセルへ直す。
  * 積分は半陰的オイラー法、刻みは 1/120 秒固定。
  */
 import type { Layer, PhysicsParams, AutoSwing, Vec3 } from '../model/project';
-import { motionAnchor, pistonOffset } from './motion';
+import { motionAnchor, motionSpread, pistonOffset } from './motion';
 
 export const PHYSICS_DT = 1 / 120;
 const MAX_DISPLACEMENT = 1.2;
 const GRAB_GAIN = 140;
 const GRAB_LIMIT = 0.7;
+/** 広がりの範囲。-1 より小さいと裏返るので手前で止める */
+const SPREAD_MIN = -0.8, SPREAD_MAX = 1.5;
 /** 平行移動の速度をならす時定数(秒)。視点は描画フレームごとにしか動かないので、刻みごとのガタつきを消す */
 const BASE_SMOOTH = 0.025;
 
-export interface SpringState { s: Vec3; v: Vec3 }
+/** s, v: 変位と速度。r, rv: 塗った範囲の広がりとその速さ */
+export interface SpringState { s: Vec3; v: Vec3; r: number; rv: number }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const v3 = (x = 0, y = 0, z = 0): Vec3 => ({ x, y, z });
@@ -61,11 +66,14 @@ export class PhysicsWorld {
 
   state(layerId: string): SpringState {
     let s = this.states.get(layerId);
-    if (!s) this.states.set(layerId, (s = { s: v3(), v: v3() }));
+    if (!s) this.states.set(layerId, (s = { s: v3(), v: v3(), r: 0, rv: 0 }));
     return s;
   }
 
   displacement(layerId: string): Vec3 { return this.states.get(layerId)?.s ?? v3(); }
+
+  /** 塗った範囲の広がり(中心からの距離に対する割合、ためて膨らむ2) */
+  spread(layerId: string): number { return this.states.get(layerId)?.r ?? 0; }
 
   reset(): void { this.states.clear(); this.acc = 0; this.base = null; }
 
@@ -107,7 +115,7 @@ export class PhysicsWorld {
     drive.z += (g2.z - 2 * g1.z + g0.z) / (dt * dt);
     for (const layer of layers) {
       const st = this.state(layer.id);
-      if (!layer.physics.enabled || !layer.visible) { zero(st.s); zero(st.v); continue; }
+      if (!layer.physics.enabled || !layer.visible) { zero(st.s); zero(st.v); st.r = st.rv = 0; continue; }
       const { k, m, c, g } = coefficients(layer.physics);
       // 土台の位置と速度(速度は1刻み前との差から求める)
       if (on) {
@@ -131,6 +139,14 @@ export class PhysicsWorld {
       if (len > MAX_DISPLACEMENT) {
         const sc = MAX_DISPLACEMENT / len;
         st.s.x *= sc; st.s.y *= sc; st.s.z *= sc;
+      }
+      // 塗った範囲の広がり(土台が動かないレイヤーでは 0 に戻るだけ)
+      const motion = layer.physics.motion, mp = layer.physics.motionParams;
+      const rb = on ? motionSpread(motion, this.time + dt, auto.period, auto.strength, mp) : 0;
+      const rbp = on ? motionSpread(motion, this.time, auto.period, auto.strength, mp) : 0;
+      if (rb !== 0 || rbp !== 0 || st.r !== 0 || st.rv !== 0) {
+        st.rv += ((-k * (st.r - rb) - c * (st.rv - (rb - rbp) / dt)) / m) * dt;
+        st.r = Math.max(SPREAD_MIN, Math.min(SPREAD_MAX, st.r + st.rv * dt));
       }
     }
     this.time += dt;
@@ -156,14 +172,14 @@ export class PhysicsWorld {
     const b = this.base;
     return {
       time: this.time, acc: this.acc,
-      states: [...this.states].map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v } }]),
+      states: [...this.states].map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v }, r: s.r, rv: s.rv }]),
       base: b ? { pos: { ...b.pos }, vel: { ...b.vel } } : null,
     };
   }
 
   restore(snap: WorldSnapshot): void {
     this.time = snap.time; this.acc = snap.acc;
-    this.states = new Map(snap.states.map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v } }]));
+    this.states = new Map(snap.states.map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v }, r: s.r ?? 0, rv: s.rv ?? 0 }]));
     const b = snap.base;
     this.base = b ? { pos: { ...b.pos }, vel: { ...b.vel } } : null;
   }

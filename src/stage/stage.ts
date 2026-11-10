@@ -83,6 +83,8 @@ export class Stage {
       uMap: { value: null }, uW: { value: null }, uLayerCount: { value: 0 },
       uPop: { value: new Array(MAX_LAYERS).fill(0) },
       uSwing: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector3()) },
+      uSpread: { value: new Array(MAX_LAYERS).fill(0) },
+      uCenter: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector2()) },
       uActive: { value: -1 }, uOverlay: { value: 1 }, uGrid: { value: 0 },
       uBrushOn: { value: 0 }, uBrush: { value: new THREE.Vector3() }, uOpacity: { value: 1 },
       uFade: { value: 0 }, uFlat: { value: 0 },
@@ -173,6 +175,15 @@ export class Stage {
   setSwing(index: number, s: Vec3, visible: boolean): void {
     const v = (this.uniforms.uSwing.value as THREE.Vector3[])[index];
     if (visible) v.set(s.x, s.y, s.z); else v.set(0, 0, 0);
+  }
+
+  /**
+   * 塗った範囲の広がり(ためて膨らむ2)。center はそのレイヤーのウェイトの重心(画像のローカル座標、元画像のピクセル)、
+   * r は中心からの距離に対する割合。広がらないレイヤーは r = 0
+   */
+  setSpread(index: number, center: { x: number; y: number }, r: number, visible: boolean): void {
+    (this.uniforms.uSpread.value as number[])[index] = visible ? r : 0;
+    (this.uniforms.uCenter.value as THREE.Vector2[])[index].set(center.x, center.y);
   }
 
   /** 塗った矩形だけをテクスチャへ転送する。まだGPUに無いときは全面転送に切り替える。 */

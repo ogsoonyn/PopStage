@@ -6,6 +6,7 @@
  * - どのパターンも周期 T で元に戻る(T の整数倍の長さで書き出せばループする)。
  * - 振れ幅は strength(0〜1)に比例する。「ためて膨らむ」だけはポップ量にも比例する(pop は正規化座標)。
  * - 揺らし方ごとの固有設定は params(キーは「揺らし方.項目」)。未設定は MOTION_PARAMS の既定値。
+ * - ためて膨らむ2 は手前への動き(motionAnchor)に加えて、塗った範囲の広がりの土台を motionSpread で返す。
  * - ピストンだけは土台を動かさず(motionAnchor は 0)、画像全体の位置を pistonOffset で返す。
  *   塗った部分はその加速度を慣性力として受けて、遅れて付いてくる(world.ts)。
  */
@@ -26,6 +27,13 @@ function hop(phase: number, start: number, air: number, h: number): number {
 }
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
+
+/** ためて膨らむの離す瞬間の押し出しにかける時間(周期に対する割合) */
+const KICK = 0.08;
+/** ためて膨らむの形。time までに -depth へゆっくり縮め、離した瞬間に一度だけ kick の山で押し出す */
+function chargeCurve(u: number, depth: number, time: number, kick: number): number {
+  return u < time ? -depth * smooth(u / time) : kick * bump(u, time + KICK / 2, KICK);
+}
 
 export function motionAnchor(
   pattern: MotionPattern, t: number, period: number, strength: number,
@@ -80,11 +88,9 @@ export function motionAnchor(
     case 'heartbeat': // ドクン、ドクン、と手前にふくらむ
       out.z = 0.22 * s * P('amp') * (bump(u, 0.06, 0.1) + P('second') * bump(u, 0.06 + P('gap'), 0.1));
       break;
-    case 'charge': { // ポップ量をゆっくり平らに近づけてから、ぱっと戻し、さらに押し出す
-      const depth = Math.min(1, P('depth') * 2 * s), time = P('time'), kick = 0.08;
-      out.z = u < time ? -depth * pop * smooth(u / time) : P('bulge') * 2 * s * pop * bump(u, time + kick / 2, kick);
+    case 'charge': case 'charge2': // ポップ量をゆっくり平らに近づけてから、ぱっと戻し、さらに押し出す
+      out.z = pop * chargeCurve(u, Math.min(1, P('depth') * 2 * s), P('time'), P('bulge') * 2 * s);
       break;
-    }
     case 'piston': // 土台は動かさない。画像全体を動かす(pistonOffset)
       break;
     case 'stretch': { // ゆっくり引き伸ばして、ぱっと離す
@@ -117,4 +123,15 @@ export function pistonOffset(
   const y = u < up ? ease(u / up) : u < up + top ? 1 : u < up + top + down ? 1 - ease((u - up - top) / down) : 0;
   out.y = 0.2 * strength * P('height') * y;
   return out;
+}
+
+/**
+ * 塗った範囲の広がりの土台(中心からの距離に対する割合。0 で元の大きさ、0.1 で 1 割外へ)。ためて膨らむ2 だけが動かす。
+ * 手前への動きと同じ時刻に、ためている間は内へ縮め、離した瞬間に外へ押し広げる。周期 T で元に戻る。
+ */
+export function motionSpread(pattern: MotionPattern, t: number, period: number, strength: number, params?: Record<string, number>): number {
+  if (pattern !== 'charge2' || strength <= 0) return 0;
+  const T = Math.max(0.05, period), u = (((t % T) + T) % T) / T;
+  const P = (key: string) => motionParam(params, 'charge2', key), a = P('spread') * 2 * strength;
+  return chargeCurve(u, a * P('pinch'), P('time'), a);
 }

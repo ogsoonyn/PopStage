@@ -108,6 +108,8 @@ export class App extends Emitter<AppEvents> {
   dirty = false;
   /** 変更のたびに増える番号。保存中に変更があったかを見分けるのに使う */
   private revision = 0;
+  /** レイヤーごとのウェイトの重心(元画像のピクセル、ためて膨らむ2 の広がりの中心)。ウェイトが変わったら捨てる */
+  private centers = new Map<string, { x: number; y: number }>();
   /** まだ GPU へ送っていない、レイヤーごとの変わった矩形 */
   private pendingUploads = new Map<string, Rect>();
   /** 自動保存用に、変わっていないレイヤーのウェイト PNG を使い回す(手動の保存では使わない) */
@@ -156,12 +158,13 @@ export class App extends Emitter<AppEvents> {
       const f = s.findLayer(layerId); if (!f) return;
       if (keys.includes('pop') || keys.includes('visible')) this.stage.setLayerParams(f.index, f.layer);
     });
-    s.on('replace', () => this.pngCache.clear());
+    s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); });
     s.on('layers', () => {
       const doc = this.doc; if (!doc) return;
       // 並べ替え・追加・削除ではウェイトは変わらないので、PNG は作り直さない(無くなったレイヤーの分だけ捨てる)
       const ids = new Set(doc.layers.map(l => l.id));
       for (const id of this.pngCache.keys()) if (!ids.has(id)) this.pngCache.delete(id);
+      for (const id of this.centers.keys()) if (!ids.has(id)) this.centers.delete(id);
       const t = performance.now();
       this.stage.setLayers(doc.layers);
       this.perf?.event({ t, d: performance.now() - t, kind: 'layers', detail: 'レイヤー構成の変更(ウェイトの全面転送)' });
@@ -171,6 +174,7 @@ export class App extends Emitter<AppEvents> {
     });
     s.on('weights', ({ layerId, rect }) => {
       this.pngCache.delete(layerId);
+      this.centers.delete(layerId);
       // GPU への転送は、変わった矩形をまとめて描画の直前に1回だけ行う
       const prev = this.pendingUploads.get(layerId);
       this.pendingUploads.set(layerId, prev ? unionRect(prev, rect) : { ...rect });
@@ -771,13 +775,26 @@ export class App extends Emitter<AppEvents> {
   applySwing = (world: PhysicsWorld, doc: Document): void => {
     const k = Math.max(doc.image.width, doc.image.height) / 2;
     doc.layers.forEach((l, i) => {
-      const s = world.displacement(l.id);
-      this.stage.setSwing(i, { x: s.x * k, y: s.y * k, z: s.z * k }, l.visible && l.physics.enabled);
+      const s = world.displacement(l.id), on = l.visible && l.physics.enabled;
+      this.stage.setSwing(i, { x: s.x * k, y: s.y * k, z: s.z * k }, on);
+      // 塗った範囲の広がり(ためて膨らむ2)。重心はウェイトが変わったときだけ求め直す
+      const r = world.spread(l.id);
+      this.stage.setSpread(i, r ? this.layerCenter(doc, l) : { x: 0, y: 0 }, r, on);
     });
     // 画像全体の動き(揺らし方「ピストン」)。一時停止中・自動揺らしが切れているときは 0
     const g = world.baseOffset(doc.layers);
     this.stage.setBaseOffset({ x: g.x * k, y: g.y * k, z: g.z * k });
   };
+
+  /** レイヤーのウェイトの重心(画像のローカル座標、元画像のピクセル) */
+  private layerCenter(doc: Document, l: Layer): { x: number; y: number } {
+    let c = this.centers.get(l.id);
+    if (!c) {
+      const { u, v } = l.weights.centroidUV();
+      this.centers.set(l.id, (c = { x: (u - 0.5) * doc.image.width, y: (v - 0.5) * doc.image.height }));
+    }
+    return c;
+  }
 
   private recordStep = (): void => {
     const w = this.world, c = this.project.camera;

@@ -1,6 +1,7 @@
 /**
  * 頂点シェーダがウェイトマップ(テクスチャ配列)を読み、各レイヤーの w·(ポップ·z + 揺れ) を足して持ち上げる。
- *   x' = x + Σ_i w_i (p_i ẑ + s_i)
+ *   x' = x + Σ_i w_i (p_i ẑ + s_i) + Σ_i w_i r_i (x_xy - c_i)
+ * r_i は塗った範囲の広がり(ためて膨らむ2)、c_i はそのレイヤーのウェイトの重心。広がりは画像の面内だけに効く。
  * ウェイトマップは行 0 が画像の上端なので、v を反転して読む。
  */
 export const MAX_LAYERS = 8;
@@ -11,6 +12,8 @@ export const vertexShader = /* glsl */ `
   uniform int uLayerCount;
   uniform float uPop[${MAX_LAYERS}];
   uniform vec3 uSwing[${MAX_LAYERS}];
+  uniform float uSpread[${MAX_LAYERS}];
+  uniform vec2 uCenter[${MAX_LAYERS}];
   uniform float uFlat;
   varying vec2 vUv;
   varying vec2 vP;
@@ -23,8 +26,9 @@ export const vertexShader = /* glsl */ `
       if (i >= uLayerCount) break;
       float w = textureLod(uW, vec3(wuv, float(i)), 0.0).r;
       p += w * (vec3(0.0, 0.0, uPop[i]) + uSwing[i]);
+      p.xy += w * uSpread[i] * (position.xy - uCenter[i]);
     }
-    // ポップ一時OFF: 持ち上げと揺れを消して平らな画像に戻す
+    // ポップ一時OFF: 持ち上げと揺れ(広がりも)を消して平らな画像に戻す
     p = mix(p, position, uFlat);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
   }

@@ -101,9 +101,9 @@ describe('揺れの物理', () => {
     w.unitPx = 512; // 長辺 1024px の画像相当
     w.autoSwing = { enabled: true, period: T, strength: 0.5 };
     run(w, [l], Math.ceil(20 / T) * T);
-    const xs: number[] = [], ys: number[] = [], zs: number[] = [];
-    for (let i = 0; i < Math.round(T / PHYSICS_DT); i++) { w.step([l]); const d = w.displacement(l.id); xs.push(d.x); ys.push(d.y); zs.push(d.z); }
-    return { xs, ys, zs, rest: -coefficients(l.physics).g * coefficients(l.physics).m / coefficients(l.physics).k };
+    const xs: number[] = [], ys: number[] = [], zs: number[] = [], rs: number[] = [];
+    for (let i = 0; i < Math.round(T / PHYSICS_DT); i++) { w.step([l]); const d = w.displacement(l.id); xs.push(d.x); ys.push(d.y); zs.push(d.z); rs.push(w.spread(l.id)); }
+    return { xs, ys, zs, rs, rest: -coefficients(l.physics).g * coefficients(l.physics).m / coefficients(l.physics).k };
   };
   const crossings = (v: number[], c: number) => { let n = 0; for (let i = 1; i < v.length; i++) if ((v[i - 1] - c) * (v[i] - c) < 0) n++; return n; };
 
@@ -136,11 +136,11 @@ describe('揺れの物理', () => {
 
   it('どのプリセットも発散せず、それぞれ違う動きになる', () => {
     const sig = PRESET_ORDER.map(p => {
-      const { xs, ys, zs } = cycle(p);
+      const { xs, ys, zs, rs } = cycle(p);
       const all = [...xs, ...ys, ...zs].map(Math.abs);
       expect(Math.max(...all), p).toBeLessThan(0.6);
       expect(Math.max(...all), p).toBeGreaterThan(0.005);
-      return [xs, ys, zs].map(v => (Math.max(...v) - Math.min(...v)).toFixed(3)).join('/') + ':' + crossings(ys, ys[0]);
+      return [xs, ys, zs, rs].map(v => (Math.max(...v) - Math.min(...v)).toFixed(3)).join('/') + ':' + crossings(ys, ys[0]);
     });
     expect(new Set(sig).size).toBe(PRESET_ORDER.length);
   });

@@ -49,6 +49,19 @@ export class WeightMap {
     return (a * (1 - fy) + b * fy) / 255;
   }
 
+  /** ウェイトで重み付けした重心(u, v は 0〜1、v は下が 0)。何も塗っていなければ中央 */
+  centroidUV(): { u: number; v: number } {
+    const d = this.data, W = this.width, H = this.height;
+    let sum = 0, sx = 0, sy = 0;
+    for (let y = 0; y < H; y++) {
+      let row = 0, rx = 0;
+      for (let x = 0, i = y * W; x < W; x++, i++) { const w = d[i]; if (w) { row += w; rx += w * x; } }
+      sum += row; sx += rx; sy += row * y;
+    }
+    if (!sum) return { u: 0.5, v: 0.5 };
+    return { u: (sx / sum + 0.5) / W, v: 1 - (sy / sum + 0.5) / H };
+  }
+
   max(): number { let m = 0; for (const v of this.data) if (v > m) m = v; return m; }
 
   isEmpty(): boolean { for (const v of this.data) if (v) return false; return true; }
