@@ -97,4 +97,6 @@ export async function runExport(
 function applySample(world: PhysicsWorld, smp: RecordSample): void {
   world.grab = smp.grab;
   world.grabGains = new Map(smp.grabGains);
+  world.viewTarget = smp.camera.target;
+  if (smp.viewCut) world.cutView();
 }

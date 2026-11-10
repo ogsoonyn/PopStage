@@ -5,6 +5,7 @@
  *
  * b は自動揺らしで動かす土台(アンカー)の位置。揺らし方ごとの軌道は motion.ts にある。
  * 土台が急に動いたり止まったりすると、塗った部分が遅れて付いてきて弾む。
+ * 視点の平行移動で画像が画面上を動いたときも、その加速度を慣性力として加える(F_inertia)。
  * 単位は「画像の長辺 = 2」の正規化座標。描画側で (長辺 / 2) を掛けてピクセルへ直す。
  * 積分は半陰的オイラー法、刻みは 1/120 秒固定。
  */
@@ -15,6 +16,8 @@ export const PHYSICS_DT = 1 / 120;
 const MAX_DISPLACEMENT = 1.2;
 const GRAB_GAIN = 140;
 const GRAB_LIMIT = 0.7;
+/** 平行移動の速度をならす時定数(秒)。視点は描画フレームごとにしか動かないので、刻みごとのガタつきを消す */
+const BASE_SMOOTH = 0.025;
 
 export interface SpringState { s: Vec3; v: Vec3 }
 
@@ -25,7 +28,8 @@ export function coefficients(p: PhysicsParams): { k: number; m: number; c: numbe
   return { k: lerp(20, 400, p.hardness), m: lerp(0.3, 3, p.mass), c: lerp(0.5, 12, p.damping), g: p.weight * 6 };
 }
 
-export interface WorldSnapshot { time: number; acc: number; states: [string, SpringState][] }
+interface BaseState { pos: Vec3; vel: Vec3 }
+export interface WorldSnapshot { time: number; acc: number; states: [string, SpringState][]; base?: BaseState | null }
 
 export class PhysicsWorld {
   /** 物理の経過時間(秒)。自動揺らしの位相に使う。 */
@@ -36,8 +40,11 @@ export class PhysicsWorld {
   grab: Vec3 | null = null;
   /** つかみの効き具合(レイヤーごと、0〜1) */
   grabGains = new Map<string, number>();
-  /** 外から与えるドキュメントの加速度(画像を振った時など) */
-  externalAccel: Vec3 = v3();
+  /**
+   * 視点の注視点(ワールド座標)。平行移動すると画像が画面上で逆向きに動くので、
+   * 画像を手で動かしたのと同じように揺らす。刻みの前に毎回入れる。
+   */
+  viewTarget: Vec3 = v3();
   /** 正規化座標の 1 が何ピクセルか(画像の長辺 / 2)。ポップ量を正規化座標へ直すのに使う */
   unitPx = 1;
 
@@ -45,6 +52,9 @@ export class PhysicsWorld {
   private acc = 0;
   private anchor = v3();
   private anchorPrev = v3();
+  /** 画像の見かけの位置と、ならした速度(正規化座標)。null は「次の刻みで今の位置から測り直す」 */
+  private base: BaseState | null = null;
+  private drive = v3();
 
   state(layerId: string): SpringState {
     let s = this.states.get(layerId);
@@ -54,18 +64,23 @@ export class PhysicsWorld {
 
   displacement(layerId: string): Vec3 { return this.states.get(layerId)?.s ?? v3(); }
 
-  reset(): void { this.states.clear(); this.acc = 0; }
+  reset(): void { this.states.clear(); this.acc = 0; this.base = null; }
+
+  /** 視点が飛んだ(視点のリセットなど)ことを知らせる。その動きでは揺らさない */
+  cutView(): void { this.base = null; }
+  /** 次の刻みで視点を測り直すか(操作の記録に残し、再生でも同じ所で測り直す) */
+  get viewCut(): boolean { return this.base === null; }
 
   /** 実時間で進める(描画フレームから呼ぶ)。1フレームの上限は 0.1 秒。 */
   advance(dt: number, layers: readonly Layer[], beforeStep?: () => void): void {
-    if (this.paused) return;
+    if (this.paused) { this.base = null; return; }
     this.acc = Math.min(this.acc + dt, 0.1);
     while (this.acc >= PHYSICS_DT) { beforeStep?.(); this.step(layers); this.acc -= PHYSICS_DT; }
   }
 
   /** 固定刻みで1回進める。 */
   step(layers: readonly Layer[], dt = PHYSICS_DT): void {
-    const drive = this.externalAccel, grab = this.grab, auto = this.autoSwing, on = auto.enabled;
+    const drive = this.viewAccel(dt), grab = this.grab, auto = this.autoSwing, on = auto.enabled;
     const b = this.anchor, bp = this.anchorPrev;
     for (const layer of layers) {
       const st = this.state(layer.id);
@@ -98,13 +113,36 @@ export class PhysicsWorld {
     this.time += dt;
   }
 
+  /** 平行移動による画像の見かけの加速度。速度をならしてから、1刻みでの変化を加速度にする */
+  private viewAccel(dt: number): Vec3 {
+    const u = this.unitPx || 1, t = this.viewTarget, a = this.drive;
+    // 注視点が右へ動くと、画像は画面上で左へ動いて見える
+    const pos = v3(-t.x / u, -t.y / u, -t.z / u);
+    const b = this.base;
+    if (!b) { this.base = { pos, vel: v3() }; zero(a); return a; }
+    const k = 1 - Math.exp(-dt / BASE_SMOOTH);
+    const nx = b.vel.x + ((pos.x - b.pos.x) / dt - b.vel.x) * k;
+    const ny = b.vel.y + ((pos.y - b.pos.y) / dt - b.vel.y) * k;
+    const nz = b.vel.z + ((pos.z - b.pos.z) / dt - b.vel.z) * k;
+    a.x = (nx - b.vel.x) / dt; a.y = (ny - b.vel.y) / dt; a.z = (nz - b.vel.z) / dt;
+    b.pos = pos; b.vel = v3(nx, ny, nz);
+    return a;
+  }
+
   snapshot(): WorldSnapshot {
-    return { time: this.time, acc: this.acc, states: [...this.states].map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v } }]) };
+    const b = this.base;
+    return {
+      time: this.time, acc: this.acc,
+      states: [...this.states].map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v } }]),
+      base: b ? { pos: { ...b.pos }, vel: { ...b.vel } } : null,
+    };
   }
 
   restore(snap: WorldSnapshot): void {
     this.time = snap.time; this.acc = snap.acc;
     this.states = new Map(snap.states.map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v } }]));
+    const b = snap.base;
+    this.base = b ? { pos: { ...b.pos }, vel: { ...b.vel } } : null;
   }
 }
 

@@ -155,6 +155,49 @@ describe('揺れの物理', () => {
     expect(b.x).toBeCloseTo(a.x, 3); expect(b.y).toBeCloseTo(a.y, 3);
   });
 
+  it('視点を平行移動すると、画像の動きに遅れて揺れ、止めると戻る', () => {
+    const l = layerWith({ weight: 0 }), w = new PhysicsWorld();
+    w.unitPx = 50;
+    run(w, [l], 0.1);
+    expect(w.displacement(l.id).x).toBe(0);
+    // 注視点を右へ動かす = 画像は画面上で左へ動く。塗った部分は遅れるので右へずれる
+    let maxX = 0;
+    for (let i = 0; i < 30; i++) { w.viewTarget = { x: i * 2, y: 0, z: 0 }; w.step([l]); maxX = Math.max(maxX, w.displacement(l.id).x); }
+    expect(maxX).toBeGreaterThan(0.01);
+    expect(Math.abs(w.displacement(l.id).y)).toBeLessThan(1e-9);
+    // 止めた所で反動が出て、その後は収まる
+    let minX = 0;
+    for (let i = 0; i < 60; i++) { w.step([l]); minX = Math.min(minX, w.displacement(l.id).x); }
+    expect(minX).toBeLessThan(-0.01);
+    run(w, [l], 40);
+    expect(Math.abs(w.displacement(l.id).x)).toBeLessThan(1e-4);
+  });
+
+  it('視点が飛んだとき(リセット・一時停止明け)は揺らさない', () => {
+    const l = layerWith({ weight: 0 }), w = new PhysicsWorld();
+    w.unitPx = 50;
+    w.step([l]);
+    w.cutView(); w.viewTarget = { x: 500, y: 300, z: 0 };
+    run(w, [l], 1);
+    expect(w.displacement(l.id)).toEqual({ x: 0, y: 0, z: 0 });
+    w.paused = true; w.advance(0.05, [l]);
+    w.viewTarget = { x: -500, y: 0, z: 0 };
+    w.paused = false; w.advance(0.05, [l]);
+    expect(w.displacement(l.id)).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('平行移動の途中のスナップショットから復元しても同じ結果になる', () => {
+    const l = layerWith({ weight: 0 }), w = new PhysicsWorld();
+    w.unitPx = 50;
+    const go = (from: number, n: number) => { for (let i = 0; i < n; i++) { w.viewTarget = { x: (from + i) * 3, y: 0, z: 0 }; w.step([l]); } };
+    go(0, 10);
+    const snap = w.snapshot();
+    go(10, 20); const x1 = w.displacement(l.id).x;
+    w.restore(snap); go(10, 20);
+    expect(w.displacement(l.id).x).toBe(x1);
+    expect(x1).not.toBe(0);
+  });
+
   it('スナップショットから復元すると同じ結果になる', () => {
     const l = layerWith(), w = new PhysicsWorld();
     w.autoSwing = { enabled: true, period: 1, strength: 1 };

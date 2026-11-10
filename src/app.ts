@@ -185,6 +185,7 @@ export class App extends Emitter<AppEvents> {
   resetView(): void {
     const fov = this.project.camera.fov;
     this.project.camera = { ...defaultCamera(), fov };
+    this.world.cutView(); // 視点が飛ぶだけなので揺らさない
     this.cameraChanged();
   }
 
@@ -522,7 +523,9 @@ export class App extends Emitter<AppEvents> {
 
   private recordStep = (): void => {
     const w = this.world, c = this.project.camera;
+    w.viewTarget = c.target; // 平行移動でも揺らす
     this.recorder.record({
+      viewCut: w.viewCut,
       grab: w.grab ? { ...w.grab } : null,
       grabGains: [...w.grabGains],
       camera: { fov: c.fov, yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, target: { ...c.target } },

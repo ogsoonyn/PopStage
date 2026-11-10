@@ -11,6 +11,8 @@ export interface RecordSample {
   grab: Vec3 | null;
   grabGains: [string, number][];
   camera: CameraState;
+  /** この刻みで視点を測り直したか(視点のリセットなどで飛んだ所) */
+  viewCut?: boolean;
   snap?: WorldSnapshot;
 }
 

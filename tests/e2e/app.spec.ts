@@ -336,6 +336,44 @@ test('つかんでドラッグすると揺れる', async ({ page }) => {
   expect(during).toBeGreaterThan(0.01);
 });
 
+/** ms ミリ秒の間、先頭レイヤーの揺れ(x)の最小・最大を測る */
+const watchSwingX = (page: Page, ms: number) => page.evaluate(ms => new Promise<[number, number]>(resolve => {
+  const a = (window as any).popstage, t0 = performance.now();
+  let lo = 0, hi = 0;
+  const tick = () => {
+    const x = a.world.displacement(a.doc.layers[0].id).x;
+    lo = Math.min(lo, x); hi = Math.max(hi, x);
+    if (performance.now() - t0 < ms) requestAnimationFrame(tick); else resolve([lo, hi]);
+  };
+  tick();
+}), ms);
+
+test('中ドラッグで平行移動すると揺れ、視点のリセットでは揺れない', async ({ page }) => {
+  await boot(page);
+  await page.keyboard.press('p'); // 一時停止を解除
+  await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: false } }); });
+  await page.waitForTimeout(1500); // 重さで垂れた所で落ち着かせる
+  const box = (await page.locator('#view').boundingBox())!;
+  const watching = watchSwingX(page, 1200);
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.5);
+  await page.mouse.down({ button: 'middle' });
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5, { steps: 6 });
+  await page.mouse.up({ button: 'middle' });
+  const [lo, hi] = await watching;
+  expect(await page.evaluate(() => (window as any).popstage.project.camera.target.x)).toBeLessThan(0);
+  // 画像は右へ動くので、塗った部分は左へ遅れ、止めた所で右へ振れ返す
+  expect(lo).toBeLessThan(-0.01);
+  expect(hi).toBeGreaterThan(0.01);
+
+  await page.waitForTimeout(3000); // 収まるのを待つ
+  const still = watchSwingX(page, 800);
+  const before = await page.evaluate(() => { const a = (window as any).popstage; return a.world.displacement(a.doc.layers[0].id).x; });
+  await page.keyboard.press('Home');
+  const [lo2, hi2] = await still;
+  expect(await page.evaluate(() => (window as any).popstage.project.camera.target.x)).toBe(0);
+  expect(Math.max(Math.abs(lo2 - before), Math.abs(hi2 - before))).toBeLessThan(0.005);
+});
+
 test('レイヤーの追加・複製・削除・名前の変更', async ({ page }) => {
   await boot(page);
   await page.locator('aside button[data-cmd=addLayer]').click();
