@@ -54,6 +54,10 @@ export class App extends Emitter<AppEvents> {
   dirty = false;
   /** 変更のたびに増える番号。保存中に変更があったかを見分けるのに使う */
   private revision = 0;
+  /** 自動保存用に、変わっていないレイヤーのウェイト PNG を使い回す(手動の保存では使わない) */
+  private pngCache = new Map<string, Uint8Array>();
+  /** 直近の自動保存が失敗していればその理由 */
+  autosaveError: string | null = null;
   /** 実行中の自動保存(終わるのを待ってから自動保存を消すため) */
   private autosaving: Promise<void> = Promise.resolve();
   exporting = false;
@@ -92,13 +96,16 @@ export class App extends Emitter<AppEvents> {
       const f = s.findLayer(layerId); if (!f) return;
       if (keys.includes('pop') || keys.includes('visible')) this.stage.setLayerParams(f.index, f.layer);
     });
+    s.on('replace', () => this.pngCache.clear());
     s.on('layers', () => {
+      this.pngCache.clear();
       const doc = this.doc; if (!doc) return;
       this.stage.setLayers(doc.layers);
       if (!this.activeLayerId || !s.findLayer(this.activeLayerId)) this.setActiveLayer(doc.layers[0]?.id ?? null);
       else this.syncView();
     });
     s.on('weights', ({ layerId, rect }) => {
+      this.pngCache.delete(layerId);
       const f = s.findLayer(layerId); if (!f) return;
       this.stage.uploadWeights(f.index, f.layer, rect);
     });
@@ -335,11 +342,21 @@ export class App extends Emitter<AppEvents> {
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = window.setTimeout(() => {
       if (!this.dirty || !this.doc || this.stroke) { if (this.stroke) this.scheduleAutosave(); return; }
-      try {
-        const run = autosave.save({ savedAt: Date.now(), name: this.suggestedName(), bytes: this.serialize() })
-          .then(() => { this.lastAutosave = new Date(); this.emit('status', undefined); }, e => { console.warn('autosave failed', e); });
-        this.autosaving = this.autosaving.then(() => run);
-      } catch (e) { console.warn('autosave failed', e); }
+      const fail = (e: unknown) => {
+        console.warn('autosave failed', e);
+        this.autosaveError = e instanceof Error ? e.message : String(e);
+        this.emit('status', undefined);
+      };
+      // 直列化は重いので、操作の合間(アイドル時間)に行う
+      idle(() => {
+        if (!this.dirty || !this.doc || this.stroke) return;
+        try {
+          const bytes = serializeProject(this.project, { pngCache: this.pngCache });
+          const run = autosave.save({ savedAt: Date.now(), name: this.suggestedName(), bytes })
+            .then(() => { this.lastAutosave = new Date(); this.autosaveError = null; this.emit('status', undefined); }, fail);
+          this.autosaving = this.autosaving.then(() => run);
+        } catch (e) { fail(e); }
+      });
     }, AUTOSAVE_DELAY);
   }
 
@@ -531,4 +548,10 @@ function nextLayerName(doc: Document): string {
   let n = doc.layers.length + 1;
   while (doc.layers.some(l => l.name === `レイヤー${n}`)) n++;
   return `レイヤー${n}`;
+}
+
+/** ブラウザが暇なときに実行する(requestIdleCallback が無ければすぐ後に) */
+function idle(fn: () => void): void {
+  if ('requestIdleCallback' in window) window.requestIdleCallback(fn, { timeout: 2000 });
+  else setTimeout(fn, 0);
 }

@@ -64,7 +64,11 @@ export function migrate(json: Record<string, unknown>): ProjectJson {
 
 /* ---------- 保存 ---------- */
 
-export function serializeProject(project: Project, opts: { thumbnail?: Uint8Array } = {}): Uint8Array {
+/**
+ * プロジェクトを .popstage のバイト列にする。
+ * pngCache を渡すと、レイヤー ID ごとのウェイト PNG を使い回す(ウェイトを変えたら呼び出し側で消すこと)。
+ */
+export function serializeProject(project: Project, opts: { thumbnail?: Uint8Array; pngCache?: Map<string, Uint8Array> } = {}): Uint8Array {
   const files: Zippable = {};
   const docs: DocumentJson[] = project.documents.map((doc, di) => {
     const imagePath = `images/doc-${di}.${doc.image.ext}`;
@@ -76,7 +80,9 @@ export function serializeProject(project: Project, opts: { thumbnail?: Uint8Arra
       meshDensity: doc.meshDensity, opacity: doc.opacity,
       layers: doc.layers.map((layer, li) => {
         const path = `weights/doc-${di}-layer-${li}.png`;
-        files[path] = [encodeGrayPng(layer.weights.width, layer.weights.height, layer.weights.data), { level: 0 }];
+        let png = opts.pngCache?.get(layer.id);
+        if (!png) { png = encodeGrayPng(layer.weights.width, layer.weights.height, layer.weights.data); opts.pngCache?.set(layer.id, png); }
+        files[path] = [png, { level: 0 }];
         return {
           id: layer.id, name: layer.name, visible: layer.visible, pop: layer.pop, physics: { ...layer.physics, motionParams: { ...layer.physics.motionParams } },
           weights: { path, width: layer.weights.width, height: layer.weights.height },

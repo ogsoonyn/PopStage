@@ -438,6 +438,41 @@ test('別のファイルを開くと、前の作業の自動保存は消える',
   await expect.poll(() => autosaveOp(page, 'get')).toBeNull();
 });
 
+test('自動保存は塗った内容を反映し、失敗したらステータスバーで知らせる', async ({ page }) => {
+  await boot(page);
+  const autosavedSum = () => page.evaluate(async () => {
+    const db: IDBDatabase = await new Promise(res => {
+      const r = indexedDB.open('popstage', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('autosave');
+      r.onsuccess = () => res(r.result);
+    });
+    const req = db.transaction('autosave', 'readonly').objectStore('autosave').get('current');
+    const v: any = await new Promise(res => { req.onsuccess = () => res(req.result); });
+    db.close();
+    if (!v) return -1;
+    const mod = '/src/storage/popstage.ts';
+    const { deserializeProject } = await import(/* @vite-ignore */ mod);
+    const { project } = await deserializeProject(v.bytes);
+    return project.documents[0].layers[0].weights.data.reduce((s: number, x: number) => s + x, 0) as number;
+  });
+  // 1回目: 塗って自動保存させる
+  await dragOnStage(page, [0.45, 0.5], [0.55, 0.5]);
+  const s1 = await weightSum(page);
+  await expect.poll(autosavedSum, { timeout: 10000 }).toBe(s1);
+  // 2回目: さらに塗ると、使い回していた PNG ではなく新しい内容が保存される
+  await dragOnStage(page, [0.3, 0.3], [0.4, 0.4]);
+  const s2 = await weightSum(page);
+  expect(s2).not.toBe(s1);
+  await expect.poll(autosavedSum, { timeout: 10000 }).toBe(s2);
+
+  // 保存先が壊れていると、ステータスバーに失敗が出る
+  await page.evaluate(() => {
+    IDBObjectStore.prototype.put = function () { throw new DOMException('容量が足りません', 'QuotaExceededError'); };
+  });
+  await page.evaluate(() => (window as any).popstage.store.patchLayer((window as any).popstage.activeLayerId, { pop: 33 }));
+  await expect(page.locator('#sSave')).toContainText('自動保存に失敗しました', { timeout: 10000 });
+});
+
 test('ドロップで画像を開ける。ダイアログ表示中・書き出し中は開かない', async ({ page }) => {
   await boot(page);
   const drop = () => page.evaluate(async () => {
