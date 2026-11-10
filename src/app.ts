@@ -2,7 +2,7 @@
  * アプリ本体。モデル・コマンド・描画・物理・保存・書き出しをつなぐ。
  * 画面の部品(ui/)はここを経由して状態を読み書きする。
  */
-import { Store, createProject, createDocument, createLayer, cloneLayer, defaultCamera, LIMITS, type Project, type Document, type Layer } from './model/project';
+import { Store, createProject, createDocument, createLayer, cloneLayer, defaultCamera, defaultMultiCamera, LIMITS, type CameraState, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
 import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from './commands/commands';
 import { Stage, type ViewOptions } from './stage/stage';
@@ -42,7 +42,9 @@ export class App extends Emitter<AppEvents> {
 
   tool: Tool = 'brush';
   activeLayerId: string | null = null;
-  view: ViewOptions = { overlay: true, grid: false, fade: false, flat: false };
+  view: ViewOptions = { overlay: true, grid: false, fade: false, flat: false, multi: false };
+  /** 3面図の「自由角度」の視点(画面だけの設定で保存しない) */
+  multiCam: CameraState = defaultMultiCamera();
   paused = false;
   brush: BrushOptions = { size: 64, strength: 0.3, hardness: 0, pressure: 'strength' };
   imageCanvas: HTMLCanvasElement | null = null;
@@ -458,7 +460,7 @@ export class App extends Emitter<AppEvents> {
     this.world.autoSwing = this.project.autoSwing;
     this.world.advance(dt, doc.layers, this.recordStep);
     this.applySwing(this.world, doc);
-    this.stage.render(this.project.camera);
+    this.stage.render(this.project.camera, this.multiCam);
   }
 
   /* ---------- 書き出し ---------- */

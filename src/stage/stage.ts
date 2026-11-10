@@ -13,7 +13,20 @@ export interface ViewOptions {
   fade: boolean;
   /** ポップ(持ち上げと揺れ)を一時的に消して平らに表示する */
   flat: boolean;
+  /** 3面図(正面・右・下・自由角度)を横に並べる。並べ方は UI が setLayout で渡す */
+  multi: boolean;
 }
+
+/** キャンバス左上からの矩形(CSS ピクセル) */
+export interface ViewRect { x: number; y: number; w: number; h: number }
+export type SubViewKind = 'front' | 'right' | 'bottom' | 'free';
+
+/** 3面図の各向き(画像のローカル座標)。正面図に対して第三角法の位置関係になるよう上方向を決める */
+const ORTHO_DIRS: Record<Exclude<SubViewKind, 'free'>, { dir: THREE.Vector3; up: THREE.Vector3 }> = {
+  front: { dir: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0) },
+  right: { dir: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 1, 0) },
+  bottom: { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1) },
+};
 
 export interface PickResult {
   x: number; y: number; // ドキュメントのローカル座標(ピクセル)
@@ -38,6 +51,11 @@ export class Stage {
   private hit = new THREE.Vector3();
   private plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
   private gridN = new THREE.Vector2(1, 1);
+  /** 主ビューの矩形。null ならキャンバス全体 */
+  private mainRect: ViewRect | null = null;
+  private subViews: { kind: SubViewKind; rect: ViewRect }[] = [];
+  private orthoCam = new THREE.OrthographicCamera();
+  private freeCam = new THREE.PerspectiveCamera(40, 1, 1, 1e6);
   vertexCount = 0;
   /** 部分転送を使えたか(フェーズ0の検証項目の確認用) */
   partialUploads = 0;
@@ -205,8 +223,8 @@ export class Stage {
     return ((Math.max(h, w / aspect) * 0.62) / Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)) * cam.zoom;
   }
 
-  applyCamera(cam: CameraState, aspect = this.camera.aspect): void {
-    const c = this.camera, d = this.cameraDistance(cam, aspect), cp = Math.cos(cam.pitch);
+  applyCamera(cam: CameraState, aspect = this.camera.aspect, c = this.camera): void {
+    const d = this.cameraDistance(cam, aspect), cp = Math.cos(cam.pitch);
     c.fov = cam.fov; c.aspect = aspect;
     c.near = Math.max(0.1, d * 0.01); c.far = d * 100;
     c.position.set(cam.target.x + d * Math.sin(cam.yaw) * cp, cam.target.y + d * Math.sin(cam.pitch), cam.target.z + d * Math.cos(cam.yaw) * cp);
@@ -216,7 +234,7 @@ export class Stage {
 
   /** 画面上の 1px がカメラ注視点の距離で何単位にあたるか */
   pixelToWorld(cam: CameraState): number {
-    return (2 * this.cameraDistance(cam) * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)) / Math.max(1, this.canvas.clientHeight);
+    return (2 * this.cameraDistance(cam) * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)) / Math.max(1, this.main().h);
   }
 
   /** 画面の右・上方向(ワールド)を返す */
@@ -229,14 +247,66 @@ export class Stage {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     if (!w || !h) return;
     this.renderer.setSize(w, h, false);
-    this.camera.aspect = w / h;
+    const m = this.main();
+    this.camera.aspect = m.w / Math.max(1, m.h);
+  }
+
+  /** 主ビューと横に並べる図の矩形を決める。subs を空にすると主ビューだけに戻る */
+  setLayout(main: ViewRect | null, subs: { kind: SubViewKind; rect: ViewRect }[]): void {
+    this.mainRect = main;
+    this.subViews = subs;
+    const m = this.main();
+    this.camera.aspect = m.w / Math.max(1, m.h);
+  }
+
+  private main(): ViewRect {
+    return this.mainRect ?? { x: 0, y: 0, w: this.canvas.clientWidth, h: this.canvas.clientHeight };
+  }
+
+  /** ポップの奥行きの範囲(画像のローカル z)。ウェイトは 0〜1 なので、正負のポップ量をそれぞれ足した範囲に収まる */
+  private depthRange(): { min: number; max: number } {
+    const pops = this.uniforms.uPop.value as number[], n = this.uniforms.uLayerCount.value as number;
+    const k = 1 - (this.uniforms.uFlat.value as number);
+    let min = 0, max = 0;
+    for (let i = 0; i < n; i++) { if (pops[i] > 0) max += pops[i] * k; else min += pops[i] * k; }
+    return { min, max };
+  }
+
+  /** 3面図のカメラ。3つの図は同じ縮尺にそろえ、ポップの膨らみも含めて収まる大きさにする */
+  private orthoCamera(kind: Exclude<SubViewKind, 'free'>, rect: ViewRect, scale: number): THREE.OrthographicCamera {
+    const c = this.orthoCam, m = this.mesh!.matrixWorld, { min, max } = this.depthRange();
+    const { dir, up } = ORTHO_DIRS[kind];
+    const center = new THREE.Vector3(0, 0, (min + max) / 2).applyMatrix4(m);
+    const d = new THREE.Vector3().copy(dir).transformDirection(m);
+    const reach = (Math.max(this.imageSize.w, this.imageSize.h) + (max - min)) * 4 * this.mesh!.scale.x;
+    c.position.copy(center).addScaledVector(d, reach);
+    c.up.copy(up).transformDirection(m);
+    c.lookAt(center);
+    const hw = (rect.w * scale) / 2, hh = (rect.h * scale) / 2;
+    c.left = -hw; c.right = hw; c.top = hh; c.bottom = -hh;
+    c.near = 0.1; c.far = reach * 2;
+    c.updateProjectionMatrix(); c.updateMatrixWorld();
+    return c;
+  }
+
+  /** 1px あたりのワールド長さ。3つの図すべてに中身が収まる値をとる */
+  private orthoScale(): number {
+    const { w, h } = this.imageSize, { min, max } = this.depthRange();
+    const depth = Math.max(max - min, Math.max(w, h) * 0.02);
+    const ext: Record<string, [number, number]> = { front: [w, h], right: [depth, h], bottom: [w, depth] };
+    let k = 0;
+    for (const v of this.subViews) {
+      const e = ext[v.kind]; if (!e) continue;
+      k = Math.max(k, e[0] / Math.max(1, v.rect.w), e[1] / Math.max(1, v.rect.h));
+    }
+    return k * 1.15 * (this.mesh?.scale.x ?? 1);
   }
 
   /** ポインタからのレイと「持ち上げる前の平面」の交点 */
   pick(clientX: number, clientY: number): PickResult | null {
     if (!this.mesh) return null;
-    const r = this.canvas.getBoundingClientRect();
-    this.ndc.set(((clientX - r.left) / r.width) * 2 - 1, -(((clientY - r.top) / r.height) * 2 - 1));
+    const r = this.canvas.getBoundingClientRect(), m = this.main();
+    this.ndc.set(((clientX - r.left - m.x) / m.w) * 2 - 1, -(((clientY - r.top - m.y) / m.h) * 2 - 1));
     this.ray.setFromCamera(this.ndc, this.camera);
     const inv = this.mesh.matrixWorld.clone().invert();
     const local = this.ray.ray.clone().applyMatrix4(inv);
@@ -245,10 +315,41 @@ export class Stage {
     return { x: this.hit.x, y: this.hit.y, u, v, inside: u >= 0 && u <= 1 && v >= 0 && v <= 1 };
   }
 
-  render(cam: CameraState): void {
+  /** free は 3面図の「自由角度」の視点 */
+  render(cam: CameraState, free?: CameraState): void {
+    const r = this.renderer;
     this.applyCamera(cam);
-    this.renderer.setRenderTarget(null);
-    this.renderer.render(this.scene, this.camera);
+    r.setRenderTarget(null);
+    if (!this.subViews.length || !this.mesh) {
+      r.setScissorTest(false);
+      r.setViewport(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
+      r.render(this.scene, this.camera);
+      return;
+    }
+    r.setScissorTest(true);
+    this.drawIn(this.main(), this.camera);
+    // 横の図にはブラシの円を描かない
+    const u = this.uniforms, brush = u.uBrushOn.value;
+    u.uBrushOn.value = 0;
+    const scale = this.orthoScale();
+    for (const v of this.subViews) {
+      if (v.kind === 'free') {
+        if (!free) continue;
+        this.applyCamera(free, v.rect.w / Math.max(1, v.rect.h), this.freeCam);
+        this.drawIn(v.rect, this.freeCam);
+      } else {
+        this.drawIn(v.rect, this.orthoCamera(v.kind, v.rect, scale));
+      }
+    }
+    u.uBrushOn.value = brush;
+    r.setScissorTest(false);
+  }
+
+  private drawIn(rc: ViewRect, cam: THREE.Camera): void {
+    const y = this.canvas.clientHeight - rc.y - rc.h;
+    this.renderer.setViewport(rc.x, y, rc.w, rc.h);
+    this.renderer.setScissor(rc.x, y, rc.w, rc.h);
+    this.renderer.render(this.scene, cam);
   }
 
   /* ---------- 書き出し ---------- */

@@ -146,6 +146,55 @@ test('画像を薄く・ポップを一時OFF: 画面だけが変わり、書き
   expect((await stage.screenshot()).equals(shot0)).toBe(true);
 });
 
+test('3面図: 横に4つの図が出て、自由角度はドラッグで回り、主ビューの当たり判定はずれない', async ({ page }) => {
+  await boot(page);
+  // 注視点(原点)は主ビューの中央に映るので、そこを指すと画像の中心が返る
+  const pickCenter = () => page.evaluate(() => {
+    const a = (window as any).popstage, r = a.stage.canvas.getBoundingClientRect();
+    const p = document.getElementById('multiView')!.getBoundingClientRect();
+    const right = p.width > 0 ? p.left : r.right;
+    const q = a.stage.pick((r.left + right) / 2, r.top + r.height / 2);
+    return [q.x, q.y];
+  });
+  const [x0, y0] = await pickCenter();
+  expect(Math.abs(x0)).toBeLessThan(1); expect(Math.abs(y0)).toBeLessThan(1);
+
+  await page.locator('#view').focus();
+  await page.keyboard.press('m');
+  await expect(page.locator('#multiView')).toBeVisible();
+  await expect(page.locator('#vMulti')).toBeChecked();
+  await expect(page.locator('#multiView .mv-cell')).toHaveCount(4);
+  const [x1, y1] = await pickCenter();
+  expect(Math.abs(x1)).toBeLessThan(1); expect(Math.abs(y1)).toBeLessThan(1);
+
+  // 正面の図に画像が描かれている(背景のチェッカーだけではない)
+  const front = await page.locator('#multiView [data-kind=front]').screenshot();
+  await page.evaluate(() => (window as any).popstage.setViewOption('flat', true));
+  await page.waitForTimeout(100);
+  const right = page.locator('#multiView [data-kind=right]');
+  const rightFlat = await right.screenshot();
+  await page.evaluate(() => (window as any).popstage.setViewOption('flat', false));
+  await page.waitForTimeout(100);
+  expect((await right.screenshot()).equals(rightFlat)).toBe(false); // 横から見ると膨らみが分かる
+  expect(front.length).toBeGreaterThan(0);
+
+  const free = (await page.locator('#multiView [data-kind=free]').boundingBox())!;
+  const yaw0 = await page.evaluate(() => (window as any).popstage.multiCam.yaw);
+  const mainYaw = await page.evaluate(() => (window as any).popstage.project.camera.yaw);
+  await page.mouse.move(free.x + free.width * 0.3, free.y + free.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(free.x + free.width * 0.7, free.y + free.height * 0.5, { steps: 5 });
+  await page.mouse.up();
+  expect(await page.evaluate(() => (window as any).popstage.multiCam.yaw)).not.toBeCloseTo(yaw0);
+  expect(await page.evaluate(() => (window as any).popstage.project.camera.yaw)).toBeCloseTo(mainYaw);
+
+  await page.locator('#view').focus();
+  await page.keyboard.press('m');
+  await expect(page.locator('#multiView')).toBeHidden();
+  const [x2, y2] = await pickCenter();
+  expect(Math.abs(x2)).toBeLessThan(1); expect(Math.abs(y2)).toBeLessThan(1);
+});
+
 test('右ドラッグで視点が回り、Home で戻る', async ({ page }) => {
   await boot(page);
   const yaw0 = await page.evaluate(() => (window as any).popstage.project.camera.yaw);

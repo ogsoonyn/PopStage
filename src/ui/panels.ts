@@ -181,6 +181,7 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   $<HTMLInputElement>('vOverlay').addEventListener('change', e => app.setViewOption('overlay', (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>('vFade').addEventListener('change', e => app.setViewOption('fade', (e.target as HTMLInputElement).checked));
+  $<HTMLInputElement>('vMulti').addEventListener('change', e => app.setViewOption('multi', (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>('vFlat').addEventListener('change', e => app.setViewOption('flat', (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>('vGrid').addEventListener('change', e => app.setViewOption('grid', (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>('vPause').addEventListener('change', e => app.setPaused((e.target as HTMLInputElement).checked));
@@ -315,6 +316,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     $<HTMLInputElement>('vOverlay').checked = app.view.overlay;
     $<HTMLInputElement>('vFade').checked = app.view.fade;
     $<HTMLInputElement>('vFlat').checked = app.view.flat;
+    $<HTMLInputElement>('vMulti').checked = app.view.multi;
     $<HTMLInputElement>('vGrid').checked = app.view.grid;
     $<HTMLInputElement>('vPause').checked = app.paused;
   }

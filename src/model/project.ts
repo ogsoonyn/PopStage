@@ -243,6 +243,11 @@ export function defaultCamera(): CameraState {
   return { fov: LIMITS.fov.def, yaw: -0.35, pitch: 0.25, zoom: 1, target: { x: 0, y: 0, z: 0 } };
 }
 
+/** 3面図の「自由角度」の初期視点。膨らみが分かるよう斜め上から見る */
+export function defaultMultiCamera(): CameraState {
+  return { fov: LIMITS.fov.def, yaw: 0.7, pitch: 0.45, zoom: 1.5, target: { x: 0, y: 0, z: 0 } };
+}
+
 export function createProject(doc?: Document): Project {
   return {
     background: null,

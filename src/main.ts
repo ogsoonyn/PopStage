@@ -4,6 +4,7 @@ import { bindStageInput, isTyping } from './ui/input';
 import { bindPanels } from './ui/panels';
 import { bindExportDialog } from './ui/exportDialog';
 import { bindBlurDialog } from './ui/blurDialog';
+import { bindMultiView } from './ui/multiView';
 import { $, ask, toast } from './ui/dom';
 import { autosave } from './storage/autosave';
 import { isImageFile, isProjectFile } from './ui/imageio';
@@ -21,6 +22,7 @@ const e2e = params.has('e2e');
 (window as unknown as { popstage: App }).popstage = app;
 
 bindStageInput(app, canvas);
+const multiView = bindMultiView(app, canvas);
 bindPanels(app);
 const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
@@ -63,6 +65,7 @@ const commands: Record<string, { run: () => unknown; enabled?: () => boolean }> 
   toggleFade: { run: () => app.setViewOption('fade', !app.view.fade) },
   toggleFlat: { run: () => app.setViewOption('flat', !app.view.flat) },
   togglePause: { run: () => app.setPaused(!app.paused) },
+  toggleMulti: { run: () => app.setViewOption('multi', !app.view.multi) },
   resetView: { run: () => app.resetView() },
   addLayer: { run: () => app.addLayer(), enabled: () => !!app.doc },
   duplicateLayer: { run: () => app.duplicateLayer(), enabled: () => !!app.activeLayer },
@@ -92,7 +95,7 @@ function refreshCommands(): void {
   });
   document.querySelector('[data-label=undo]')!.textContent = app.history.undoLabel ? `(${app.history.undoLabel})` : '';
   document.querySelector('[data-label=redo]')!.textContent = app.history.redoLabel ? `(${app.history.redoLabel})` : '';
-  const checks: Record<string, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, pause: app.paused };
+  const checks: Record<string, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused };
   document.querySelectorAll<HTMLElement>('[data-check]').forEach(el => { el.textContent = checks[el.dataset.check!] ? '✓' : ''; });
 }
 app.history.on('change', refreshCommands);
@@ -144,6 +147,7 @@ window.addEventListener('keydown', e => {
   if (k === 'w') return hit('toggleOverlay');
   if (k === 'f') return hit('toggleFlat');
   if (k === 'p') return hit('togglePause');
+  if (k === 'm') return hit('toggleMulti');
   if (e.key === '[' || e.key === ']') {
     const el = $<HTMLInputElement>('brushSize'), step = Math.max(2, Math.round(app.brush.size * 0.15));
     el.value = String(app.brush.size + (e.key === ']' ? step : -step));
@@ -176,7 +180,7 @@ function refreshStatus(): void {
   $('sVerts').textContent = `${app.stage.vertexCount.toLocaleString()} 頂点`;
   $('sZoom').textContent = `ズーム ${Math.round(100 / app.project.camera.zoom)}%`;
   $('sImage').textContent = d ? `${d.image.width}×${d.image.height}px・ウェイト ${d.layers[0]?.weights.width ?? 0}×${d.layers[0]?.weights.height ?? 0}` : '-';
-  if (!app.exporting) $('sRec').textContent = [app.view.flat && 'ポップOFF', app.paused && '揺れ停止中'].filter(Boolean).join('・');
+  if (!app.exporting) $('sRec').textContent = [app.view.flat && 'ポップOFF', app.paused && '揺れ一時停止中'].filter(Boolean).join('・');
   $('sSave').textContent = app.dirty ? (app.lastAutosave ? `未保存の変更あり(${app.lastAutosave.toLocaleTimeString()} に自動保存)` : '未保存の変更あり') : app.lastSaved ? `保存済み ${app.lastSaved.toLocaleTimeString()}` : '';
 }
 function refreshTitle(): void {
@@ -190,7 +194,7 @@ app.on('view', refreshStatus);
 app.on('file', refreshTitle);
 
 window.addEventListener('beforeunload', e => { if (app.dirty) e.preventDefault(); });
-new ResizeObserver(() => app.stage.resize()).observe(canvas);
+new ResizeObserver(() => { app.stage.resize(); multiView.layout(); }).observe(canvas);
 
 /* ---------- 起動 ---------- */
 

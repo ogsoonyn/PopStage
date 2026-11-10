@@ -44,8 +44,9 @@
       <li><button data-cmd="toggleOverlay">ウェイトの重ね表示 <span data-check="overlay" class="ml-auto"></span><kbd class="kbd kbd-xs">W</kbd></button></li>
       <li><button data-cmd="toggleFade">画像を薄く <span data-check="fade" class="ml-auto"></span><kbd class="kbd kbd-xs">Shift+W</kbd></button></li>
       <li><button data-cmd="toggleFlat">ポップを一時OFF <span data-check="flat" class="ml-auto"></span><kbd class="kbd kbd-xs">F</kbd></button></li>
+      <li><button data-cmd="togglePause">揺れを一時停止 <span data-check="pause" class="ml-auto"></span><kbd class="kbd kbd-xs">P</kbd></button></li>
+      <li><button data-cmd="toggleMulti">3面図 <span data-check="multi" class="ml-auto"></span><kbd class="kbd kbd-xs">M</kbd></button></li>
       <li><button data-cmd="toggleGrid">グリッド <span data-check="grid" class="ml-auto"></span><kbd class="kbd kbd-xs">Shift+G</kbd></button></li>
-      <li><button data-cmd="togglePause">揺れの一時停止 <span data-check="pause" class="ml-auto"></span><kbd class="kbd kbd-xs">P</kbd></button></li>
       <li><button data-cmd="resetView">視点リセット<kbd class="kbd kbd-xs ml-auto">Home</kbd></button></li>
     </ul>
   </div>
@@ -105,6 +106,13 @@
   <!-- 3Dビュー -->
   <section class="flex-1 min-w-0 relative" id="stageWrap">
     <div id="stage" class="absolute inset-0"><canvas id="view" tabindex="0"></canvas></div>
+    <!-- 3面図。キャンバスは下に敷いたまま、各セルの位置に Stage が描く -->
+    <div id="multiView" class="absolute top-0 right-0 bottom-0 hidden flex-col border-l border-base-content/20 text-xs">
+      <div class="mv-cell" data-kind="front"><span class="mv-label">正面</span></div>
+      <div class="mv-cell" data-kind="right"><span class="mv-label">右から</span></div>
+      <div class="mv-cell" data-kind="bottom"><span class="mv-label">下から</span></div>
+      <div class="mv-cell cursor-grab" data-kind="free" title="ドラッグで回転、ホイールでズーム、ダブルクリックで初期の角度に戻す"><span class="mv-label">自由角度(ドラッグで回転)</span></div>
+    </div>
     <div id="dropHint" class="absolute inset-3 border-4 border-dashed border-primary rounded-box bg-base-100/70 hidden items-center justify-center text-lg font-bold pointer-events-none">
       ここに画像か .popstage ファイルをドロップ
     </div>
@@ -184,8 +192,9 @@
         <label class="flex items-center justify-between">ウェイトを重ねて表示 <input id="vOverlay" type="checkbox" class="toggle toggle-sm"></label>
         <label class="flex items-center justify-between" title="画像を薄くして塗りを見やすくします(書き出しには影響しません)">画像を薄く <input id="vFade" type="checkbox" class="toggle toggle-sm"></label>
         <label class="flex items-center justify-between" title="ポップと揺れを一時的に消して平らに表示します(書き出しには影響しません)">ポップを一時OFF <input id="vFlat" type="checkbox" class="toggle toggle-sm"></label>
+        <label class="flex items-center justify-between" title="すべてのレイヤーの揺れを一時的に止めます(保存・書き出しには影響しません)">揺れを一時停止 <input id="vPause" type="checkbox" class="toggle toggle-sm"></label>
+        <label class="flex items-center justify-between" title="正面・右・下から見た図と、角度を変えられる図を横に並べます">3面図 <input id="vMulti" type="checkbox" class="toggle toggle-sm"></label>
         <label class="flex items-center justify-between">グリッド <input id="vGrid" type="checkbox" class="toggle toggle-sm"></label>
-        <label class="flex items-center justify-between">揺れを止める <input id="vPause" type="checkbox" class="toggle toggle-sm"></label>
       </section>
     </div>
   </aside>
@@ -304,7 +313,7 @@
       <span>書き出し</span><span>Ctrl+E</span>
       <span>ウェイト表示 / グリッド</span><span>W / Shift+G</span>
       <span>画像を薄く / ポップを一時OFF</span><span>Shift+W / F</span>
-      <span>揺れの一時停止</span><span>P</span>
+      <span>揺れを一時停止 / 3面図</span><span>P / M</span>
     </div>
     <div class="modal-action"><form method="dialog"><button class="btn btn-sm">閉じる</button></form></div>
   </div>
