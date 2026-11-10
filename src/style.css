@@ -34,3 +34,7 @@
 
 /* 膨らませる: 3Dビューの下に浮かべ、ほかの操作はそのまま受け付ける */
 #inflateDialog { position: fixed; left: 50%; right: auto; top: auto; bottom: 2.5rem; transform: translateX(-50%); margin: 0; z-index: 40; width: min(34rem, calc(100vw - 2rem)); }
+
+/* 左のツールボタンの右上に出すショートカット */
+.tool-key { position: absolute; top: 1px; right: 3px; font: 600 9px/1 ui-monospace, monospace; opacity: .55; }
+.tool[aria-pressed=true] .tool-key { opacity: .85; }

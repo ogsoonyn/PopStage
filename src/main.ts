@@ -9,6 +9,7 @@ import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
 import { $, ask, toast } from './ui/dom';
 import { autosave } from './storage/autosave';
+import { prefs, persistControls } from './storage/prefs';
 import { isImageFile, isProjectFile } from './ui/imageio';
 
 const canvas = $<HTMLCanvasElement>('view');
@@ -32,6 +33,24 @@ if (params.has('debug')) togglePerf();
 bindStageInput(app, canvas);
 const multiView = bindMultiView(app, canvas);
 bindPanels(app);
+
+/* ---------- 設定をブラウザに覚える(ファイルには書かない) ---------- */
+const byId = <T extends HTMLElement>(...ids: string[]) => ids.map(id => $<T>(id));
+persistControls('brush', byId<HTMLInputElement | HTMLSelectElement>('brushSize', 'brushStrength', 'brushHardness', 'brushPressure'));
+// 「ポップを一時OFF」「揺れを一時停止」は一時的な切り替えなので覚えない
+persistControls('view', byId<HTMLInputElement>('vOverlay', 'vGrid', 'vFade', 'vMulti'));
+{
+  const TOOLS: Tool[] = ['brush', 'erase', 'smooth', 'inflate', 'grab', 'shake', 'view'];
+  const t = prefs.get<string>('tool');
+  if (t && (TOOLS as string[]).includes(t)) app.setTool(t as Tool);
+  app.on('tool', t => prefs.set('tool', t));
+}
+// 背景・自動揺らし・画角は、変えたら「新しい画像を開いたときの既定」として覚える
+app.store.on('project', ({ keys }) => {
+  if (!keys.some(k => k === 'background' || k === 'autoSwing' || k === 'camera')) return;
+  const p = app.project;
+  prefs.set('newImage', { background: p.background, autoSwing: { ...p.autoSwing }, fov: p.camera.fov });
+});
 const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
 const recentDialog = bindRecentDialog(app);
@@ -151,9 +170,15 @@ app.on('tool', refreshTool);
 
 const anyDialogOpen = () => !!document.querySelector('dialog[open]');
 
+/** 画面を覆うダイアログ(確認・書き出しなど)が開いているか。膨らませるのパネルのように画面を覆わないものは含めない */
+const modalOpen = () => !!document.querySelector('dialog[open]:modal');
+
 window.addEventListener('keydown', e => {
-  if (isTyping(e) || anyDialogOpen()) return;
-  const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
+  // 膨らませるのパネルを開いている間も、表示の切り替えなどは効かせる(できない操作は commandEnabled で止める)
+  if (isTyping(e) || modalOpen()) return;
+  // 日本語入力がオンのときは key が 'Process' になるので、キーの位置(code)から読む
+  const key = e.key === 'Process' && /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : e.key;
+  const k = key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
   const hit = (name: string) => { e.preventDefault(); runCommand(name); };
   if (ctrl && e.shiftKey && e.altKey && e.code === 'KeyP') { e.preventDefault(); togglePerf(); return; }
   if (ctrl) {
@@ -169,7 +194,7 @@ window.addEventListener('keydown', e => {
   if (e.shiftKey && k === 'w') return hit('toggleFade');
   if (e.key === 'Home') return hit('resetView');
   const tools: Record<string, Tool> = { b: 'brush', e: 'erase', s: 'smooth', i: 'inflate', g: 'grab', y: 'shake', v: 'view' };
-  if (!e.shiftKey && tools[k]) { e.preventDefault(); app.setTool(tools[k]); return; }
+  if (!e.shiftKey && tools[k]) { e.preventDefault(); if (!app.previewingInflate) app.setTool(tools[k]); return; }
   if (k === 'w') return hit('toggleOverlay');
   if (k === 'f') return hit('toggleFlat');
   if (k === 'p') return hit('togglePause');

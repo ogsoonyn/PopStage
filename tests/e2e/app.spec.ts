@@ -1281,3 +1281,199 @@ test('パフォーマンスのデバッグ表示は ?debug かショートカッ
   expect(data.frames.length).toBeGreaterThan(10);
   expect(data.document.layers).toBe(1);
 });
+
+/* ---------- ショートカットと細かな表示 ---------- */
+
+test('ショートカット: 一覧のキーがすべて期待どおりに効く', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  await page.locator('#view').focus();
+
+  // ツール(ボタンにもキーを出す)
+  for (const [key, tool] of [['b', 'brush'], ['e', 'erase'], ['s', 'smooth'], ['i', 'inflate'], ['g', 'grab'], ['y', 'shake'], ['v', 'view'], ['b', 'brush']]) {
+    await page.keyboard.press(key);
+    expect(await app(a => a.tool), key).toBe(tool);
+    await expect(page.locator(`.tool[data-tool=${tool}]`)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator(`.tool[data-tool=${tool}] .tool-key`)).toHaveText(key.toUpperCase());
+  }
+  // 表示の切り替え(押すたびに入れ替わる)
+  const view = () => app(a => ({ ...a.view, paused: a.paused }));
+  for (const [key, prop] of [['w', 'overlay'], ['Shift+W', 'fade'], ['Shift+G', 'grid'], ['f', 'flat'], ['p', 'paused'], ['m', 'multi']] as const) {
+    const before = (await view())[prop];
+    await page.keyboard.press(key);
+    await expect.poll(async () => (await view())[prop], key).toBe(!before);
+    await page.keyboard.press(key);
+    await expect.poll(async () => (await view())[prop], key).toBe(before);
+  }
+  // Home で正面へ
+  await app(a => { a.project.camera.yaw = 1; a.project.camera.pitch = 0.5; });
+  await page.keyboard.press('Home');
+  expect(await app(a => [a.project.camera.yaw, a.project.camera.pitch])).toEqual([0, 0]);
+  // [ と ] でブラシの大きさ
+  const size0 = await app(a => a.brush.size);
+  await page.keyboard.press(']');
+  expect(await app(a => a.brush.size)).toBeGreaterThan(size0);
+  await page.keyboard.press('[');
+  await page.keyboard.press('[');
+  expect(await app(a => a.brush.size)).toBeLessThan(size0);
+  // 元に戻す / やり直す
+  await app(a => a.weightOp('全消去', (wm: any) => wm.clear()));
+  const sum = () => app(a => a.activeLayer.weights.data.reduce((s: number, v: number) => s + v, 0) as number);
+  expect(await sum()).toBe(0);
+  await page.keyboard.press('Control+z');
+  expect(await sum()).toBeGreaterThan(0);
+  await page.keyboard.press('Control+Shift+z');
+  expect(await sum()).toBe(0);
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+y');
+  expect(await sum()).toBe(0);
+  // 保存(Ctrl+S は今のファイルへ、Ctrl+Shift+S は保存先を選ぶ)・開く(Ctrl+O / Ctrl+Shift+O)は、ファイルの選択画面を横取りして確かめる
+  await app(a => {
+    const w = window as any;
+    w.__calls = [];
+    w.showSaveFilePicker = async () => { w.__calls.push('saveAs'); throw new DOMException('x', 'AbortError'); };
+    w.showOpenFilePicker = async (o: any) => { w.__calls.push('open:' + Object.keys(o.types[0].accept).join(',')); throw new DOMException('x', 'AbortError'); };
+    a.fileHandle = { name: 'k.popstage', createWritable: async () => { w.__calls.push('save'); return { write: async () => {}, close: async () => {} }; } };
+  });
+  const calls = () => page.evaluate(() => (window as any).__calls as string[]);
+  await page.keyboard.press('Control+s');
+  await expect.poll(calls).toEqual(['save']);
+  await page.keyboard.press('Control+Shift+s');
+  await expect.poll(calls).toEqual(['save', 'saveAs']);
+  await page.keyboard.press('Control+o');
+  await expect.poll(calls).toEqual(['save', 'saveAs', 'open:application/zip,image/*']);
+  await page.keyboard.press('Control+Shift+o');
+  await expect.poll(calls).toEqual(['save', 'saveAs', 'open:application/zip,image/*', 'open:image/*']);
+  // 書き出し
+  await page.keyboard.press('Control+e');
+  await expect(page.locator('#exportDialog')).toHaveAttribute('open', '');
+  // 画面を覆うダイアログの表示中は、ほかのショートカットは効かない
+  await page.keyboard.press('g');
+  expect(await app(a => a.tool)).toBe('brush');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#exportDialog')).not.toHaveAttribute('open', '');
+  // パフォーマンスのデバッグ表示
+  await page.keyboard.press('Control+Shift+Alt+KeyP');
+  await expect(page.locator('#perfOverlay')).toBeVisible();
+  await page.keyboard.press('Control+Shift+Alt+KeyP');
+  await expect(page.locator('#perfOverlay')).toHaveCount(0);
+  // 日本語入力がオンのとき(key が Process)も、キーの位置で効く
+  await page.evaluate(() => document.getElementById('view')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Process', code: 'KeyG', bubbles: true })));
+  expect(await app(a => a.tool)).toBe('grab');
+  // 選択欄にフォーカスがあるときは、文字キーを選択欄に任せる
+  await page.locator('#brushPressure').focus();
+  await page.keyboard.press('b');
+  expect(await app(a => a.tool)).toBe('grab');
+  await page.locator('#view').focus();
+
+  // 膨らませるのパネル(画面を覆わない)を開いている間も、表示の切り替えは効く。ツールの切り替えや元に戻すは効かない
+  await page.keyboard.press('i');
+  await dragOnStage(page, [0.4, 0.35], [0.6, 0.65]);
+  await expect(page.locator('#inflateDialog')).toHaveJSProperty('open', true);
+  await page.locator('#view').focus();
+  const overlay = (await view()).overlay;
+  await page.keyboard.press('w');
+  await expect.poll(async () => (await view()).overlay).toBe(!overlay);
+  await page.keyboard.press('b');
+  expect(await app(a => a.tool)).toBe('inflate');
+  const undo0 = await app(a => a.history.size);
+  await page.keyboard.press('Control+z');
+  expect(await app(a => [a.previewingInflate, a.history.size])).toEqual([true, undo0]);
+});
+
+test('3面図にはウェイトの重ね表示と「画像を薄く」を効かせない。画像の外ではカーソルが十字になる', async ({ page }) => {
+  await boot(page);
+  await page.locator('#view').focus();
+  await page.keyboard.press('m');
+  await expect(page.locator('#multiView')).toBeVisible();
+  const front = page.locator('#multiView [data-kind=front]');
+  const set = (overlay: boolean, fade: boolean) => page.evaluate(([o, f]) => { const a = (window as any).popstage; a.view.overlay = o; a.view.fade = f; a.syncView(); }, [overlay, fade]);
+  const shots = async () => {
+    await page.waitForTimeout(150);
+    return { front: await front.screenshot(), main: await page.screenshot({ clip: { x: (await page.locator('#view').boundingBox())!.x, y: (await page.locator('#view').boundingBox())!.y, width: 300, height: 300 } }) };
+  };
+  await set(false, false);
+  const plain = await shots();
+  await set(true, true);
+  const both = await shots();
+  expect(both.front.equals(plain.front)).toBe(true);
+  expect(both.main.equals(plain.main)).toBe(false); // 主ビューには効く
+
+  // カーソル: 画像の上はブラシの円だけ、画像の外では十字
+  await page.keyboard.press('m');
+  await page.keyboard.press('b');
+  const box = (await page.locator('#view').boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await expect(page.locator('#view')).toHaveCSS('cursor', 'none');
+  await page.mouse.move(box.x + 4, box.y + 4);
+  await expect(page.locator('#view')).toHaveCSS('cursor', 'crosshair');
+});
+
+test('設定はブラウザに覚え、読み込み直しても戻る(ファイルには書かない)', async ({ page }) => {
+  await boot(page);
+  await page.locator('#view').focus();
+  // ブラシ・表示・ツール・背景を変える
+  await page.locator('#brushSize').fill('150');
+  await page.locator('#brushPressure').selectOption('size');
+  await page.locator('#vGrid').check();
+  await page.locator('#vMulti').check();
+  await page.locator('#view').focus();
+  await page.keyboard.press('g');
+  await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ background: '#123456', autoSwing: { ...a.project.autoSwing, period: 2.5 } }); });
+  // 書き出しの設定
+  await page.keyboard.press('Control+e');
+  await page.locator('#exW').fill('640');
+  await page.locator('#exW').dispatchEvent('change');
+  await page.locator('input[name=exFps][value="30"]').check();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+
+  await page.goto('/?e2e');
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  const s = await page.evaluate(() => { const a = (window as any).popstage; return { brush: a.brush, view: a.view, tool: a.tool, bg: a.project.background }; });
+  expect(s.brush.size).toBe(150);
+  expect(s.brush.pressure).toBe('size');
+  expect(s.view.grid).toBe(true);
+  expect(s.view.multi).toBe(true);
+  expect(s.tool).toBe('grab');
+  await expect(page.locator('#brushSizeO')).toHaveText('150px');
+  await expect(page.locator('#vGrid')).toBeChecked();
+  // サンプルの背景は変えない。新しい画像を開くと、覚えた背景・周期になる
+  expect(s.bg).not.toBe('#123456');
+  await page.evaluate(async () => {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 48;
+    const b: Blob = await new Promise(r => c.toBlob(x => r(x!), 'image/png'));
+    await (window as any).popstage.openFile(new File([b], 'n.png', { type: 'image/png' }));
+  });
+  expect(await page.evaluate(() => { const a = (window as any).popstage; return [a.project.background, a.project.autoSwing.period]; })).toEqual(['#123456', 2.5]);
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+e');
+  await expect(page.locator('#exW')).toHaveValue('640');
+  await expect(page.locator('input[name=exFps][value="30"]')).toBeChecked();
+});
+
+test('膨らませる: ヘルプを Esc で閉じてもプレビューは残る。範囲を描いている途中の Esc で描き直しは始まらない', async ({ page }) => {
+  await boot(page);
+  const previewing = () => page.evaluate(() => (window as any).popstage.previewingInflate as boolean);
+  await page.locator('#view').focus();
+  await page.keyboard.press('i');
+  await dragOnStage(page, [0.4, 0.35], [0.6, 0.65]);
+  expect(await previewing()).toBe(true);
+  await page.evaluate(() => (document.getElementById('helpDialog') as HTMLDialogElement).showModal());
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#helpDialog')).not.toHaveAttribute('open', '');
+  expect(await previewing()).toBe(true);
+  await page.locator('#inflCancel').click();
+  expect(await previewing()).toBe(false);
+  // 描いている途中で Esc
+  const box = (await page.locator('#view').boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.4);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.55, { steps: 4 });
+  expect(await previewing()).toBe(true);
+  await page.keyboard.press('Escape');
+  expect(await previewing()).toBe(false);
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 4 });
+  expect(await previewing()).toBe(false);
+  await page.mouse.up();
+});

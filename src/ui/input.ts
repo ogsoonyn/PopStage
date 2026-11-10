@@ -14,7 +14,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   const drag = { mode: null as DragMode, id: -1, lx: 0, ly: 0, sx: 0, sy: 0 };
   /** 膨らませる範囲を描き始めた点(元画像のローカル座標) */
   let areaStart: { x: number; y: number } | null = null;
-  let space = false, alt = false, hover: { x: number; y: number } | null = null;
+  let space = false, alt = false, hover: { x: number; y: number; inside: boolean } | null = null;
   /** ポインタがキャンバスの上にあるか。Space の平行移動はフォーカスの場所ではなくこれで決める */
   let pointerInside = false;
 
@@ -28,7 +28,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     canvas.style.cursor = space || drag.mode === 'pan' ? 'move'
       : drag.mode === 'orbit' ? 'grabbing'
       : app.tool === 'grab' || app.tool === 'shake' ? (drag.mode === 'grab' || drag.mode === 'shake' ? 'grabbing' : 'grab')
-      : app.tool === 'view' ? 'move' : showBrush && hover ? 'none' : 'crosshair';
+      // ブラシの円は画像の上にしか描けないので、画像の外では十字のカーソルを出して見失わないようにする
+      : app.tool === 'view' ? 'move' : showBrush && hover?.inside ? 'none' : 'crosshair';
   };
   app.on('tool', updateCursor);
 
@@ -55,7 +56,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
 
   canvas.addEventListener('pointermove', e => {
     const p = app.stage.pick(e.clientX, e.clientY);
-    hover = p ? { x: p.x, y: p.y } : null;
+    hover = p ? { x: p.x, y: p.y, inside: p.inside } : null;
     if (drag.mode && e.pointerId === drag.id) {
       const dx = e.clientX - drag.lx, dy = e.clientY - drag.ly;
       drag.lx = e.clientX; drag.ly = e.clientY;
@@ -141,6 +142,9 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     drag.mode = 'area';
   }
 
+  // Esc などでプレビューが終わったら、描いている途中の範囲も捨てる(次に動かしたときに始め直さない)
+  app.on('inflate', phase => { if (phase === 'end' && drag.mode === 'area') { drag.mode = null; areaStart = null; updateCursor(); } });
+
   function moveArea(e: PointerEvent): void {
     const p = app.stage.pick(e.clientX, e.clientY);
     if (!p || !areaStart) return;
@@ -157,8 +161,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (e.key === 'Alt') { alt = true; e.preventDefault(); }
     // ボタンなどにフォーカスが残っていても、ポインタがキャンバス上にあれば平行移動にする。
     // キャンバスの外では Space をボタンの押下などに使えるよう、横取りしない
-    // ダイアログの表示中は、ボタンなどを Space で押せるよう横取りしない
-    const dialogOpen = !!document.querySelector('dialog[open]');
+    // 画面を覆うダイアログの表示中は、ボタンなどを Space で押せるよう横取りしない(膨らませるのパネルは除く)
+    const dialogOpen = !!document.querySelector('dialog[open]:modal');
     if (e.code === 'Space' && !isTextEntry(e) && !dialogOpen && (space || pointerInside || drag.mode !== null || e.target === canvas || e.target === document.body)) {
       if (!space) { space = true; updateCursor(); }
       e.preventDefault();

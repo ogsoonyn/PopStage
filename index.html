@@ -98,14 +98,14 @@
 <main class="flex-1 min-h-0 flex">
   <!-- ツールバー -->
   <nav class="flex flex-col gap-1 p-1.5 bg-base-100 border-r border-base-300 shrink-0" aria-label="ツール">
-    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="brush" title="ブラシ (B)"><span class="text-base leading-none">🖌</span><span class="text-xs">ブラシ</span></button>
-    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="erase" title="消しゴム (E、ブラシ中は Alt)"><span class="text-base leading-none">⌫</span><span class="text-xs">消しゴム</span></button>
-    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="smooth" title="ぼかし (S)"><span class="text-base leading-none">◌</span><span class="text-xs">ぼかし</span></button>
-    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="inflate" title="膨らませる (I): 範囲をドラッグして、指定した高さと断面で一括して膨らませる"><span class="text-base leading-none">◓</span><span class="text-xs">膨らみ</span></button>
-    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="grab" title="つかむ (G)"><span class="text-base leading-none">✋</span><span class="text-xs">つかむ</span></button>
-    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="shake" title="揺らす (Y):カメラを画像に付けたまま振る。画像は動かず、揺れだけが見える"><span class="text-base leading-none">〰</span><span class="text-xs">揺らす</span></button>
+    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="brush" aria-keyshortcuts="B" title="ブラシ (B)"><span class="text-base leading-none">🖌</span><span class="text-xs">ブラシ</span><kbd class="tool-key" aria-hidden="true">B</kbd></button>
+    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="erase" aria-keyshortcuts="E" title="消しゴム (E、ブラシ中は Alt)"><span class="text-base leading-none">⌫</span><span class="text-xs">消しゴム</span><kbd class="tool-key" aria-hidden="true">E</kbd></button>
+    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="smooth" aria-keyshortcuts="S" title="ぼかし (S)"><span class="text-base leading-none">◌</span><span class="text-xs">ぼかし</span><kbd class="tool-key" aria-hidden="true">S</kbd></button>
+    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="inflate" aria-keyshortcuts="I" title="膨らませる (I): 範囲をドラッグして、指定した高さと断面で一括して膨らませる"><span class="text-base leading-none">◓</span><span class="text-xs">膨らみ</span><kbd class="tool-key" aria-hidden="true">I</kbd></button>
+    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="grab" aria-keyshortcuts="G" title="つかむ (G)"><span class="text-base leading-none">✋</span><span class="text-xs">つかむ</span><kbd class="tool-key" aria-hidden="true">G</kbd></button>
+    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="shake" aria-keyshortcuts="Y" title="揺らす (Y):カメラを画像に付けたまま振る。画像は動かず、揺れだけが見える"><span class="text-base leading-none">〰</span><span class="text-xs">揺らす</span><kbd class="tool-key" aria-hidden="true">Y</kbd></button>
     <div class="divider my-0"></div>
-    <button class="tool btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="view" title="視点 (V)"><span class="text-base leading-none">⟲</span><span class="text-xs">視点</span></button>
+    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="view" aria-keyshortcuts="V" title="視点 (V)"><span class="text-base leading-none">⟲</span><span class="text-xs">視点</span><kbd class="tool-key" aria-hidden="true">V</kbd></button>
   </nav>
 
   <!-- 3Dビュー -->

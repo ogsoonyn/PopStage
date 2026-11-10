@@ -3,6 +3,7 @@ import type { App } from '../app';
 import { availableFormats, canEncodeAt, estimateExportBytes, EXPORT_MEMORY_WARN, FORMAT_INFO, even, type ExportFormat } from '../export/encoders';
 import type { ExportSettings } from '../export/exporter';
 import { $, ask, saveFile, toast, formatBytes } from './dom';
+import { persistControls } from '../storage/prefs';
 
 const FORMATS: ExportFormat[] = ['mp4', 'webm', 'webm-alpha', 'png', 'gif'];
 
@@ -160,7 +161,11 @@ export function bindExportDialog(app: App): { open: () => void } {
   return {
     async open() {
       if (!app.doc) { toast('先に画像を開いてください。', 'warning'); return; }
-      if (!initialized) await init();
+      if (!initialized) {
+        await init();
+        // 形式・大きさ・長さ・fps・ループはブラウザに覚えておく(形式の一覧ができてから戻す)
+        persistControls('export', [fmt, W, H, dur, loop, ...document.querySelectorAll<HTMLInputElement>('input[name=exFps]')]);
+      }
       if (!W.value) { const [w, h] = viewSize(); W.value = String(w); H.value = String(h); }
       if (!dur.value) dur.value = String(+(app.project.autoSwing.period * 2).toFixed(2));
       bgColor.value = app.project.background ?? '#ffffff';

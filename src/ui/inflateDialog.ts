@@ -46,7 +46,8 @@ export function bindInflateDialog(app: App): void {
   }
   $('inflApply').addEventListener('click', () => finish(true));
   $('inflCancel').addEventListener('click', () => finish(false));
-  window.addEventListener('keydown', e => { if (e.key === 'Escape' && dlg.open) { e.preventDefault(); finish(false); } });
+  // ヘルプなど別のダイアログを Esc で閉じたときは、プレビューを捨てない
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && dlg.open && !document.querySelector('dialog[open]:modal')) { e.preventDefault(); finish(false); } });
 
   /** 入力中の欄は書き換えない(打っている途中の値が消えないように) */
   const set = (el: HTMLInputElement | HTMLSelectElement, v: string) => { if (document.activeElement !== el) el.value = v; };

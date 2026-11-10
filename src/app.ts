@@ -14,6 +14,7 @@ import { inflateShape, popForHeight, rescaleForPop, type InflateProfile, type In
 import { serializeProject, serializeProjectBlob, deserializeProject, FILE_EXTENSION, type PngCacheEntry } from './storage/popstage';
 import { autosave } from './storage/autosave';
 import { recent, type RecentKind } from './storage/recent';
+import { prefs } from './storage/prefs';
 import { runExport, type ExportSettings } from './export/exporter';
 import { Emitter } from './util/emitter';
 import { decodeForDisplay, canvasAlpha, browserDecodeGray, fileToAsset, rgbaToPng, isProjectFile, isImageFile } from './ui/imageio';
@@ -350,16 +351,35 @@ export class App extends Emitter<AppEvents> {
     await recent.add({ name, kind, size, thumb, handle, bytes });
   }
 
+  /**
+   * 新しい画像に使う背景・自動揺らし・画角。最後に変えた値をブラウザに覚えてあれば、それを使う
+   * (main.ts で覚える)。無ければ今の作業の値を引き継ぐ。
+   */
+  private newImageDefaults(): Pick<Project, 'background' | 'autoSwing'> & { fov: number } {
+    const prev = this.project, d = prefs.get<Record<string, unknown>>('newImage') ?? {};
+    const num = (v: unknown, lim: { min: number; max: number }, def: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lim.min, Math.min(lim.max, v)) : def);
+    const a = (d.autoSwing && typeof d.autoSwing === 'object' ? d.autoSwing : {}) as Record<string, unknown>;
+    const bg = d.background === null || (typeof d.background === 'string' && /^#[0-9a-f]{6}$/i.test(d.background)) ? d.background as string | null : prev.background;
+    return {
+      background: 'background' in d ? bg : prev.background,
+      autoSwing: {
+        enabled: typeof a.enabled === 'boolean' ? a.enabled : prev.autoSwing.enabled,
+        period: num(a.period, LIMITS.period, prev.autoSwing.period),
+        strength: num(a.strength, { min: 0, max: 1 }, prev.autoSwing.strength),
+      },
+      fov: num(d.fov, LIMITS.fov, prev.camera.fov),
+    };
+  }
+
   /** 開けたら true */
   async openImage(file: File): Promise<boolean> {
     setBusy(true);
     try {
       const { asset, canvas } = await fileToAsset(file, this.displaySize);
-      const prev = this.project;
-      const p = createProject(createDocument(asset, file.name));
-      p.background = prev.background;
-      p.autoSwing = { ...prev.autoSwing };
-      p.camera.fov = prev.camera.fov;
+      const p = createProject(createDocument(asset, file.name)), d = this.newImageDefaults();
+      p.background = d.background;
+      p.autoSwing = d.autoSwing;
+      p.camera.fov = d.fov;
       if (!(await this.loadProject(p, { canvas }))) return false;
       this.setTool('brush');
       toast(`「${file.name}」を開きました。動かしたい所を塗ってください。`, 'success');
@@ -581,7 +601,8 @@ export class App extends Emitter<AppEvents> {
     this.inflateSession = {
       layerId: layer.id, original, area: { ...area },
       // 高さの初期値は前回の値、初めてならポップ量と同じ(ポップ量が 0 なら既定のポップ量)
-      settings: { ...st, height: st.height ?? (layer.pop > 0 ? layer.pop : LIMITS.pop.def) },
+      // 前回の高さは引き継ぐが、このレイヤーのポップ量は超えない(別のレイヤーでいきなりポップ量を上げない)
+      settings: { ...st, height: layer.pop > 0 ? Math.min(st.height ?? layer.pop, layer.pop) : (st.height ?? LIMITS.pop.def) },
       originalPop: layer.pop, pop: layer.pop, base: original,
     };
     this.renderInflate();
