@@ -1417,13 +1417,13 @@ test('ショートカット: 一覧のキーがすべて期待どおりに効く
   expect(await app(a => [a.previewingInflate, a.history.size])).toEqual([true, undo0]);
 });
 
-test('3面図にはウェイトの重ね表示と「画像を薄く」を効かせない。画像の外ではカーソルが十字になる', async ({ page }) => {
+test('3面図にはウェイトの重ね表示・「画像を薄く」・グリッドを効かせない。画像の外ではカーソルが十字になる', async ({ page }) => {
   await boot(page);
   await page.locator('#view').focus();
   await page.keyboard.press('m');
   await expect(page.locator('#multiView')).toBeVisible();
   const front = page.locator('#multiView [data-kind=front]');
-  const set = (overlay: boolean, fade: boolean) => page.evaluate(([o, f]) => { const a = (window as any).popstage; a.view.overlay = o; a.view.fade = f; a.syncView(); }, [overlay, fade]);
+  const set = (overlay: boolean, fade: boolean) => page.evaluate(([o, f]) => { const a = (window as any).popstage; a.view.overlay = o; a.view.fade = f; a.view.grid = o; a.syncView(); }, [overlay, fade]);
   const shots = async () => {
     await page.waitForTimeout(150);
     return { front: await front.screenshot(), main: await page.screenshot({ clip: { x: (await page.locator('#view').boundingBox())!.x, y: (await page.locator('#view').boundingBox())!.y, width: 300, height: 300 } }) };
@@ -1512,4 +1512,48 @@ test('膨らませる: ヘルプを Esc で閉じてもプレビューは残る�
   await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 4 });
   expect(await previewing()).toBe(false);
   await page.mouse.up();
+});
+
+test('表示の切り替えはキーで変えても覚える。ファイルの選択画面を断られたらボタンで開き直す', async ({ page }) => {
+  await boot(page);
+  await page.locator('#view').focus();
+  await page.keyboard.press('m');
+  await page.keyboard.press('Shift+W'); // 画像を薄く(重ね表示も入る)
+  await page.keyboard.press('w');       // 重ね表示だけ外す
+  await page.waitForTimeout(400);
+  await page.goto('/?e2e');
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  expect(await page.evaluate(() => { const v = (window as any).popstage.view; return [v.multi, v.fade, v.overlay]; })).toEqual([true, true, false]);
+  await expect(page.locator('#vMulti')).toBeChecked();
+  await page.locator('#view').focus();
+  await page.keyboard.press('m');
+  await page.waitForTimeout(400);
+  await page.goto('/?e2e');
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  expect(await page.evaluate(() => (window as any).popstage.view.multi)).toBe(false);
+
+  // 1回目は「操作の直後ではない」と断られ、ボタンを押すと開き直す
+  await page.evaluate(() => {
+    const w = window as any;
+    w.__calls = 0;
+    w.showOpenFilePicker = async () => { w.__calls++; if (w.__calls === 1) throw new DOMException('Must be handling a user gesture', 'SecurityError'); throw new DOMException('x', 'AbortError'); };
+  });
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+o');
+  await expect(page.locator('#askYes')).toHaveText('ファイルを選ぶ…');
+  await page.locator('#askYes').click();
+  await expect.poll(() => page.evaluate(() => (window as any).__calls)).toBe(2);
+  await expect(page.locator('#toasts')).not.toContainText('SecurityError');
+  // 保存先の選択も同じ。断られてもダウンロードに切り替えず、ボタンで開き直す
+  await page.evaluate(() => {
+    const w = window as any;
+    w.__save = 0; w.__downloads = 0;
+    w.showSaveFilePicker = async () => { w.__save++; if (w.__save === 1) throw new DOMException('Must be handling a user gesture', 'SecurityError'); throw new DOMException('x', 'AbortError'); };
+    const orig = URL.createObjectURL; URL.createObjectURL = (b: any) => { w.__downloads++; return orig(b); };
+  });
+  await page.keyboard.press('Control+Shift+s');
+  await expect(page.locator('#askYes')).toHaveText('保存先を選ぶ…');
+  await page.locator('#askYes').click();
+  await expect.poll(() => page.evaluate(() => (window as any).__save)).toBe(2);
+  expect(await page.evaluate(() => (window as any).__downloads)).toBe(0);
 });

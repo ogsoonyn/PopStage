@@ -400,9 +400,9 @@ export class Stage {
     }
     r.setScissorTest(true);
     this.drawIn(this.main(), this.camera);
-    // 横の図は形を見るためのものなので、ブラシの円・ウェイトの重ね表示・画像を薄くは効かせない
-    const u = this.uniforms, brush = u.uBrushOn.value, overlay = u.uOverlay.value, fade = u.uFade.value;
-    u.uBrushOn.value = 0; u.uOverlay.value = 0; u.uFade.value = 0;
+    // 横の図は形を見るためのものなので、ブラシの円・ウェイトの重ね表示・画像を薄く・グリッドは効かせない
+    const u = this.uniforms, brush = u.uBrushOn.value, overlay = u.uOverlay.value, fade = u.uFade.value, grid = u.uGrid.value;
+    u.uBrushOn.value = 0; u.uOverlay.value = 0; u.uFade.value = 0; u.uGrid.value = 0;
     const scale = this.orthoScale();
     for (const v of this.subViews) {
       if (v.kind === 'free') {
@@ -413,7 +413,7 @@ export class Stage {
         this.drawIn(v.rect, this.orthoCamera(v.kind, v.rect, scale, ortho));
       }
     }
-    u.uBrushOn.value = brush; u.uOverlay.value = overlay; u.uFade.value = fade;
+    u.uBrushOn.value = brush; u.uOverlay.value = overlay; u.uFade.value = fade; u.uGrid.value = grid;
     r.setScissorTest(false);
   }
 

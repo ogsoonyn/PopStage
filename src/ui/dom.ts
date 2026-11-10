@@ -50,6 +50,25 @@ export function ask(o: AskOptions): Promise<{ ok: boolean; value?: number }> {
   });
 }
 
+/** ファイルの選択画面を開けなかった理由が「ユーザーの操作の直後ではない」ことか */
+export function isGestureError(e: unknown): boolean {
+  const n = (e as DOMException)?.name;
+  return n === 'SecurityError' || n === 'NotAllowedError';
+}
+
+/**
+ * ブラウザはファイルの選択画面を、クリックやキー操作の直後にしか開かせない。ショートカットのあと
+ * 時間がたったときや、続けて開いたときなどに断られたら、ボタンを押してもらってからもう一度開く。
+ */
+export async function retryWithClick<T>(open: () => Promise<T>, label: string): Promise<T | undefined> {
+  try { return await open(); } catch (e) {
+    if (!isGestureError(e)) throw e;
+    const r = await ask({ title: label, body: 'ブラウザの制限で、ファイルの選択画面をすぐに開けませんでした。下のボタンを押すと開きます。', yes: label });
+    if (!r.ok) throw new DOMException('キャンセル', 'AbortError');
+    return await open();
+  }
+}
+
 export function setBusy(on: boolean): void {
   const el = $('busy');
   el.classList.toggle('hidden', !on);
@@ -68,7 +87,8 @@ export async function saveFile(blob: Blob, name: string, types: FilePickerAccept
   }
   if (window.showSaveFilePicker) {
     try {
-      const h = await window.showSaveFilePicker({ suggestedName: name, types });
+      const h = await retryWithClick(() => window.showSaveFilePicker!({ suggestedName: name, types }), '保存先を選ぶ…');
+      if (!h) return undefined;
       const w = await h.createWritable();
       await w.write(blob); await w.close();
       return h;

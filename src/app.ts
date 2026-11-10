@@ -692,6 +692,13 @@ export class App extends Emitter<AppEvents> {
     const st = s.settings;
     this.inflateSettings = { ...st }; // 次に描くときも同じ設定で始める
     const shape = `${st.shape === 'ellipse' ? '楕円' : '矩形'} ${Math.round(s.area.w)}×${Math.round(s.area.h)}px`;
+    if (newLayer && !newLayer.weights.data.some(v => v > 0)) {
+      // 範囲がすべて画像の外などで何も膨らまなかったときは、空のレイヤーを残さない
+      this.inflateSession = s;
+      this.endInflate(false);
+      toast('変化はありませんでした。');
+      return;
+    }
     if (newLayer) {
       // 仮に入れたレイヤーをそのまま正式に追加する。戻すとレイヤーごと消え、元のレイヤーは触れていないので元どおり
       const index = doc.layers.indexOf(newLayer);

@@ -7,7 +7,7 @@ import { bindBlurDialog } from './ui/blurDialog';
 import { bindInflateDialog } from './ui/inflateDialog';
 import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
-import { $, ask, toast } from './ui/dom';
+import { $, ask, toast, retryWithClick } from './ui/dom';
 import { autosave } from './storage/autosave';
 import { prefs, persistControls } from './storage/prefs';
 import { isImageFile, isProjectFile } from './ui/imageio';
@@ -38,7 +38,13 @@ bindPanels(app);
 const byId = <T extends HTMLElement>(...ids: string[]) => ids.map(id => $<T>(id));
 persistControls('brush', byId<HTMLInputElement | HTMLSelectElement>('brushSize', 'brushStrength', 'brushHardness', 'brushPressure'));
 // 「ポップを一時OFF」「揺れを一時停止」は一時的な切り替えなので覚えない
-persistControls('view', byId<HTMLInputElement>('vOverlay', 'vGrid', 'vFade', 'vMulti'));
+{
+  // キー・メニュー・チェックボックスのどれで切り替えても覚えるよう、アプリの表示の状態から覚える
+  const saved = prefs.get<Record<string, unknown>>('view') ?? {};
+  for (const k of ['overlay', 'grid', 'fade', 'multi'] as const) if (typeof saved[k] === 'boolean') app.view[k] = saved[k] as boolean;
+  app.syncView();
+  app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, grid: v.grid, fade: v.fade, multi: v.multi }); });
+}
 {
   const TOOLS: Tool[] = ['brush', 'erase', 'smooth', 'inflate', 'grab', 'shake', 'view'];
   const t = prefs.get<string>('tool');
@@ -68,7 +74,9 @@ const IMAGE_ACCEPT = { 'image/*': ['.png', '.jpg', '.jpeg', '.webp'] };
 async function pickAndOpen(types: FilePickerAcceptType[], fallback: HTMLInputElement): Promise<void> {
   if (window.showOpenFilePicker) {
     try {
-      const [h] = await window.showOpenFilePicker({ types });
+      const r = await retryWithClick(() => window.showOpenFilePicker!({ types }), 'ファイルを選ぶ…');
+      if (!r) return;
+      const [h] = r;
       await app.openFile(await h.getFile(), h);
     } catch (e) { if ((e as DOMException).name !== 'AbortError') toast(String(e), 'error'); }
   } else fallback.click();
@@ -163,7 +171,8 @@ function refreshTool(): void {
   document.querySelectorAll<HTMLElement>('[data-brush-opt]').forEach(el => el.classList.toggle('opacity-40', !paint));
   $('toolHint').textContent = TOOL_HINTS[app.tool];
 }
-document.querySelectorAll<HTMLButtonElement>('.tool').forEach(b => b.addEventListener('click', () => app.setTool(b.dataset.tool as Tool)));
+// 膨らませるのプレビュー中はツールを切り替えない(キーと同じ)
+document.querySelectorAll<HTMLButtonElement>('.tool').forEach(b => b.addEventListener('click', () => { if (!app.previewingInflate) app.setTool(b.dataset.tool as Tool); }));
 app.on('tool', refreshTool);
 
 /* ---------- ショートカット ---------- */
