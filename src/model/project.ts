@@ -253,6 +253,18 @@ export function defaultMultiCamera(): CameraState {
   return { fov: LIMITS.fov.def, yaw: 0.7, pitch: 0.45, zoom: 1.5, target: { x: 0, y: 0, z: 0 } };
 }
 
+/** 3面図の正投影の図(正面・右から・下から)の見え方。3つの図で共有し、縮尺と位置の対応をそろえる */
+export interface OrthoView {
+  /** 拡大率。1 で全体が収まり、大きいほど拡大する */
+  zoom: number;
+  /** 図の中心のずれ(画像のローカル座標、元画像のピクセル単位) */
+  pan: Vec3;
+}
+
+export function defaultOrthoView(): OrthoView {
+  return { zoom: 1, pan: { x: 0, y: 0, z: 0 } };
+}
+
 export function createProject(doc?: Document): Project {
   return {
     background: null,

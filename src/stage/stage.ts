@@ -3,7 +3,7 @@
  * 単位は元画像の 1 ピクセル = 1、画像の中心が原点。
  */
 import * as THREE from 'three';
-import type { CameraState, Document, Layer, Vec3 } from '../model/project';
+import type { CameraState, Document, Layer, OrthoView, Vec3 } from '../model/project';
 import type { Rect } from '../model/weightmap';
 import { vertexShader, fragmentShader, MAX_LAYERS } from './shaders';
 
@@ -27,6 +27,10 @@ const ORTHO_DIRS: Record<Exclude<SubViewKind, 'free'>, { dir: THREE.Vector3; up:
   right: { dir: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 1, 0) },
   bottom: { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1) },
 };
+
+/** 3面図の正投影の図の拡大率の範囲 */
+export const ORTHO_ZOOM = { min: 0.5, max: 20 };
+const ORTHO_NONE: OrthoView = { zoom: 1, pan: { x: 0, y: 0, z: 0 } };
 
 export interface PickResult {
   x: number; y: number; // ドキュメントのローカル座標(ピクセル)
@@ -280,17 +284,20 @@ export class Stage {
     return { min, max };
   }
 
-  /** 3面図のカメラ。3つの図は同じ縮尺にそろえ、ポップの膨らみも含めて収まる大きさにする */
-  private orthoCamera(kind: Exclude<SubViewKind, 'free'>, rect: ViewRect, scale: number): THREE.OrthographicCamera {
+  /**
+   * 3面図のカメラ。3つの図は同じ縮尺にそろえ、ポップの膨らみも含めて収まる大きさにする。
+   * 拡大率と中心のずれ(view)も3つで共有するので、正面と右・下の図で位置の対応が崩れない
+   */
+  private orthoCamera(kind: Exclude<SubViewKind, 'free'>, rect: ViewRect, scale: number, view: OrthoView): THREE.OrthographicCamera {
     const c = this.orthoCam, m = this.mesh!.matrixWorld, { min, max } = this.depthRange();
-    const { dir, up } = ORTHO_DIRS[kind];
-    const center = new THREE.Vector3(0, 0, (min + max) / 2).applyMatrix4(m);
+    const { dir, up } = ORTHO_DIRS[kind], p = view.pan;
+    const center = new THREE.Vector3(p.x, p.y, (min + max) / 2 + p.z).applyMatrix4(m);
     const d = new THREE.Vector3().copy(dir).transformDirection(m);
     const reach = (Math.max(this.imageSize.w, this.imageSize.h) + (max - min)) * 4 * this.mesh!.scale.x;
     c.position.copy(center).addScaledVector(d, reach);
     c.up.copy(up).transformDirection(m);
     c.lookAt(center);
-    const hw = (rect.w * scale) / 2, hh = (rect.h * scale) / 2;
+    const hw = (rect.w * scale) / 2 / view.zoom, hh = (rect.h * scale) / 2 / view.zoom;
     c.left = -hw; c.right = hw; c.top = hh; c.bottom = -hh;
     c.near = 0.1; c.far = reach * 2;
     c.updateProjectionMatrix(); c.updateMatrixWorld();
@@ -310,6 +317,62 @@ export class Stage {
     return k * 1.15 * (this.mesh?.scale.x ?? 1);
   }
 
+  /** 3面図の正投影の図の、画面の右・上方向(画像のローカル座標)。カメラの x 軸は up × dir */
+  private orthoAxes(kind: Exclude<SubViewKind, 'free'>): { right: THREE.Vector3; up: THREE.Vector3 } {
+    const { dir, up } = ORTHO_DIRS[kind];
+    return { right: new THREE.Vector3().crossVectors(up, dir), up: up.clone() };
+  }
+
+  /** 3面図の正投影の図で、画面の 1px が画像のローカル座標で何単位か(拡大率込み) */
+  private orthoUnitPerPixel(view: OrthoView): number {
+    return this.orthoScale() / (this.mesh?.scale.x ?? 1) / view.zoom;
+  }
+
+  /** 中心のずれは、画像と膨らみが図の外へ遠く離れない範囲に収める */
+  private clampOrthoPan(view: OrthoView): void {
+    const { min, max } = this.depthRange(), lim = Math.max(this.imageSize.w, this.imageSize.h) + (max - min);
+    const p = view.pan, c = (v: number) => Math.max(-lim, Math.min(lim, v));
+    p.x = c(p.x); p.y = c(p.y); p.z = c(p.z);
+  }
+
+  /** 3面図の正投影の図を、画面上で (dx, dy) px ドラッグしたぶん平行移動する(画像がポインタに付いてくる向き) */
+  panOrtho(view: OrthoView, kind: Exclude<SubViewKind, 'free'>, dx: number, dy: number): void {
+    const k = this.orthoUnitPerPixel(view), { right, up } = this.orthoAxes(kind);
+    const d = right.multiplyScalar(-dx * k).addScaledVector(up, dy * k);
+    view.pan.x += d.x; view.pan.y += d.y; view.pan.z += d.z;
+    this.clampOrthoPan(view);
+  }
+
+  /**
+   * 3面図の正投影の図の拡大率を factor 倍にする。(cx, cy) は図の中心からのポインタの位置(px、下が正)で、
+   * そこに映っている点が動かないよう中心をずらす
+   */
+  zoomOrtho(view: OrthoView, kind: Exclude<SubViewKind, 'free'>, factor: number, cx: number, cy: number): void {
+    const k0 = this.orthoUnitPerPixel(view);
+    const zoom = Math.max(ORTHO_ZOOM.min, Math.min(ORTHO_ZOOM.max, view.zoom * factor));
+    const k1 = k0 * view.zoom / zoom, { right, up } = this.orthoAxes(kind);
+    const d = right.multiplyScalar(cx * (k0 - k1)).addScaledVector(up, -cy * (k0 - k1));
+    view.zoom = zoom;
+    view.pan.x += d.x; view.pan.y += d.y; view.pan.z += d.z;
+    this.clampOrthoPan(view);
+  }
+
+  /**
+   * 3面図の自由角度の図を、画面上で (dx, dy) px ドラッグしたぶん平行移動する(画像がポインタに付いてくる向き)。
+   * 動かすのは cam の注視点だけで、主ビューの視点や揺れの計算には関わらない
+   */
+  panFree(cam: CameraState, dx: number, dy: number): void {
+    const v = this.subViews.find(s => s.kind === 'free');
+    if (!v) return;
+    const aspect = v.rect.w / Math.max(1, v.rect.h);
+    this.applyCamera(cam, aspect, this.freeCam);
+    const k = (2 * this.cameraDistance(cam, aspect) * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)) / Math.max(1, v.rect.h);
+    const e = this.freeCam.matrixWorld.elements;
+    cam.target.x += -dx * k * e[0] + dy * k * e[4];
+    cam.target.y += -dx * k * e[1] + dy * k * e[5];
+    cam.target.z += -dx * k * e[2] + dy * k * e[6];
+  }
+
   /** ポインタからのレイと「持ち上げる前の平面」の交点 */
   pick(clientX: number, clientY: number): PickResult | null {
     if (!this.mesh) return null;
@@ -324,8 +387,8 @@ export class Stage {
     return { x: this.hit.x, y: this.hit.y, u, v, inside: u >= 0 && u <= 1 && v >= 0 && v <= 1 };
   }
 
-  /** free は 3面図の「自由角度」の視点 */
-  render(cam: CameraState, free?: CameraState): void {
+  /** free は 3面図の「自由角度」の視点、ortho は正面・右から・下からの図の拡大率と平行移動 */
+  render(cam: CameraState, free?: CameraState, ortho: OrthoView = ORTHO_NONE): void {
     const r = this.renderer;
     this.applyCamera(cam);
     r.setRenderTarget(null);
@@ -347,7 +410,7 @@ export class Stage {
         this.applyCamera(free, v.rect.w / Math.max(1, v.rect.h), this.freeCam);
         this.drawIn(v.rect, this.freeCam);
       } else {
-        this.drawIn(v.rect, this.orthoCamera(v.kind, v.rect, scale));
+        this.drawIn(v.rect, this.orthoCamera(v.kind, v.rect, scale, ortho));
       }
     }
     u.uBrushOn.value = brush;

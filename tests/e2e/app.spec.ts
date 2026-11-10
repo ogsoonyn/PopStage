@@ -196,6 +196,106 @@ test('3面図: 横に4つの図が出て、自由角度はドラッグで回り�
   expect(Math.abs(x2)).toBeLessThan(1); expect(Math.abs(y2)).toBeLessThan(1);
 });
 
+test('3面図: 正面・右・下はホイールでズーム・ドラッグで平行移動、自由角度は中ドラッグで平行移動し、主ビューと揺れには影響しない', async ({ page }) => {
+  await boot(page);
+  await page.keyboard.press('p'); // 一時停止を解除して、揺れの計算が動いている状態で確かめる
+  await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: false } }); });
+  await page.locator('#view').focus();
+  await page.keyboard.press('m');
+  await expect(page.locator('#multiView')).toBeVisible();
+  await page.waitForTimeout(1500); // 重さで垂れた所で落ち着かせる
+  const state = () => page.evaluate(() => {
+    const a = (window as any).popstage;
+    return {
+      main: JSON.stringify(a.project.camera), viewTarget: JSON.stringify(a.world.viewTarget),
+      dirty: a.dirty as boolean, undo: a.history.size as number,
+      ortho: JSON.parse(JSON.stringify(a.multiOrtho)) as { zoom: number; pan: { x: number; y: number; z: number } },
+      free: JSON.parse(JSON.stringify(a.multiCam)) as { yaw: number; pitch: number; zoom: number; target: { x: number; y: number; z: number } },
+    };
+  });
+  const s0 = await state();
+  expect(s0.ortho).toEqual({ zoom: 1, pan: { x: 0, y: 0, z: 0 } });
+  const before = await page.evaluate(() => { const a = (window as any).popstage; return a.world.displacement(a.doc.layers[0].id).x; });
+  const watching = watchSwingX(page, 2500);
+
+  // 正面: ホイールで拡大する。中心から外れた所で回すと、その点へ寄るので中心がずれる
+  const front = page.locator('#multiView [data-kind=front]'), fb = (await front.boundingBox())!;
+  const shot0 = await front.screenshot();
+  await page.mouse.move(fb.x + fb.width * 0.75, fb.y + fb.height * 0.5);
+  await page.mouse.wheel(0, -400);
+  await expect.poll(async () => (await state()).ortho.zoom).toBeGreaterThan(1.3);
+  const s1 = await state();
+  expect(s1.ortho.pan.x).toBeGreaterThan(0); // 右寄りの点へ寄る
+  expect(s1.ortho.pan.y).toBeCloseTo(0);
+  await page.waitForTimeout(100);
+  expect((await front.screenshot()).equals(shot0)).toBe(false);
+  // 右からの図でも同じ状態を変える(3つで共有)。縮小は下限で止まる
+  const right = page.locator('#multiView [data-kind=right]'), rb = (await right.boundingBox())!;
+  await page.mouse.move(rb.x + rb.width / 2, rb.y + rb.height / 2);
+  for (let i = 0; i < 8; i++) await page.mouse.wheel(0, 800);
+  await expect.poll(async () => (await state()).ortho.zoom).toBeCloseTo(0.5);
+  await page.mouse.wheel(0, -600);
+  await expect.poll(async () => (await state()).ortho.zoom).toBeGreaterThan(1);
+
+  // 正面: 左ドラッグで平行移動(画像がポインタに付いてくるので、中心は逆へずれる)
+  const pan0 = (await state()).ortho.pan;
+  await page.mouse.move(fb.x + fb.width * 0.5, fb.y + fb.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(fb.x + fb.width * 0.7, fb.y + fb.height * 0.7, { steps: 5 });
+  await page.mouse.up();
+  const pan1 = (await state()).ortho.pan;
+  expect(pan1.x).toBeLessThan(pan0.x);
+  expect(pan1.y).toBeGreaterThan(pan0.y);
+  expect(pan1.z).toBeCloseTo(pan0.z);
+
+  // ダブルクリックで拡大率と平行移動が戻る
+  await front.dblclick();
+  expect((await state()).ortho).toEqual({ zoom: 1, pan: { x: 0, y: 0, z: 0 } });
+
+  // 自由角度: 中ドラッグで平行移動する。回転とズームは変わらない
+  const free = page.locator('#multiView [data-kind=free]'), vb = (await free.boundingBox())!;
+  await page.mouse.move(vb.x + vb.width * 0.3, vb.y + vb.height * 0.5);
+  await page.mouse.down({ button: 'middle' });
+  await page.mouse.move(vb.x + vb.width * 0.7, vb.y + vb.height * 0.5, { steps: 6 });
+  await page.mouse.up({ button: 'middle' });
+  const s2 = await state();
+  const moved = (p: { x: number; y: number; z: number }, q: { x: number; y: number; z: number }) => Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z);
+  expect(moved(s2.free.target, s0.free.target)).toBeGreaterThan(5);
+  expect(s2.free.yaw).toBeCloseTo(s0.free.yaw);
+  expect(s2.free.pitch).toBeCloseTo(s0.free.pitch);
+  expect(s2.free.zoom).toBeCloseTo(s0.free.zoom);
+  // Shift+左ドラッグでも平行移動になり、回転しない
+  await page.keyboard.down('Shift');
+  await page.mouse.move(vb.x + vb.width * 0.5, vb.y + vb.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(vb.x + vb.width * 0.5, vb.y + vb.height * 0.7, { steps: 6 });
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  const s3 = await state();
+  expect(moved(s3.free.target, s2.free.target)).toBeGreaterThan(5);
+  expect(s3.free.yaw).toBeCloseTo(s0.free.yaw);
+  expect(s3.free.pitch).toBeCloseTo(s0.free.pitch);
+  // 左ドラッグは今まで通り回転
+  await page.mouse.move(vb.x + vb.width * 0.3, vb.y + vb.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(vb.x + vb.width * 0.7, vb.y + vb.height * 0.5, { steps: 5 });
+  await page.mouse.up();
+  expect((await state()).free.yaw).not.toBeCloseTo(s0.free.yaw);
+
+  // 主ビューの視点・揺れの計算・未保存の印・アンドゥには何も起きない
+  const [lo, hi] = await watching;
+  expect(Math.max(Math.abs(lo - before), Math.abs(hi - before))).toBeLessThan(0.005);
+  const s4 = await state();
+  expect(s4.main).toBe(s0.main);
+  expect(s4.viewTarget).toBe(s0.viewTarget);
+  expect(s4.dirty).toBe(s0.dirty);
+  expect(s4.undo).toBe(s0.undo);
+
+  // ダブルクリックで回転・ズーム・平行移動がすべて初期の視点に戻る
+  await free.dblclick();
+  expect((await state()).free).toEqual(s0.free);
+});
+
 for (const target of ['[data-tool=brush]', '#pPreset']) test(`${target} にフォーカスが残っていても、Space+ドラッグは平行移動になり塗らない`, async ({ page }) => {
   await boot(page);
   await page.locator(target).focus();
