@@ -267,7 +267,11 @@ export class App extends Emitter<AppEvents> {
   private async openFileNow(file: File, handle: FileSystemFileHandle | undefined, confirmed: boolean): Promise<void> {
     if (isProjectFile(file)) {
       if (!confirmed && !(await this.confirmDiscard())) return;
-      const bytes = new Uint8Array(await file.arrayBuffer());
+      let bytes: Uint8Array;
+      try { bytes = new Uint8Array(await file.arrayBuffer()); } catch (e) {
+        toast(`「${file.name}」を読めませんでした: ${e instanceof Error ? e.message : e}`, 'error', 6000);
+        return;
+      }
       // 一覧への記録は待たない(記録が遅れたり失敗したりしても、次のファイルを開けるように)
       if (await this.openProjectBytes(bytes, file.name, handle ?? null)) void this.remember('project', file.name, file.size, handle, () => bytes);
     } else if (isImageFile(file)) {

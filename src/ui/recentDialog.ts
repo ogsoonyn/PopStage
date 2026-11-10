@@ -64,7 +64,7 @@ export function bindRecentDialog(app: App): { open: () => Promise<void> } {
       meta.append(b);
     }
     btn.append(pic, name, meta);
-    btn.addEventListener('click', () => void openEntry(e));
+    btn.addEventListener('click', () => void openEntry(e, i));
     btn.addEventListener('keydown', ev => { if (ev.key === 'Delete') { ev.preventDefault(); void removeEntry(e, i); } });
     const x = document.createElement('button');
     x.type = 'button';
@@ -101,20 +101,20 @@ export function bindRecentDialog(app: App): { open: () => Promise<void> } {
   /** ダブルクリックなどで2回目が来ても無視する */
   let opening = false;
 
-  async function openEntry(e: RecentEntry): Promise<void> {
+  async function openEntry(e: RecentEntry, i: number): Promise<void> {
     if (opening) return;
     if (app.busy) { toast('いまはファイルを開けません。処理が終わってからもう一度お試しください。', 'warning'); return; }
     opening = true;
-    try { await openEntryNow(e); } finally { opening = false; }
+    try { await openEntryNow(e, i); } finally { opening = false; }
   }
 
-  async function openEntryNow(e: RecentEntry): Promise<void> {
+  async function openEntryNow(e: RecentEntry, i: number): Promise<void> {
     let file: File | null;
     try { file = await readEntry(e); } catch (err) {
       if ((err as DOMException).name === 'NotFoundError') {
         const r = await ask({ title: `「${e.name}」が見つかりません`, body: '移動・名前の変更・削除をした可能性があります。一覧から外しますか?', yes: '一覧から外す', no: 'そのまま' });
         if (r.ok) await recent.remove(e.id);
-        if (dlg.open) await render();
+        if (dlg.open) await render(i); // 外したカードの位置へフォーカスを戻す
       } else toast(`開けませんでした: ${err instanceof Error ? err.message : err}`, 'error', 6000);
       return;
     }
