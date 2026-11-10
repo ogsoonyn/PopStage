@@ -25,8 +25,11 @@ export async function fileToAsset(file: File, maxDisplay: number): Promise<{ ass
 
 async function decodeBitmap(bytes: Uint8Array, mime: string): Promise<ImageBitmap> {
   // 画素数は回転(EXIF)の影響を受けないので、ヘッダの寸法で判定できる
+  // 受け付けるのは PNG / JPEG / WebP だけで、正しいファイルなら必ずヘッダを読める。
+  // 読めないもの(中身が別の形式など)は、大きさを確かめられないのでデコードしない
   const size = imageHeaderSize(bytes);
-  if (size && size.width * size.height > MAX_IMAGE_PIXELS) {
+  if (!size) throw new Error('画像を読み込めませんでした(壊れているか、PNG / JPEG / WebP ではありません)。');
+  if (size.width * size.height > MAX_IMAGE_PIXELS) {
     throw new Error(`画像が大きすぎます(${size.width}×${size.height})。${MAX_IMAGE_PIXELS / 1e6} メガピクセル以下にしてください。`);
   }
   try {

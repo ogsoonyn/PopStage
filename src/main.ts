@@ -214,7 +214,8 @@ async function boot(): Promise<void> {
       yes: '復元する', no: '破棄して新しく始める',
     });
     if (r.ok) {
-      if (await app.openProjectBytes(saved.bytes, null, null, true)) { app.fileName = saved.name; refreshTitle(); return; }
+      // 復元している間にドロップされたファイルを開かない(開くと、復元の失敗と取り違えてサンプルで上書きしてしまう)
+      if (await app.whileOpening(() => app.openProjectBytes(saved.bytes, null, null, true))) { app.fileName = saved.name; refreshTitle(); return; }
       // 復元できなかったときはサンプルで始める。壊れた自動保存を残すかは本人に決めてもらう
       const keep = await ask({
         title: '前回の作業を復元できませんでした',

@@ -194,7 +194,7 @@ export class App extends Emitter<AppEvents> {
    */
   cameraChanged(): void {
     clearTimeout(this.cameraTimer);
-    this.cameraTimer = window.setTimeout(() => this.store.emit('change', undefined), 300);
+    this.cameraTimer = window.setTimeout(() => { this.cameraTimer = 0; this.store.emit('change', undefined); }, 300);
   }
   private cameraTimer = 0;
 
@@ -225,6 +225,7 @@ export class App extends Emitter<AppEvents> {
       this.fileName = opts.fileName ?? null;
       this.fileHandle = opts.handle ?? null;
       this.dirty = !!opts.dirty;
+      this.autosaveError = null;
       this.applyDocument(canvas);
     } finally { this.loading = false; }
     // 別の作業に切り替えたので、前の作業の自動保存はもう要らない(復元した作業の読み込みは除く)
@@ -252,8 +253,13 @@ export class App extends Emitter<AppEvents> {
 
   async openFile(file: File, handle?: FileSystemFileHandle): Promise<void> {
     if (this.busy) { toast('いまはファイルを開けません。処理が終わってからもう一度お試しください。', 'warning'); return; }
+    await this.whileOpening(() => this.openFileNow(file, handle));
+  }
+
+  /** ファイルを開いている間は、ほかのファイルを開かせない(起動時の復元にも使う) */
+  async whileOpening<T>(fn: () => Promise<T>): Promise<T> {
     this.opening = true;
-    try { await this.openFileNow(file, handle); } finally { this.opening = false; }
+    try { return await fn(); } finally { this.opening = false; }
   }
 
   private async openFileNow(file: File, handle?: FileSystemFileHandle): Promise<void> {
@@ -322,15 +328,19 @@ export class App extends Emitter<AppEvents> {
     if (!this.doc) return false;
     // 書き込みを待つ間に変更されたら、その変更は保存されていないので「未保存」のまま残す
     const thumb = await this.thumbnail();
+    // 間引き中の視点の変更は、これから保存する内容に含まれるので、ここで通知を取り消す
+    const cameraPending = this.cameraTimer !== 0;
+    if (cameraPending) { clearTimeout(this.cameraTimer); this.cameraTimer = 0; }
     const revision = this.revision;
     const bytes = this.serialize(thumb);
     const blob = new Blob([bytes as BlobPart], { type: 'application/zip' });
     try {
       const h = await saveFile(blob, this.suggestedName(), PROJECT_TYPES, saveAs ? null : this.fileHandle);
-      if (h === undefined) return false;
+      if (h === undefined) { if (cameraPending) this.cameraChanged(); return false; }
       this.fileHandle = h;
       if (h) this.fileName = h.name; else this.fileName ??= this.suggestedName();
       this.lastSaved = new Date();
+      this.autosaveError = null; // ファイルに保存できたので、自動保存の失敗の案内は消す
       if (this.revision === revision) {
         this.dirty = false;
         // 予約中の自動保存は取り消し、実行中のものがあれば終わってから消す(古い内容が後から書き込まれないように)
@@ -343,6 +353,7 @@ export class App extends Emitter<AppEvents> {
       toast(h ? `「${h.name}」に保存しました。` : `「${this.fileName}」をダウンロードしました。`, 'success');
       return true;
     } catch (e) {
+      if (cameraPending) this.cameraChanged(); // 保存できなかったので、視点の変更は未保存のまま
       toast(`保存できませんでした: ${e instanceof Error ? e.message : e}`, 'error', 6000);
       return false;
     }
@@ -351,7 +362,9 @@ export class App extends Emitter<AppEvents> {
   private scheduleAutosave(): void {
     clearTimeout(this.autosaveTimer);
     this.autosaveTimer = window.setTimeout(() => {
-      if (!this.dirty || !this.doc || this.stroke) { if (this.stroke) this.scheduleAutosave(); return; }
+      // 塗りの最中・ぼかしのプレビュー中は、確定していない状態を保存しないよう後に回す
+      const unsettled = !!this.stroke || this.previewingBlur;
+      if (!this.dirty || !this.doc || unsettled) { if (unsettled) this.scheduleAutosave(); return; }
       const fail = (e: unknown) => {
         console.warn('autosave failed', e);
         this.autosaveError = e instanceof Error ? e.message : String(e);
@@ -359,7 +372,8 @@ export class App extends Emitter<AppEvents> {
       };
       // 直列化は重いので、操作の合間(アイドル時間)に行う
       idle(() => {
-        if (!this.dirty || !this.doc || this.stroke) return;
+        if (!this.dirty || !this.doc) return;
+        if (this.stroke || this.previewingBlur) { this.scheduleAutosave(); return; }
         try {
           const bytes = serializeProject(this.project, { pngCache: this.pngCache });
           const run = autosave.save({ savedAt: Date.now(), name: this.suggestedName(), bytes })

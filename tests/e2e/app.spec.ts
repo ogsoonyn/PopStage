@@ -231,6 +231,14 @@ test('視点を変えると「未保存」になる。変化の無い一括処�
 
   await dragOnStage(page, [0.5, 0.5], [0.7, 0.5], 'right');
   await expect.poll(dirty).toBe(true);
+
+  // 回した直後に保存しても、保存が済んだ後で「未保存」に戻らない
+  await page.evaluate(async () => { const a = (window as any).popstage; await a.save(); });
+  await dragOnStage(page, [0.5, 0.5], [0.3, 0.5], 'right');
+  await page.evaluate(async () => { await (window as any).popstage.save(); });
+  expect(await dirty()).toBe(false);
+  await page.waitForTimeout(500);
+  expect(await dirty()).toBe(false);
 });
 
 test('画角のアンドゥは画角だけを戻し、その後に回した視点は戻さない', async ({ page }) => {
@@ -521,6 +529,13 @@ test('自動保存は塗った内容を反映し、失敗したらステータ�
   });
   await page.evaluate(() => (window as any).popstage.store.patchLayer((window as any).popstage.activeLayerId, { pop: 33 }));
   await expect(page.locator('#sSave')).toContainText('自動保存に失敗しました', { timeout: 10000 });
+  // ファイルへ保存できたら、失敗の案内は消える
+  await page.evaluate(async () => {
+    const a = (window as any).popstage;
+    a.fileHandle = { name: 'x.popstage', createWritable: async () => ({ write: async () => {}, close: async () => {} }) };
+    await a.save();
+  });
+  await expect(page.locator('#sSave')).not.toContainText('自動保存に失敗しました');
 });
 
 test('画像を開くときのデコードは1回だけ。巨大な寸法の画像はデコードする前に断る', async ({ page }) => {
@@ -548,6 +563,8 @@ test('画像を開くときのデコードは1回だけ。巨大な寸法の画�
     new DataView(png.buffer).setUint32(16, 20000); new DataView(png.buffer).setUint32(20, 20000);
     calls = 0;
     await a.openFile(new File([png], 'huge.png', { type: 'image/png' }));
+    // 拡張子は .png でも中身が GIF のもの(ヘッダから大きさを確かめられない)
+    await a.openFile(new File([new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 0, 1, 0, 0, 0, 0, 0x3b])], 'fake.png', { type: 'image/png' }));
     window.createImageBitmap = orig;
     return { sizes, openCalls, name, hugeCalls: calls, after: a.doc.name };
   });
@@ -557,6 +574,7 @@ test('画像を開くときのデコードは1回だけ。巨大な寸法の画�
   expect(r.hugeCalls).toBe(0);
   expect(r.after).toBe('once.png');
   await expect(page.locator('#toasts')).toContainText('画像が大きすぎます');
+  await expect(page.locator('#toasts')).toContainText('PNG / JPEG / WebP ではありません');
 });
 
 test('ドロップで画像を開ける。ダイアログ表示中・書き出し中は開かない', async ({ page }) => {

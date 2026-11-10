@@ -103,13 +103,13 @@ export function bindExportDialog(app: App): { open: () => void } {
     $('sRec').textContent = on ? '● 書き出し中' : '';
   }
 
-  start.addEventListener('click', async () => {
-    const s = readSettings();
-    if (s.width * s.height > app.stage.maxTextureSize ** 2) { toast('サイズが大きすぎます。', 'error'); return; }
+  /** 書き出してよいかを確かめる(確認の待ち中に2回目のクリックや「閉じる」が通らないよう、呼ぶ側でボタンを止めておく) */
+  async function confirmStart(s: ExportSettings): Promise<boolean> {
+    if (s.width * s.height > app.stage.maxTextureSize ** 2) { toast('サイズが大きすぎます。', 'error'); return false; }
     // 動画は実際のサイズでエンコードできるかを先に確かめる(形式の一覧は 1280×720 で調べている)
     if (!(await canEncodeAt(s.format, s.width, s.height))) {
       toast(`このブラウザでは ${s.width}×${s.height} の${FORMAT_INFO[s.format].label}を書き出せません。サイズを小さくしてください。`, 'error', 6000);
-      return;
+      return false;
     }
     const est = estimateExportBytes(s.format, s.width, s.height, Math.round(s.duration * s.fps));
     if (est > EXPORT_MEMORY_WARN) {
@@ -119,8 +119,18 @@ export function bindExportDialog(app: App): { open: () => void } {
 サイズや長さを減らすか、MP4 / WebM を選ぶと軽くなります。`,
         yes: 'このまま書き出す', no: 'やめる',
       });
-      if (!r.ok) return;
+      if (!r.ok) return false;
     }
+    return true;
+  }
+
+  start.addEventListener('click', async () => {
+    if (running || start.disabled) return;
+    const s = readSettings();
+    start.disabled = true; cancel.disabled = true;
+    let ok = false;
+    try { ok = await confirmStart(s); } finally { start.disabled = false; cancel.disabled = false; }
+    if (!ok || !dlg.open) return; // 確認の間に Esc でダイアログが閉じられたら書き出さない
     dur.value = String(+s.duration.toFixed(2));
     running = new AbortController();
     setRunning(true);
