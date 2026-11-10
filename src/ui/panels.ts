@@ -1,7 +1,7 @@
 /** 右パネル(レイヤー一覧とプロパティ)とツールオプション。 */
 import type { App } from '../app';
 import { PRESETS, PRESET_ORDER, MOTIONS, MOTION_PARAMS, LIMITS, applyPreset, motionParam, type MotionParamDef, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type Project, type Document } from '../model/project';
-import { PatchLayer, PatchDocument, PatchProject, Batch } from '../commands/commands';
+import { PatchLayer, PatchDocument, PatchProject, Batch, SetFov } from '../commands/commands';
 import { $, toast } from './dom';
 import { drawWeightThumb } from './imageio';
 
@@ -163,7 +163,21 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   bindRange('pDensity', { target: 'doc', keys: ['meshDensity'], label: 'メッシュ密度', toPatch: v => ({ meshDensity: v }), fmt: v => `${v}` });
   bindRange('pOpacity', { target: 'doc', keys: ['opacity'], label: '不透明度', toPatch: v => ({ opacity: v / 100 }), fmt: v => `${v}%` });
-  bindRange('pFov', { target: 'project', keys: ['camera'], label: '画角', toPatch: v => ({ camera: { ...app.project.camera, fov: v } }), fmt: v => `${v}°` });
+  {
+    // 画角は視点と同じ camera に入っているが、アンドゥでは画角だけを戻す
+    const el = $<HTMLInputElement>('pFov'), out = $('pFovO');
+    let before: number | null = null;
+    el.addEventListener('input', () => {
+      before ??= app.project.camera.fov;
+      store.patchProject({ camera: { ...app.project.camera, fov: +el.value } });
+      out.textContent = `${el.value}°`;
+    });
+    el.addEventListener('change', () => {
+      if (before === null) return;
+      if (before !== +el.value) history.push(new SetFov('画角', before, +el.value));
+      before = null;
+    });
+  }
   bindRange('pPeriod', { target: 'project', keys: ['autoSwing'], label: '自動揺らしの周期', toPatch: v => ({ autoSwing: { ...app.project.autoSwing, period: v / 10 } }), fmt: v => `${(v / 10).toFixed(1)}秒` });
   bindRange('pAutoStr', { target: 'project', keys: ['autoSwing'], label: '自動揺らしの強さ', toPatch: v => ({ autoSwing: { ...app.project.autoSwing, strength: v / 100 } }), fmt: pct });
   $<HTMLInputElement>('pAuto').addEventListener('change', e => exec('project', '自動揺らしの切替', { autoSwing: { ...app.project.autoSwing, enabled: (e.target as HTMLInputElement).checked } }));

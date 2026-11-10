@@ -54,6 +54,17 @@ export class PatchProject implements Command {
   revert(store: Store): void { store.patchProject(deepCopy(this.before)); }
 }
 
+/**
+ * 画角の変更。視点(回転・平行移動・ズーム)はアンドゥの対象外なので、カメラ全体ではなく
+ * 画角だけを差分として持ち、戻すときも今の視点に画角だけを当てる。
+ */
+export class SetFov implements Command {
+  readonly bytes = OBJ_BYTES;
+  constructor(readonly label: string, private before: number, private after: number) {}
+  apply(store: Store): void { store.patchProject({ camera: { ...store.project.camera, fov: this.after } }); }
+  revert(store: Store): void { store.patchProject({ camera: { ...store.project.camera, fov: this.before } }); }
+}
+
 /** 複数の変更を1手にまとめる(プリセットで材質と周期を同時に変えるときなど)。 */
 export class Batch implements Command {
   readonly bytes: number;

@@ -233,6 +233,25 @@ test('視点を変えると「未保存」になる。変化の無い一括処�
   await expect.poll(dirty).toBe(true);
 });
 
+test('画角のアンドゥは画角だけを戻し、その後に回した視点は戻さない', async ({ page }) => {
+  await boot(page);
+  const cam = () => page.evaluate(() => { const c = (window as any).popstage.project.camera; return { fov: c.fov, yaw: c.yaw }; });
+  const c0 = await cam();
+  await page.locator('#pFov').fill(String(c0.fov + 20));
+  await page.locator('#pFov').dispatchEvent('change');
+  await dragOnStage(page, [0.5, 0.5], [0.7, 0.5], 'right');
+  const c1 = await cam();
+  expect(c1.fov).toBe(c0.fov + 20);
+  expect(c1.yaw).not.toBeCloseTo(c0.yaw);
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+z');
+  const c2 = await cam();
+  expect(c2.fov).toBe(c0.fov);
+  expect(c2.yaw).toBeCloseTo(c1.yaw);
+  await page.keyboard.press('Control+y');
+  expect((await cam()).fov).toBe(c0.fov + 20);
+});
+
 test('右ドラッグで視点が回り、Home で戻る', async ({ page }) => {
   await boot(page);
   const yaw0 = await page.evaluate(() => (window as any).popstage.project.camera.yaw);
