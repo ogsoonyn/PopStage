@@ -8,10 +8,19 @@ import {
   type Project, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern,
 } from '../model/project';
 import { WeightMap, weightSizeFor } from '../model/weightmap';
-import { encodeGrayPng, decodePngToGray, type GrayImage } from './png';
+import { encodeGrayPng, decodePngToGray, readPngSize, MAX_PNG_SIDE, type GrayImage } from './png';
 
 export const FORMAT_VERSION = 1;
 export const FILE_EXTENSION = '.popstage';
+
+/** 展開する1ファイルあたりの上限(バイト)。ZIP 爆弾でメモリを使い切らないよう、宣言サイズで弾く */
+export const UNZIP_LIMITS = { json: 16 << 20, image: 256 << 20, weights: 64 << 20, thumbnail: 8 << 20 };
+
+/** プロトタイプを辿らずに、自前のキーかどうかを調べる(`constructor` などを通さない) */
+const own = (o: object, k: unknown): boolean => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+
+/** 背景色は #rrggbb だけを受け付ける(CSS に入るので、url() などを通さない) */
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 /* ---------- project.json の形 ---------- */
 
@@ -106,7 +115,7 @@ function motionParamsFrom(v: unknown): Record<string, number> {
   if (!v || typeof v !== 'object') return out;
   for (const [key, raw] of Object.entries(v as Record<string, unknown>)) {
     const [m, k] = key.split('.');
-    const def = MOTION_PARAMS[m as MotionPattern]?.find(d => d.key === k);
+    const def = own(MOTION_PARAMS, m) ? MOTION_PARAMS[m as MotionPattern].find(d => d.key === k) : undefined;
     if (!def || typeof raw !== 'number' || !Number.isFinite(raw)) continue;
     if (def.options) { if (def.options.some(([val]) => val === raw)) out[key] = raw; }
     else out[key] = Math.max(def.min, Math.min(def.max, raw));
@@ -116,10 +125,10 @@ function motionParamsFrom(v: unknown): Record<string, number> {
 
 function physicsFrom(v: unknown): PhysicsParams {
   const o = (v ?? {}) as Record<string, unknown>;
-  const preset: PresetName = o.preset === 'custom' || (typeof o.preset === 'string' && o.preset in PRESETS) ? (o.preset as PresetName) : 'custom';
+  const preset: PresetName = o.preset === 'custom' || own(PRESETS, o.preset) ? (o.preset as PresetName) : 'custom';
   const base = PRESETS.puru;
   // 揺らし方の項目が無い古いファイルは、プリセットから補う。カスタムならこれまでの動き(左右に振る)にする
-  const motion: MotionPattern = typeof o.motion === 'string' && o.motion in MOTIONS ? (o.motion as MotionPattern)
+  const motion: MotionPattern = own(MOTIONS, o.motion) ? (o.motion as MotionPattern)
     : preset !== 'custom' ? PRESETS[preset].motion : 'shake';
   return {
     enabled: o.enabled !== false, preset,
@@ -130,16 +139,27 @@ function physicsFrom(v: unknown): PhysicsParams {
 }
 
 export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = {}): Promise<{ project: Project; thumbnail?: Uint8Array }> {
-  let files: Record<string, Uint8Array>;
-  try { files = unzipSync(bytes); } catch { throw new Error('.popstage ファイルを展開できませんでした(壊れているか、形式が違います)'); }
-  const pj = files['project.json'];
+  // まず project.json だけを展開し、そこに書かれたファイルだけを上限付きで展開する
+  const pj = unzipEntries(bytes, new Map([['project.json', UNZIP_LIMITS.json]]))['project.json'];
   if (!pj) throw new Error('project.json が見つかりません');
-  const json = migrate(JSON.parse(strFromU8(pj)));
+  let parsed: unknown;
+  try { parsed = JSON.parse(strFromU8(pj)); } catch { throw new Error('project.json を読めませんでした(壊れています)'); }
+  if (!parsed || typeof parsed !== 'object') throw new Error('project.json の形式が不正です');
+  const json = migrate(parsed as Record<string, unknown>);
+  const docsJson = Array.isArray(json.documents) ? json.documents : [];
+  const wanted = new Map<string, number>([['thumbnail.png', UNZIP_LIMITS.thumbnail]]);
+  for (const dj of docsJson) {
+    if (typeof dj?.image?.path === 'string') wanted.set(dj.image.path, UNZIP_LIMITS.image);
+    for (const lj of Array.isArray(dj?.layers) ? dj.layers : []) {
+      if (typeof lj?.weights?.path === 'string') wanted.set(lj.weights.path, UNZIP_LIMITS.weights);
+    }
+  }
+  const files = unzipEntries(bytes, wanted);
 
   const project = createProject();
   const p = json.project ?? {} as ProjectJson['project'];
   const cam = defaultCamera(), c = (p.camera ?? {}) as Partial<typeof cam>;
-  project.background = typeof p.background === 'string' ? p.background : null;
+  project.background = typeof p.background === 'string' && HEX_COLOR.test(p.background) ? p.background : null;
   project.camera = {
     fov: num(c.fov, LIMITS.fov.min, LIMITS.fov.max, cam.fov), yaw: num(c.yaw, -1e3, 1e3, cam.yaw),
     pitch: num(c.pitch, -1.5, 1.5, cam.pitch), zoom: num(c.zoom, 0.05, 20, cam.zoom), target: vec(c.target),
@@ -151,7 +171,7 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
     strength: unit(p.autoSwing?.strength, 0.5),
   };
 
-  for (const dj of json.documents ?? []) {
+  for (const dj of docsJson) {
     const imgBytes = files[dj.image?.path];
     if (!imgBytes) throw new Error(`画像 ${dj.image?.path} が見つかりません`);
     const ext = dj.image.path.split('.').pop() ?? 'png';
@@ -164,13 +184,18 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
       opacity: unit(dj.opacity, 1), layers: [],
     };
     const ws = weightSizeFor(width, height);
-    for (const lj of (dj.layers ?? []).slice(0, LIMITS.maxLayers)) {
+    for (const lj of (Array.isArray(dj.layers) ? dj.layers : []).slice(0, LIMITS.maxLayers)) {
       const wb = files[lj.weights?.path];
       let weights = new WeightMap(ws.w, ws.h);
       if (wb) {
         let g: GrayImage;
         try { g = decodePngToGray(wb); }
-        catch (e) { if (!opts.decodeFallback) throw e; g = await opts.decodeFallback(wb); }
+        catch (e) {
+          // 内蔵デコーダで読めない PNG だけブラウザに任せる。寸法が大きすぎるものは任せない
+          const size = readPngSize(wb);
+          if (!opts.decodeFallback || !size || size.width > MAX_PNG_SIDE || size.height > MAX_PNG_SIDE) throw e;
+          g = await opts.decodeFallback(wb);
+        }
         weights = WeightMap.resampled(new WeightMap(g.width, g.height, g.data), ws.w, ws.h);
       }
       const layer: Layer = {
@@ -183,4 +208,22 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
     project.documents.push(doc);
   }
   return { project, thumbnail: files['thumbnail.png'] };
+}
+
+/** wanted に挙げたファイルだけを展開する。宣言サイズが上限を超えるものがあれば読み込みをやめる */
+function unzipEntries(bytes: Uint8Array, wanted: Map<string, number>): Record<string, Uint8Array> {
+  const tooLarge: string[] = [];
+  let files: Record<string, Uint8Array>;
+  try {
+    files = unzipSync(bytes, {
+      filter: f => {
+        const limit = wanted.get(f.name);
+        if (limit === undefined) return false;
+        if (f.originalSize > limit) { tooLarge.push(f.name); return false; }
+        return true;
+      },
+    });
+  } catch { throw new Error('.popstage ファイルを展開できませんでした(壊れているか、形式が違います)'); }
+  if (tooLarge.length) throw new Error(`.popstage の中のファイルが大きすぎます(${tooLarge.join(', ')})`);
+  return files;
 }

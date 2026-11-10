@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { zlibSync, zipSync, strToU8 } from 'fflate';
 import { encodeGrayPng, decodePngToGray } from '../../src/storage/png';
-import { serializeProject, deserializeProject, migrate, FORMAT_VERSION } from '../../src/storage/popstage';
+import { serializeProject, deserializeProject, migrate, FORMAT_VERSION, UNZIP_LIMITS } from '../../src/storage/popstage';
 import { createDocument, createProject, createLayer } from '../../src/model/project';
 
 describe('PNG', () => {
@@ -33,6 +33,22 @@ describe('PNG', () => {
 
   it('対応外の形式は例外', () => {
     expect(() => decodePngToGray(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]))).toThrow();
+  });
+
+  it('巨大な寸法を名乗る PNG は展開前に弾く', () => {
+    const png = buildPng(100000, 100000, 8, 0, zlibSync(new Uint8Array(16)));
+    expect(() => decodePngToGray(png)).toThrow(/too large/);
+  });
+
+  it('画像データが足りない PNG は例外', () => {
+    const png = buildPng(4, 4, 8, 0, zlibSync(new Uint8Array(6)));
+    expect(() => decodePngToGray(png)).toThrow(/truncated/);
+  });
+
+  it('寸法より多く展開されるデータは、寸法の分だけで止める', () => {
+    const raw = new Uint8Array(4 << 20); // 2x2 に対して 4MB
+    const g = decodePngToGray(buildPng(2, 2, 8, 0, zlibSync(raw)));
+    expect(g.width).toBe(2); expect([...g.data]).toEqual([0, 0, 0, 0]);
   });
 });
 
@@ -111,6 +127,44 @@ describe('.popstage', () => {
     const zip = zipSync({ 'project.json': strToU8(JSON.stringify(json)), 'images/doc-0.png': new Uint8Array([1]) });
     const { project } = await deserializeProject(zip);
     expect(project.documents[0].layers[0].physics.motionParams).toEqual({ 'charge.depth': 1, 'charge.time': 0.5, 'stretch.dir': 2 });
+  });
+
+  const oneLayer = (project: object, physics: object = {}) => ({
+    formatVersion: 1, app: 'PopStage', project,
+    documents: [{ name: 'x', image: { path: 'images/doc-0.png', width: 10, height: 10 }, layers: [{ name: 'L', physics, weights: { path: 'none.png' } }] }],
+  });
+  const zipOf = (json: object, extra: Record<string, Uint8Array> = {}) =>
+    zipSync({ 'project.json': strToU8(JSON.stringify(json)), 'images/doc-0.png': new Uint8Array([1]), ...extra });
+
+  it('プロトタイプにある名前(constructor など)は知らない値として扱う', async () => {
+    const zip = zipOf(oneLayer({}, { preset: 'toString', motion: 'constructor', motionParams: { 'constructor.x': 1, 'toString.y': 2, '__proto__.z': 3 } }));
+    const { project } = await deserializeProject(zip);
+    const ph = project.documents[0].layers[0].physics;
+    expect(ph.preset).toBe('custom');
+    expect(ph.motion).toBe('shake');
+    expect(ph.motionParams).toEqual({});
+  });
+
+  it('背景色は #rrggbb だけを受け付ける', async () => {
+    const bg = async (background: unknown) => (await deserializeProject(zipOf(oneLayer({ background })))).project.background;
+    expect(await bg('#AbCdEf')).toBe('#AbCdEf');
+    expect(await bg('url(https://example.com/track.png)')).toBeNull();
+    expect(await bg('red')).toBeNull();
+    expect(await bg('#123')).toBeNull();
+  });
+
+  it('展開後が上限を超えるファイルが入っていたら読まない。使わないファイルは展開しない', async () => {
+    const big = new Uint8Array(UNZIP_LIMITS.thumbnail + 1);
+    await expect(deserializeProject(zipOf(oneLayer({}), { 'thumbnail.png': big }))).rejects.toThrow(/大きすぎます/);
+    const junk = new Uint8Array(UNZIP_LIMITS.json + 1);
+    const { project } = await deserializeProject(zipOf(oneLayer({}), { 'junk.bin': junk }));
+    expect(project.documents.length).toBe(1);
+  });
+
+  it('project.json が壊れている・形が違うときは分かりやすく失敗する', async () => {
+    await expect(deserializeProject(zipSync({ 'project.json': strToU8('{oops') }))).rejects.toThrow(/project.json/);
+    const { project } = await deserializeProject(zipOf({ formatVersion: 1, project: {}, documents: { a: 1 } }));
+    expect(project.documents).toEqual([]);
   });
 
   it('新しい版のファイルは読めないと伝える', () => {

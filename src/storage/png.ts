@@ -7,6 +7,17 @@ import { zlibSync, unzlibSync } from 'fflate';
 
 const SIG = [137, 80, 78, 71, 13, 10, 26, 10];
 
+/** 読み込めるウェイト PNG の一辺の上限。これより大きい寸法を名乗るものは展開前に弾く */
+export const MAX_PNG_SIDE = 8192;
+
+/** PNG のヘッダ(IHDR)から寸法を読む。PNG でなければ null */
+export function readPngSize(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 24) return null;
+  for (let i = 0; i < 8; i++) if (bytes[i] !== SIG[i]) return null;
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: dv.getUint32(16), height: dv.getUint32(20) };
+}
+
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -72,6 +83,7 @@ export function decodePngToGray(bytes: Uint8Array): GrayImage {
     p += 12 + len;
   }
   if (!width || !height) throw new Error('PNG: IHDR missing');
+  if (width > MAX_PNG_SIDE || height > MAX_PNG_SIDE) throw new Error(`PNG: ${width}x${height} is too large`);
   if (interlace) throw new Error('PNG: interlaced images are not supported');
   if (depth !== 8 && depth !== 16) throw new Error(`PNG: bit depth ${depth} is not supported`);
   if (ctype === 3 && (depth !== 8 || !palette)) throw new Error('PNG: unsupported palette image');
@@ -80,8 +92,11 @@ export function decodePngToGray(bytes: Uint8Array): GrayImage {
 
   const total = idat.reduce((s, d) => s + d.length, 0), comp = new Uint8Array(total);
   let o = 0; for (const d of idat) { comp.set(d, o); o += d.length; }
-  const raw = unzlibSync(comp);
   const bpp = channels * (depth / 8), stride = width * bpp;
+  // 展開後の大きさは寸法から決まるので、その大きさの出力先を渡して、それ以上は展開させない
+  const expected = (stride + 1) * height;
+  const raw = unzlibSync(comp, { out: new Uint8Array(expected) });
+  if (raw.length < expected) throw new Error('PNG: image data is truncated');
   const img = new Uint8Array(stride * height);
   for (let y = 0; y < height; y++) {
     const f = raw[y * (stride + 1)], src = y * (stride + 1) + 1, dst = y * stride;
