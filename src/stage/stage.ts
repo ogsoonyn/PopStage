@@ -49,6 +49,8 @@ export class Stage {
   private ray = new THREE.Raycaster();
   private ndc = new THREE.Vector2();
   private hit = new THREE.Vector3();
+  private pickInv = new THREE.Matrix4();
+  private pickRay = new THREE.Ray();
   private plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
   private gridN = new THREE.Vector2(1, 1);
   /** 主ビューの矩形。null ならキャンバス全体 */
@@ -308,8 +310,9 @@ export class Stage {
     const r = this.canvas.getBoundingClientRect(), m = this.main();
     this.ndc.set(((clientX - r.left - m.x) / m.w) * 2 - 1, -(((clientY - r.top - m.y) / m.h) * 2 - 1));
     this.ray.setFromCamera(this.ndc, this.camera);
-    const inv = this.mesh.matrixWorld.clone().invert();
-    const local = this.ray.ray.clone().applyMatrix4(inv);
+    // ポインタが動くたびに呼ばれるので、行列とレイは使い回す
+    this.pickInv.copy(this.mesh.matrixWorld).invert();
+    const local = this.pickRay.copy(this.ray.ray).applyMatrix4(this.pickInv);
     if (!local.intersectPlane(this.plane, this.hit)) return null;
     const { w, h } = this.imageSize, u = this.hit.x / w + 0.5, v = this.hit.y / h + 0.5;
     return { x: this.hit.x, y: this.hit.y, u, v, inside: u >= 0 && u <= 1 && v >= 0 && v <= 1 };

@@ -281,6 +281,27 @@ test('レイヤー一覧はキーボードで選択・名前の変更ができ�
   expect(await page.evaluate(() => (window as any).popstage.project.camera.yaw)).toBe(1.23);
 });
 
+test('1フレームの間の塗りは、まとめて1回だけ GPU へ送る', async ({ page }) => {
+  await boot(page);
+  const r = await page.evaluate(async () => {
+    const a = (window as any).popstage, st = a.stage;
+    const nextFrame = () => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+    await nextFrame();
+    const before = st.partialUploads + st.fullUploads;
+    // 高レートのペンのように、1フレームの間に何十回も塗り進める
+    a.beginStroke('brush', -100, 0, 1);
+    for (let i = 1; i <= 40; i++) a.strokeTo(-100 + i * 5, Math.sin(i) * 20, 1);
+    const sync = st.partialUploads + st.fullUploads - before;
+    await nextFrame();
+    const after = st.partialUploads + st.fullUploads - before;
+    a.endStroke();
+    return { sync, after };
+  });
+  expect(r.sync).toBe(0);
+  expect(r.after).toBeGreaterThanOrEqual(1);
+  expect(r.after).toBeLessThanOrEqual(2);
+});
+
 test('右ドラッグで視点が回り、Home で戻る', async ({ page }) => {
   await boot(page);
   const yaw0 = await page.evaluate(() => (window as any).popstage.project.camera.yaw);

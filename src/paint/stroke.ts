@@ -29,6 +29,7 @@ export function falloff(d: number, hardness: number): number {
 
 export class Stroke {
   private work: Float32Array;
+  private scratch = new Float32Array(0);
   private befores = new Map<number, Uint8Array>();
   private last: { x: number; y: number } | null = null;
   private dirty: Rect | null = null;
@@ -123,9 +124,11 @@ export class Stroke {
    */
   private smooth(rect: Rect, cx: number, cy: number, r: number, strength: number): void {
     const W = this.map.width, w = rect.w, h = rect.h, work = this.work, R = smoothRadius(r);
-    const src = new Float32Array(w * h);
+    // スタンプごとに確保しないよう、作業用の配列は使い回す(大きさが足りないときだけ作り直す)
+    if (this.scratch.length < w * h * 3) this.scratch = new Float32Array(w * h * 3);
+    const src = this.scratch.subarray(0, w * h), a = this.scratch.subarray(w * h, 2 * w * h), b = this.scratch.subarray(2 * w * h, 3 * w * h);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) src[y * w + x] = work[(rect.y + y) * W + rect.x + x];
-    const a = src.slice(), b = new Float32Array(w * h);
+    a.set(src);
     for (let pass = 0; pass < 2; pass++) { boxRows(a, b, w, h, R); boxCols(b, a, w, h, R); }
     const mix = Math.min(1, strength * 2.5);
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {

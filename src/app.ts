@@ -4,6 +4,7 @@
  */
 import { Store, createProject, createDocument, createLayer, cloneLayer, defaultCamera, defaultMultiCamera, LIMITS, type CameraState, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
+import type { Rect } from './model/weightmap';
 import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from './commands/commands';
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld } from './physics/world';
@@ -56,6 +57,8 @@ export class App extends Emitter<AppEvents> {
   dirty = false;
   /** 変更のたびに増える番号。保存中に変更があったかを見分けるのに使う */
   private revision = 0;
+  /** まだ GPU へ送っていない、レイヤーごとの変わった矩形 */
+  private pendingUploads = new Map<string, Rect>();
   /** 自動保存用に、変わっていないレイヤーのウェイト PNG を使い回す(手動の保存では使わない) */
   private pngCache = new Map<string, Uint8Array>();
   /** 直近の自動保存が失敗していればその理由 */
@@ -103,13 +106,15 @@ export class App extends Emitter<AppEvents> {
       this.pngCache.clear();
       const doc = this.doc; if (!doc) return;
       this.stage.setLayers(doc.layers);
+      this.pendingUploads.clear(); // 全レイヤーを送り直したので、溜めていた分は要らない
       if (!this.activeLayerId || !s.findLayer(this.activeLayerId)) this.setActiveLayer(doc.layers[0]?.id ?? null);
       else this.syncView();
     });
     s.on('weights', ({ layerId, rect }) => {
       this.pngCache.delete(layerId);
-      const f = s.findLayer(layerId); if (!f) return;
-      this.stage.uploadWeights(f.index, f.layer, rect);
+      // GPU への転送は、変わった矩形をまとめて描画の直前に1回だけ行う
+      const prev = this.pendingUploads.get(layerId);
+      this.pendingUploads.set(layerId, prev ? unionRect(prev, rect) : { ...rect });
     });
     s.on('project', ({ keys }) => {
       if (keys.includes('background')) this.applyBackground();
@@ -133,6 +138,7 @@ export class App extends Emitter<AppEvents> {
     this.stage.rebuildMesh(doc.meshDensity);
     this.stage.setTransform(doc);
     this.stage.setLayers(doc.layers);
+    this.pendingUploads.clear();
     this.world.unitPx = Math.max(doc.image.width, doc.image.height) / 2;
     this.applyBackground();
     this.syncView();
@@ -297,6 +303,7 @@ export class App extends Emitter<AppEvents> {
 
   async thumbnail(): Promise<Uint8Array | undefined> {
     if (!this.doc) return undefined;
+    this.flushWeights();
     try {
       const w = 320, h = 240;
       return await rgbaToPng(this.stage.renderFrame(w, h, this.project.camera, this.project.background), w, h);
@@ -524,12 +531,22 @@ export class App extends Emitter<AppEvents> {
     requestAnimationFrame(loop);
   }
 
+  /** 溜まっているウェイトの変更を GPU へ送る(描画・書き出しの直前に呼ぶ) */
+  flushWeights(): void {
+    for (const [id, rect] of this.pendingUploads) {
+      const f = this.store.findLayer(id);
+      if (f) this.stage.uploadWeights(f.index, f.layer, rect);
+    }
+    this.pendingUploads.clear();
+  }
+
   frame(dt: number): void {
     const doc = this.doc;
     if (this.exporting || !doc || !this.stage.hasDocument) return;
     this.world.autoSwing = this.project.autoSwing;
     this.world.advance(dt, doc.layers, this.recordStep);
     this.applySwing(this.world, doc);
+    this.flushWeights();
     this.stage.render(this.project.camera, this.multiCam);
   }
 
@@ -537,6 +554,7 @@ export class App extends Emitter<AppEvents> {
 
   async exportMedia(s: ExportSettings, onProgress: (done: number, total: number) => void, signal: AbortSignal) {
     this.exporting = true;
+    this.flushWeights();
     this.emit('status', undefined);
     try {
       return await runExport({ stage: this.stage, store: this.store, recorder: this.recorder, applySwing: this.applySwing }, s, onProgress, signal);
@@ -557,4 +575,9 @@ function nextLayerName(doc: Document): string {
 function idle(fn: () => void): void {
   if ('requestIdleCallback' in window) window.requestIdleCallback(fn, { timeout: 2000 });
   else setTimeout(fn, 0);
+}
+
+function unionRect(a: Rect, b: Rect): Rect {
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
 }
