@@ -11,6 +11,8 @@ type DragMode = 'orbit' | 'pan' | 'grab' | 'paint' | null;
 export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDown: () => boolean } {
   const drag = { mode: null as DragMode, id: -1, lx: 0, ly: 0, sx: 0, sy: 0 };
   let space = false, alt = false, hover: { x: number; y: number } | null = null;
+  /** ポインタがキャンバスの上にあるか。Space の平行移動はフォーカスの場所ではなくこれで決める */
+  let pointerInside = false;
 
   const isPaintTool = () => app.tool === 'brush' || app.tool === 'erase' || app.tool === 'smooth';
   const paintMode = (): PaintMode => (app.tool === 'brush' && alt ? 'erase' : (app.tool as PaintMode));
@@ -82,7 +84,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   };
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
-  canvas.addEventListener('pointerleave', () => { hover = null; updateCursor(); });
+  canvas.addEventListener('pointerenter', () => { pointerInside = true; });
+  canvas.addEventListener('pointerleave', () => { pointerInside = false; hover = null; updateCursor(); });
 
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
@@ -118,14 +121,19 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
 
   window.addEventListener('keydown', e => {
     if (e.key === 'Alt') { alt = true; e.preventDefault(); }
-    if (e.code === 'Space' && !isTyping(e) && (e.target === canvas || e.target === document.body)) {
+    // ボタンなどにフォーカスが残っていても、ポインタがキャンバス上にあれば平行移動にする。
+    // キャンバスの外では Space をボタンの押下などに使えるよう、横取りしない
+    if (e.code === 'Space' && !isTyping(e) && (space || pointerInside || drag.mode !== null || e.target === canvas || e.target === document.body)) {
       if (!space) { space = true; updateCursor(); }
       e.preventDefault();
     }
   });
   window.addEventListener('keyup', e => {
     if (e.key === 'Alt') { alt = false; e.preventDefault(); }
-    if (e.code === 'Space') { space = false; updateCursor(); }
+    if (e.code === 'Space' && space) {
+      space = false; updateCursor();
+      e.preventDefault(); // フォーカス中のボタンが Space の離しで押されないようにする
+    }
   });
   window.addEventListener('blur', () => { space = false; alt = false; });
 

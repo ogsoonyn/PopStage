@@ -196,6 +196,23 @@ test('3面図: 横に4つの図が出て、自由角度はドラッグで回り�
   expect(Math.abs(x2)).toBeLessThan(1); expect(Math.abs(y2)).toBeLessThan(1);
 });
 
+test('ツールボタンにフォーカスが残っていても、Space+ドラッグは平行移動になり塗らない', async ({ page }) => {
+  await boot(page);
+  await page.locator('[data-tool=brush]').click();
+  await expect(page.locator('[data-tool=brush]')).toBeFocused();
+  const before = await page.evaluate(() => ({ t: { ...(window as any).popstage.project.camera.target }, undo: (window as any).popstage.history.canUndo }));
+  const sum0 = await weightSum(page);
+  const box = (await page.locator('#view').boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.5);
+  await page.keyboard.down('Space');
+  await dragOnStage(page, [0.4, 0.5], [0.6, 0.6]);
+  await page.keyboard.up('Space');
+  const after = await page.evaluate(() => ({ t: { ...(window as any).popstage.project.camera.target }, undo: (window as any).popstage.history.canUndo }));
+  expect(await weightSum(page)).toBe(sum0);
+  expect(after.undo).toBe(before.undo);
+  expect(Math.hypot(after.t.x - before.t.x, after.t.y - before.t.y, after.t.z - before.t.z)).toBeGreaterThan(1);
+});
+
 test('右ドラッグで視点が回り、Home で戻る', async ({ page }) => {
   await boot(page);
   const yaw0 = await page.evaluate(() => (window as any).popstage.project.camera.yaw);
