@@ -48,6 +48,8 @@ export class App extends Emitter<AppEvents> {
   paused = false;
   brush: BrushOptions = { size: 64, strength: 0.3, hardness: 0, pressure: 'strength' };
   imageCanvas: HTMLCanvasElement | null = null;
+  /** 表示用の画像の一辺の上限 */
+  private get displaySize(): number { return Math.min(4096, this.stage.maxTextureSize); }
 
   fileHandle: FileSystemFileHandle | null = null;
   fileName: string | null = null;
@@ -197,11 +199,12 @@ export class App extends Emitter<AppEvents> {
    * デコードに失敗したら例外を投げ、今の状態には何も触れない。
    * 後から始まった別の読み込みに追い越されたときは何もせず false を返す。
    */
-  async loadProject(project: Project, opts: { fileName?: string | null; handle?: FileSystemFileHandle | null; dirty?: boolean; keepAutosave?: boolean } = {}): Promise<boolean> {
+  async loadProject(project: Project, opts: { fileName?: string | null; handle?: FileSystemFileHandle | null; dirty?: boolean; keepAutosave?: boolean; canvas?: HTMLCanvasElement } = {}): Promise<boolean> {
     const doc = project.documents[0];
     if (!doc) throw new Error('プロジェクトに画像が入っていません');
     const token = ++this.syncToken;
-    const canvas = await decodeForDisplay(doc.image, Math.min(4096, this.stage.maxTextureSize));
+    // 呼び出し側でデコード済みなら、それを使う(同じ画像を2回デコードしない)
+    const canvas = opts.canvas ?? await decodeForDisplay(doc.image, this.displaySize);
     // デコード中に別の読み込みが始まっていたら、こちらは捨てる
     if (token !== this.syncToken) return false;
     this.loading = true;
@@ -262,13 +265,13 @@ export class App extends Emitter<AppEvents> {
   async openImage(file: File): Promise<void> {
     setBusy(true);
     try {
-      const asset = await fileToAsset(file);
+      const { asset, canvas } = await fileToAsset(file, this.displaySize);
       const prev = this.project;
       const p = createProject(createDocument(asset, file.name));
       p.background = prev.background;
       p.autoSwing = { ...prev.autoSwing };
       p.camera.fov = prev.camera.fov;
-      if (!(await this.loadProject(p))) return;
+      if (!(await this.loadProject(p, { canvas }))) return;
       this.setTool('brush');
       toast(`「${file.name}」を開きました。動かしたい所を塗ってください。`, 'success');
     } catch (e) {

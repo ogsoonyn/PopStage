@@ -7,16 +7,73 @@ export const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/
 export function isImageFile(f: File): boolean { return f.type in IMAGE_TYPES || /\.(png|jpe?g|webp)$/i.test(f.name); }
 export function isProjectFile(f: File): boolean { return /\.popstage$/i.test(f.name); }
 
-export async function fileToAsset(file: File): Promise<ImageAsset> {
+/** 読み込める画像の画素数の上限。デコードすると幅×高さ×4バイトを確保するので、それを抑える */
+export const MAX_IMAGE_PIXELS = 120_000_000;
+
+/**
+ * 画像ファイルを読み、元の寸法と表示用のキャンバスを返す。デコードは1回だけで、寸法の取得と表示に使い回す。
+ * 大きすぎる画像は、ヘッダの寸法を見てデコードする前に弾く。
+ */
+export async function fileToAsset(file: File, maxDisplay: number): Promise<{ asset: ImageAsset; canvas: HTMLCanvasElement }> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const mime = file.type in IMAGE_TYPES ? file.type : sniffMime(bytes);
   if (!mime) throw new Error('PNG / JPEG / WebP の画像を選んでください。');
-  let bmp: ImageBitmap;
-  try { bmp = await createImageBitmap(new Blob([bytes], { type: mime })); }
-  catch { throw new Error('画像を読み込めませんでした(壊れているか、対応していない形式です)。'); }
+  const bmp = await decodeBitmap(bytes, mime);
   const asset: ImageAsset = { bytes, mime, ext: IMAGE_TYPES[mime], width: bmp.width, height: bmp.height };
+  return { asset, canvas: bitmapToCanvas(bmp, maxDisplay) };
+}
+
+async function decodeBitmap(bytes: Uint8Array, mime: string): Promise<ImageBitmap> {
+  // 画素数は回転(EXIF)の影響を受けないので、ヘッダの寸法で判定できる
+  const size = imageHeaderSize(bytes);
+  if (size && size.width * size.height > MAX_IMAGE_PIXELS) {
+    throw new Error(`画像が大きすぎます(${size.width}×${size.height})。${MAX_IMAGE_PIXELS / 1e6} メガピクセル以下にしてください。`);
+  }
+  try {
+    return await createImageBitmap(new Blob([bytes as BlobPart], { type: mime }), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+  } catch {
+    throw new Error('画像を読み込めませんでした(壊れているか、対応していない形式です)。');
+  }
+}
+
+function bitmapToCanvas(bmp: ImageBitmap, maxSize: number): HTMLCanvasElement {
+  const s = Math.min(1, maxSize / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s));
+  const g = c.getContext('2d')!;
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(bmp, 0, 0, c.width, c.height);
   bmp.close();
-  return asset;
+  return c;
+}
+
+/** PNG / JPEG / WebP のヘッダから寸法を読む(回転は考えない)。読めなければ null */
+export function imageHeaderSize(b: Uint8Array): { width: number; height: number } | null {
+  const u16be = (o: number) => (b[o] << 8) | b[o + 1];
+  const u24le = (o: number) => b[o] | (b[o + 1] << 8) | (b[o + 2] << 16);
+  if (b.length >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return { width: ((b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19]) >>> 0, height: ((b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23]) >>> 0 };
+  }
+  if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let p = 2;
+    while (p + 9 < b.length) {
+      if (b[p] !== 0xff) { p++; continue; }
+      const m = b[p + 1];
+      if (m === 0xff) { p++; continue; }
+      if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { p += 2; continue; }
+      // SOF0〜SOF15(DHT・JPG・DAC を除く)に寸法がある
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { width: u16be(p + 7), height: u16be(p + 5) };
+      p += 2 + u16be(p + 2);
+    }
+    return null;
+  }
+  if (b.length >= 30 && String.fromCharCode(b[0], b[1], b[2], b[3]) === 'RIFF' && String.fromCharCode(b[8], b[9], b[10], b[11]) === 'WEBP') {
+    const kind = String.fromCharCode(b[12], b[13], b[14], b[15]);
+    if (kind === 'VP8X') return { width: 1 + u24le(24), height: 1 + u24le(27) };
+    if (kind === 'VP8L') return { width: 1 + (b[21] | ((b[22] & 0x3f) << 8)), height: 1 + ((b[22] >> 6) | (b[23] << 2) | ((b[24] & 0x0f) << 10)) };
+    if (kind === 'VP8 ') return { width: (b[26] | (b[27] << 8)) & 0x3fff, height: (b[28] | (b[29] << 8)) & 0x3fff };
+  }
+  return null;
 }
 
 function sniffMime(b: Uint8Array): string | null {
@@ -28,20 +85,7 @@ function sniffMime(b: Uint8Array): string | null {
 
 /** 表示用に、最大 maxSize に縮めたキャンバスへ描く。画像が壊れていれば日本語のメッセージで例外を投げる。 */
 export async function decodeForDisplay(asset: ImageAsset, maxSize: number): Promise<HTMLCanvasElement> {
-  let bmp: ImageBitmap;
-  try {
-    bmp = await createImageBitmap(new Blob([asset.bytes as BlobPart], { type: asset.mime }), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
-  } catch {
-    throw new Error('画像を読み込めませんでした(壊れているか、対応していない形式です)。');
-  }
-  const s = Math.min(1, maxSize / Math.max(bmp.width, bmp.height));
-  const c = document.createElement('canvas');
-  c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s));
-  const g = c.getContext('2d')!;
-  g.imageSmoothingQuality = 'high';
-  g.drawImage(bmp, 0, 0, c.width, c.height);
-  bmp.close();
-  return c;
+  return bitmapToCanvas(await decodeBitmap(asset.bytes, asset.mime), maxSize);
 }
 
 /** キャンバスのアルファを w×h で取り出す(「アルファから生成」用)。 */

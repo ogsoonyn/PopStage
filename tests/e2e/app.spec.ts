@@ -473,6 +473,42 @@ test('自動保存は塗った内容を反映し、失敗したらステータ�
   await expect(page.locator('#sSave')).toContainText('自動保存に失敗しました', { timeout: 10000 });
 });
 
+test('画像を開くときのデコードは1回だけ。巨大な寸法の画像はデコードする前に断る', async ({ page }) => {
+  await boot(page);
+  const r = await page.evaluate(async () => {
+    const a = (window as any).popstage;
+    let calls = 0;
+    const orig = window.createImageBitmap;
+    (window as any).createImageBitmap = (...args: any[]) => { calls++; return (orig as any)(...args); };
+    const c = document.createElement('canvas'); c.width = 120; c.height = 80;
+    c.getContext('2d')!.fillRect(10, 10, 50, 30);
+    const blob = (type: string): Promise<Blob> => new Promise(r => c.toBlob(b => r(b!), type, 0.9));
+    const mod = '/src/ui/imageio.ts';
+    const { imageHeaderSize } = await import(/* @vite-ignore */ mod);
+    const sizes: Record<string, unknown> = {};
+    for (const t of ['image/png', 'image/jpeg', 'image/webp']) sizes[t] = imageHeaderSize(new Uint8Array(await (await blob(t)).arrayBuffer()));
+
+    calls = 0;
+    await a.openFile(new File([await blob('image/png')], 'once.png', { type: 'image/png' }));
+    const openCalls = calls, name = a.doc.name;
+
+    // IHDR だけの PNG で 20000×20000 を名乗る
+    const png = new Uint8Array(33);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    new DataView(png.buffer).setUint32(16, 20000); new DataView(png.buffer).setUint32(20, 20000);
+    calls = 0;
+    await a.openFile(new File([png], 'huge.png', { type: 'image/png' }));
+    window.createImageBitmap = orig;
+    return { sizes, openCalls, name, hugeCalls: calls, after: a.doc.name };
+  });
+  for (const t of ['image/png', 'image/jpeg', 'image/webp']) expect(r.sizes[t], t).toEqual({ width: 120, height: 80 });
+  expect(r.openCalls).toBe(1);
+  expect(r.name).toBe('once.png');
+  expect(r.hugeCalls).toBe(0);
+  expect(r.after).toBe('once.png');
+  await expect(page.locator('#toasts')).toContainText('画像が大きすぎます');
+});
+
 test('ドロップで画像を開ける。ダイアログ表示中・書き出し中は開かない', async ({ page }) => {
   await boot(page);
   const drop = () => page.evaluate(async () => {
