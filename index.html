@@ -19,6 +19,7 @@
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
       <li><button data-cmd="openImage">画像を開く…<kbd class="kbd kbd-xs ml-auto">Ctrl+Shift+O</kbd></button></li>
       <li><button data-cmd="open">プロジェクトを開く…<kbd class="kbd kbd-xs ml-auto">Ctrl+O</kbd></button></li>
+      <li><button data-cmd="recent">最近開いたファイル…</button></li>
       <li><button data-cmd="save">保存<kbd class="kbd kbd-xs ml-auto">Ctrl+S</kbd></button></li>
       <li><button data-cmd="saveAs">名前を付けて保存…<kbd class="kbd kbd-xs ml-auto">Ctrl+Shift+S</kbd></button></li>
       <li class="menu-title pt-2">書き出し</li>
@@ -291,6 +292,21 @@
   </div>
 </dialog>
 
+<!-- 最近開いたファイル -->
+<dialog id="recentDialog" class="modal">
+  <div class="modal-box max-w-3xl">
+    <h3 class="font-bold text-lg mb-3">最近開いたファイル</h3>
+    <p id="recentEmpty" class="hidden py-6 text-center opacity-70">まだありません。画像やプロジェクトを開くか保存すると、ここに並びます。</p>
+    <ul id="recentList" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3"></ul>
+    <p class="text-xs opacity-70 mt-3 leading-relaxed">一覧はこのブラウザの中だけに保存されます。Chrome / Edge ではファイルの場所を覚え、開き直すときに読む許可を求めます。ほかのブラウザでは中身のコピー(1件 50MB まで)を覚えます。</p>
+    <div class="modal-action">
+      <button id="recentClear" class="btn btn-sm btn-ghost mr-auto">一覧を消去…</button>
+      <form method="dialog"><button class="btn btn-sm">閉じる</button></form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
 <!-- 操作方法 -->
 <dialog id="helpDialog" class="modal">
   <div class="modal-box max-w-2xl">
@@ -312,6 +328,7 @@
       <span>ブラシサイズ</span><span>[ と ]</span>
       <span>元に戻す / やり直す</span><span>Ctrl+Z / Ctrl+Shift+Z</span>
       <span>保存 / 開く</span><span>Ctrl+S / Ctrl+O</span>
+      <span>最近開いたファイル</span><span>ファイル → 最近開いたファイル…</span>
       <span>書き出し</span><span>Ctrl+E</span>
       <span>ウェイト表示 / グリッド</span><span>W / Shift+G</span>
       <span>画像を薄く / ポップを一時OFF</span><span>Shift+W / F</span>

@@ -774,3 +774,120 @@ test('見た目の基準画像(揺れ停止・正面寄りの視点)', async ({ 
   await page.waitForTimeout(300);
   await expect(page.locator('#stage')).toHaveScreenshot('stage-sample.png');
 });
+
+/* ---------- 最近開いたファイル ---------- */
+
+async function openRecentDialog(page: Page): Promise<void> {
+  await page.locator('#menubar [role=button]', { hasText: 'ファイル' }).click();
+  await page.locator('#menubar button[data-cmd=recent]').click();
+  await expect(page.locator('#recentDialog')).toHaveAttribute('open', '');
+}
+
+/** 塗りつぶした PNG を作る(ブラウザ内で) */
+const makePng = (page: Page, name: string, color: string) => page.evaluate(async ([name, color]) => {
+  const c = document.createElement('canvas'); c.width = 160; c.height = 120;
+  const g = c.getContext('2d')!; g.fillStyle = color; g.fillRect(0, 0, 160, 120);
+  const b: Blob = await new Promise(r => c.toBlob(x => r(x!), 'image/png'));
+  (window as any).__png = new File([b], name, { type: 'image/png' });
+}, [name, color]);
+
+test('最近開いたファイル: 開いた画像が縮小画像付きで並び、そこから開き直せる(場所を覚えられないときはコピー)', async ({ page }) => {
+  await boot(page);
+  await openRecentDialog(page);
+  await expect(page.locator('#recentEmpty')).toBeVisible();
+  await expect(page.locator('#recentClear')).toBeDisabled();
+  await page.keyboard.press('Escape');
+
+  await makePng(page, 'red.png', '#e33');
+  await page.evaluate(async () => { const a = (window as any).popstage; await a.openFile((window as any).__png); });
+  await makePng(page, 'blue.png', '#33e');
+  await page.evaluate(async () => { const a = (window as any).popstage; await a.openFile((window as any).__png); await a.loadSample(); });
+
+  await openRecentDialog(page);
+  const cards = page.locator('#recentList li');
+  await expect(cards).toHaveCount(2);
+  await expect(cards.locator('.recent-name')).toHaveText(['blue.png', 'red.png']); // 新しい順
+  await expect(cards.first()).toContainText('コピー');
+  const thumbOk = await cards.first().locator('img').evaluate((img: HTMLImageElement) => img.decode().then(() => img.naturalWidth > 0));
+  expect(thumbOk).toBe(true);
+  // 開いた画像を指す最初の項目にフォーカスがあり、Enter で開ける
+  await expect(cards.first().locator('button.recent-open')).toBeFocused();
+  await cards.nth(1).locator('button.recent-open').click();
+  await expect(page.locator('#recentDialog')).not.toHaveAttribute('open', '');
+  await expect.poll(() => page.evaluate(() => (window as any).popstage.doc.name)).toBe('red.png');
+  // 開き直すと先頭へ移り、重複しない
+  await openRecentDialog(page);
+  await expect(cards.locator('.recent-name')).toHaveText(['red.png', 'blue.png']);
+});
+
+test('最近開いたファイル: 一覧から外す・消去する(ファイル自体はそのまま)', async ({ page }) => {
+  await boot(page);
+  for (const [n, c] of [['a.png', '#e33'], ['b.png', '#3e3'], ['c.png', '#33e']]) {
+    await makePng(page, n, c);
+    await page.evaluate(async () => { await (window as any).popstage.openFile((window as any).__png); });
+  }
+  await openRecentDialog(page);
+  const names = page.locator('#recentList .recent-name');
+  await expect(names).toHaveText(['c.png', 'b.png', 'a.png']);
+  await page.locator('#recentList li').first().locator('.recent-remove').click();
+  await expect(names).toHaveText(['b.png', 'a.png']);
+  // Delete キーでも外せて、フォーカスは次の項目へ
+  await page.locator('#recentList button.recent-open').first().focus();
+  await page.keyboard.press('Delete');
+  await expect(names).toHaveText(['a.png']);
+  await expect(page.locator('#recentList button.recent-open').first()).toBeFocused();
+  // 消去は確認してから
+  await page.locator('#recentClear').click();
+  await page.locator('#askNo').click();
+  await expect(names).toHaveText(['a.png']);
+  await page.locator('#recentClear').click();
+  await page.locator('#askYes').click();
+  await expect(page.locator('#recentEmpty')).toBeVisible();
+  await expect(page.locator('#recentDialog')).toHaveAttribute('open', '');
+});
+
+test('最近開いたファイル: ファイルの場所を覚えて開き直し、保存も元のファイルへ。消えたファイルは一覧から外せる', async ({ page }) => {
+  await boot(page);
+  // ブラウザ内のファイルシステム(OPFS)で、本物のファイルハンドルを作る
+  await page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory();
+    const c = document.createElement('canvas'); c.width = 100; c.height = 100; c.getContext('2d')!.fillRect(0, 0, 50, 50);
+    const b: Blob = await new Promise(r => c.toBlob(x => r(x!), 'image/png'));
+    const h = await root.getFileHandle('photo.png', { create: true });
+    const w = await h.createWritable(); await w.write(b); await w.close();
+    const a = (window as any).popstage;
+    await a.openFile(await h.getFile(), h);
+    // プロジェクトとして保存する(保存先も場所として覚える)
+    a.fileHandle = await root.getFileHandle('work.popstage', { create: true });
+    await a.save();
+    await a.loadSample();
+  });
+  await openRecentDialog(page);
+  const cards = page.locator('#recentList li');
+  await expect(cards.locator('.recent-name')).toHaveText(['work.popstage', 'photo.png']);
+  await expect(cards.first()).toContainText('プロジェクト');
+  await expect(page.locator('#recentList')).not.toContainText('コピー');
+  const stored = await page.evaluate(async () => {
+    const mod = '/src/storage/recent.ts';
+    const { recent } = await import(/* @vite-ignore */ mod);
+    return (await recent.list()).map((e: any) => ({ name: e.name, handle: !!e.handle, bytes: !!e.bytes }));
+  });
+  expect(stored).toEqual([{ name: 'work.popstage', handle: true, bytes: false }, { name: 'photo.png', handle: true, bytes: false }]);
+
+  // プロジェクトを開き直すと、上書き保存の先も元のファイルになる
+  await cards.first().locator('button.recent-open').click();
+  await expect.poll(() => page.evaluate(() => (window as any).popstage.fileName)).toBe('work.popstage');
+  expect(await page.evaluate(async () => {
+    const a = (window as any).popstage, root = await navigator.storage.getDirectory();
+    return a.fileHandle.isSameEntry(await root.getFileHandle('work.popstage'));
+  })).toBe(true);
+
+  // ファイルが消えていたら、一覧から外すか聞く
+  await page.evaluate(async () => { await (await navigator.storage.getDirectory()).removeEntry('photo.png'); });
+  await openRecentDialog(page);
+  await cards.nth(1).locator('button.recent-open').click();
+  await expect(page.locator('#askTitle')).toHaveText('「photo.png」が見つかりません');
+  await page.locator('#askYes').click();
+  await expect(cards.locator('.recent-name')).toHaveText(['work.popstage']);
+  expect(await page.evaluate(() => (window as any).popstage.fileName)).toBe('work.popstage');
+});

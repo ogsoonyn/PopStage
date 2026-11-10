@@ -5,6 +5,7 @@ import { bindPanels } from './ui/panels';
 import { bindExportDialog } from './ui/exportDialog';
 import { bindBlurDialog } from './ui/blurDialog';
 import { bindMultiView } from './ui/multiView';
+import { bindRecentDialog } from './ui/recentDialog';
 import { $, ask, toast } from './ui/dom';
 import { autosave } from './storage/autosave';
 import { isImageFile, isProjectFile } from './ui/imageio';
@@ -28,6 +29,7 @@ const multiView = bindMultiView(app, canvas);
 bindPanels(app);
 const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
+const recentDialog = bindRecentDialog(app);
 
 /* ---------- ファイルを開く ---------- */
 
@@ -35,22 +37,26 @@ const fileImage = $<HTMLInputElement>('fileImage'), fileProject = $<HTMLInputEle
 fileImage.addEventListener('change', () => { const f = fileImage.files?.[0]; fileImage.value = ''; if (f) void app.openFile(f); });
 fileProject.addEventListener('change', () => { const f = fileProject.files?.[0]; fileProject.value = ''; if (f) void app.openFile(f); });
 
-async function openProjectDialog(): Promise<void> {
+const IMAGE_ACCEPT = { 'image/*': ['.png', '.jpg', '.jpeg', '.webp'] };
+
+/** Chrome 系はファイルの場所(ハンドル)ごと受け取る。最近開いたファイルから開き直すのに使う */
+async function pickAndOpen(types: FilePickerAcceptType[], fallback: HTMLInputElement): Promise<void> {
   if (window.showOpenFilePicker) {
     try {
-      const [h] = await window.showOpenFilePicker({
-        types: [{ description: 'PopStage プロジェクト / 画像', accept: { 'application/zip': ['.popstage'], 'image/*': ['.png', '.jpg', '.jpeg', '.webp'] } }],
-      });
+      const [h] = await window.showOpenFilePicker({ types });
       await app.openFile(await h.getFile(), h);
     } catch (e) { if ((e as DOMException).name !== 'AbortError') toast(String(e), 'error'); }
-  } else fileProject.click();
+  } else fallback.click();
 }
+const openProjectDialog = () => pickAndOpen([{ description: 'PopStage プロジェクト / 画像', accept: { 'application/zip': ['.popstage'], ...IMAGE_ACCEPT } }], fileProject);
+const openImageDialog = () => pickAndOpen([{ description: '画像', accept: IMAGE_ACCEPT }], fileImage);
 
 /* ---------- コマンド(メニュー・ボタン・ショートカット共通) ---------- */
 
 const commands: Record<string, { run: () => unknown; enabled?: () => boolean }> = {
-  openImage: { run: () => fileImage.click() },
+  openImage: { run: openImageDialog },
   open: { run: openProjectDialog },
+  recent: { run: () => recentDialog.open() },
   save: { run: () => app.save(false), enabled: () => !!app.doc },
   saveAs: { run: () => app.save(true), enabled: () => !!app.doc },
   export: { run: () => exportDialog.open(), enabled: () => !!app.doc },
@@ -168,10 +174,17 @@ window.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth -
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => {
   e.preventDefault(); dragDepth = 0; showDrop(false);
-  const f = [...(e.dataTransfer?.files ?? [])].find(f => isImageFile(f) || isProjectFile(f));
+  const files = [...(e.dataTransfer?.files ?? [])], f = files.find(f => isImageFile(f) || isProjectFile(f));
   // ダイアログ(確認・書き出しなど)の表示中は、裏で別のファイルを開かない
   if (f && anyDialogOpen()) { toast('ダイアログを閉じてから、もう一度ドロップしてください。', 'warning'); return; }
-  if (f) void app.openFile(f);
+  // Chrome 系はドロップでもファイルの場所を受け取れる(イベントの中で呼ぶ必要がある)
+  const items = [...(e.dataTransfer?.items ?? [])].filter(i => i.kind === 'file');
+  const handle = f ? items[files.indexOf(f)]?.getAsFileSystemHandle?.() : undefined;
+  if (f) void (async () => {
+    let h: FileSystemFileHandle | undefined;
+    try { const x = await handle; if (x?.kind === 'file') h = x as FileSystemFileHandle; } catch { /* 場所が取れなければコピーで覚える */ }
+    await app.openFile(f, h);
+  })();
   else if (e.dataTransfer?.files.length) toast('PNG / JPEG / WebP の画像か、.popstage ファイルをドロップしてください。', 'warning');
 });
 void wrap;

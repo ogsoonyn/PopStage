@@ -12,6 +12,7 @@ import { MotionRecorder } from './physics/recorder';
 import { Stroke, type PaintMode } from './paint/stroke';
 import { serializeProject, deserializeProject, FILE_EXTENSION } from './storage/popstage';
 import { autosave } from './storage/autosave';
+import { recent, type RecentKind } from './storage/recent';
 import { runExport, type ExportSettings } from './export/exporter';
 import { Emitter } from './util/emitter';
 import { decodeForDisplay, canvasAlpha, browserDecodeGray, fileToAsset, rgbaToPng, isProjectFile, isImageFile } from './ui/imageio';
@@ -265,16 +266,28 @@ export class App extends Emitter<AppEvents> {
   private async openFileNow(file: File, handle?: FileSystemFileHandle): Promise<void> {
     if (isProjectFile(file)) {
       if (!(await this.confirmDiscard())) return;
-      await this.openProjectBytes(new Uint8Array(await file.arrayBuffer()), file.name, handle ?? null);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (await this.openProjectBytes(bytes, file.name, handle ?? null)) await this.remember('project', file.name, file.size, handle, () => bytes);
     } else if (isImageFile(file)) {
       if (!(await this.confirmDiscard())) return;
-      await this.openImage(file);
+      if (await this.openImage(file)) await this.remember('image', file.name, file.size, handle, async () => new Uint8Array(await file.arrayBuffer()));
     } else {
       toast('PNG / JPEG / WebP の画像か、.popstage ファイルを選んでください。', 'warning');
     }
   }
 
-  async openImage(file: File): Promise<void> {
+  /**
+   * 最近開いたファイルの一覧に足す。縮小画像は今の視点で描く。
+   * 一覧に入れられなくても、開く・保存するのは止めない。
+   */
+  private async remember(kind: RecentKind, name: string, size: number, handle: FileSystemFileHandle | null | undefined, bytes: () => Promise<Uint8Array> | Uint8Array, thumbPng?: Uint8Array): Promise<void> {
+    const png = thumbPng ?? await this.thumbnail();
+    const thumb = png ? new Blob([png as BlobPart], { type: 'image/png' }) : undefined;
+    await recent.add({ name, kind, size, thumb, handle, bytes });
+  }
+
+  /** 開けたら true */
+  async openImage(file: File): Promise<boolean> {
     setBusy(true);
     try {
       const { asset, canvas } = await fileToAsset(file, this.displaySize);
@@ -283,11 +296,13 @@ export class App extends Emitter<AppEvents> {
       p.background = prev.background;
       p.autoSwing = { ...prev.autoSwing };
       p.camera.fov = prev.camera.fov;
-      if (!(await this.loadProject(p, { canvas }))) return;
+      if (!(await this.loadProject(p, { canvas }))) return false;
       this.setTool('brush');
       toast(`「${file.name}」を開きました。動かしたい所を塗ってください。`, 'success');
+      return true;
     } catch (e) {
       toast(e instanceof Error ? e.message : '画像を読み込めませんでした。', 'error');
+      return false;
     } finally { setBusy(false); }
   }
 
@@ -351,6 +366,7 @@ export class App extends Emitter<AppEvents> {
       }
       this.emit('file', undefined);
       toast(h ? `「${h.name}」に保存しました。` : `「${this.fileName}」をダウンロードしました。`, 'success');
+      void this.remember('project', this.fileName ?? this.suggestedName(), bytes.byteLength, h, () => bytes, thumb);
       return true;
     } catch (e) {
       if (cameraPending) this.cameraChanged(); // 保存できなかったので、視点の変更は未保存のまま
