@@ -43,7 +43,9 @@
   #toolNav > .btn > span.text-base { display: none; }
   #toolNav > .btn { padding-top: 2px; padding-bottom: 2px; padding-right: 12px; min-height: 0; }
   #toolNav > .divider { margin: 0; height: 8px; }
+  #toolNav .nav-icon { display: none; }
 }
 /* 左のメニューの、選択中のレイヤー向けの操作のまとまり */
+#toolNav .nav-icon { font-size: 14px; line-height: 1; }
 .nav-group { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 2px; border-radius: 6px; background: color-mix(in oklab, var(--color-base-content) 6%, transparent); }
 .nav-group-label { font-size: 10px; text-align: center; opacity: .6; line-height: 1; }
