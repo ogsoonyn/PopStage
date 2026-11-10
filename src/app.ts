@@ -184,7 +184,8 @@ export class App extends Emitter<AppEvents> {
     });
     s.on('weights', ({ layerId, rect }) => {
       this.pngCache.delete(layerId);
-      this.centers.delete(layerId);
+      // 広がりの中心は、塗っている間は動かさない(塗った範囲全体がずれて見えないように)。塗り終わりで求め直す
+      if (this.stroke?.layerId !== layerId) this.centers.delete(layerId);
       // GPU への転送は、変わった矩形をまとめて描画の直前に1回だけ行う
       const prev = this.pendingUploads.get(layerId);
       this.pendingUploads.set(layerId, prev ? unionRect(prev, rect) : { ...rect });
@@ -546,6 +547,7 @@ export class App extends Emitter<AppEvents> {
   endStroke(): void {
     const st = this.stroke; if (!st) return;
     this.stroke = null;
+    this.centers.delete(st.layerId);
     const tiles = st.stroke.finish();
     if (tiles.length) {
       this.history.push(new WeightEdit(st.label, st.layerId, tiles));
@@ -853,7 +855,7 @@ export class App extends Emitter<AppEvents> {
   }
 
   /** 画像全体が画面上で元の位置からずれているか(ブラシの円を毎フレーム当て直すかの判断に使う) */
-  get imageShifted(): boolean { const s = this.base.shown; return s.x !== 0 || s.y !== 0 || s.z !== 0; }
+  get imageShifted(): boolean { const s = this.base.shown; return !this.view.flat && (s.x !== 0 || s.y !== 0 || s.z !== 0); }
 
   /** ライブ表示の画像全体のずれを決めて Stage へ入れる(applySwing の後に呼ぶ) */
   private showBase(dt: number, doc: Document): void {

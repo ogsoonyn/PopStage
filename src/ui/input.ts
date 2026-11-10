@@ -120,6 +120,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   };
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
+  canvas.addEventListener('lostpointercapture', end); // pointerup が来ないまま捕捉が外れても、ドラッグ(と止めた画像)を終える
   canvas.addEventListener('pointerenter', () => { pointerInside = true; });
   canvas.addEventListener('pointerleave', () => { pointerInside = false; hover = null; last = null; updateCursor(); });
 
