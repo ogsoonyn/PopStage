@@ -2,6 +2,7 @@
   "name": "popstage",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "description": "画像を3D空間に置き、塗った所を持ち上げて揺らすWebアプリ",
   "scripts": {
