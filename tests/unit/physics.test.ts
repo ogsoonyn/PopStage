@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PhysicsWorld, coefficients, PHYSICS_DT } from '../../src/physics/world';
 import { motionAnchor } from '../../src/physics/motion';
-import { MotionRecorder } from '../../src/physics/recorder';
+import { MotionRecorder, applySample } from '../../src/physics/recorder';
 import { createDocument, PRESETS, PRESET_ORDER, MOTIONS, MOTION_PARAMS, motionParam, applyPreset, defaultCamera, type Layer, type MotionPattern } from '../../src/model/project';
 
 const image = { bytes: new Uint8Array(), mime: 'image/png', ext: 'png', width: 100, height: 100 };
@@ -271,6 +271,29 @@ describe('操作の記録', () => {
     const r2 = rec.lastSeconds(1.5)!;
     expect(r2.samples.length).toBe(180);
     expect(r2.warmup.length + r2.samples.length).toBe(600 - 360);
+  });
+
+  it('記録から進め直すと、平行移動の揺れ(途中の視点の飛びも含む)がライブと一致する', () => {
+    const l = layerWith(), live = new PhysicsWorld(), rec = new MotionRecorder();
+    live.unitPx = 50;
+    const camera = defaultCamera(), xs: number[] = [];
+    const n = 600; // 5 秒。控え(120 刻みごと)をまたいで始める
+    for (let i = 0; i < n; i++) {
+      if (i % 2 === 0) camera.target = { x: Math.sin(i / 40) * 80, y: (i % 300) * 0.5, z: Math.cos(i / 55) * 20 }; // 描画フレームごとに動く
+      if (i === 400) live.cutView(); // 視点のリセット相当
+      live.viewTarget = camera.target;
+      rec.record({ grab: null, grabGains: [], camera: structuredClone(camera), viewCut: live.viewCut }, () => live.snapshot());
+      live.step([l]);
+      xs.push(live.displacement(l.id).x);
+    }
+    const r = rec.lastSeconds(n * PHYSICS_DT - 1.3)!;
+    expect(r.warmup.length).toBeGreaterThan(0);
+    const w = new PhysicsWorld(); w.unitPx = 50;
+    w.restore(r.start);
+    for (const smp of r.warmup) { applySample(w, smp); w.step([l]); }
+    const start = n - r.samples.length;
+    r.samples.forEach((smp, k) => { applySample(w, smp); w.step([l]); expect(w.displacement(l.id).x).toBe(xs[start + k]); });
+    expect(Math.max(...xs.map(Math.abs))).toBeGreaterThan(0.01);
   });
 
   it('60秒を超える古い記録は捨てる', () => {

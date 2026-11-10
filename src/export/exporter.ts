@@ -5,7 +5,7 @@
 import type { Stage } from '../stage/stage';
 import type { Store, CameraState, Document } from '../model/project';
 import { PhysicsWorld, PHYSICS_DT } from '../physics/world';
-import type { MotionRecorder, RecordSample } from '../physics/recorder';
+import { applySample, type MotionRecorder, type RecordSample } from '../physics/recorder';
 import { createEncoder, FORMAT_INFO, even, type ExportFormat } from './encoders';
 
 export type MotionSource = 'auto' | 'replay';
@@ -92,11 +92,4 @@ export async function runExport(
     await encoder.cancel();
     throw e;
   }
-}
-
-function applySample(world: PhysicsWorld, smp: RecordSample): void {
-  world.grab = smp.grab;
-  world.grabGains = new Map(smp.grabGains);
-  world.viewTarget = smp.camera.target;
-  if (smp.viewCut) world.cutView();
 }

@@ -4,7 +4,7 @@
  * 1秒ごとに物理状態の控えを持たせ、そこから記録どおりに進め直して再生の開始状態を作る。
  */
 import type { CameraState, Vec3 } from '../model/project';
-import type { WorldSnapshot } from './world';
+import type { PhysicsWorld, WorldSnapshot } from './world';
 import { PHYSICS_DT } from './world';
 
 export interface RecordSample {
@@ -14,6 +14,14 @@ export interface RecordSample {
   /** この刻みで視点を測り直したか(視点のリセットなどで飛んだ所) */
   viewCut?: boolean;
   snap?: WorldSnapshot;
+}
+
+/** 記録した1件を物理へ入れる(再生の書き出しで、刻みの前に呼ぶ) */
+export function applySample(world: PhysicsWorld, smp: RecordSample): void {
+  world.grab = smp.grab;
+  world.grabGains = new Map(smp.grabGains);
+  world.viewTarget = smp.camera.target;
+  if (smp.viewCut) world.cutView();
 }
 
 const MAX_SECONDS = 60;

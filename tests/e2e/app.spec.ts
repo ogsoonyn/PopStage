@@ -336,14 +336,15 @@ test('つかんでドラッグすると揺れる', async ({ page }) => {
   expect(during).toBeGreaterThan(0.01);
 });
 
-/** ms ミリ秒の間、先頭レイヤーの揺れ(x)の最小・最大を測る */
-const watchSwingX = (page: Page, ms: number) => page.evaluate(ms => new Promise<[number, number]>(resolve => {
+/** ms ミリ秒の間、先頭レイヤーの揺れ(x)の最小・最大と、最初に ±0.01 を超えた向きを測る */
+const watchSwingX = (page: Page, ms: number) => page.evaluate(ms => new Promise<[number, number, number]>(resolve => {
   const a = (window as any).popstage, t0 = performance.now();
-  let lo = 0, hi = 0;
+  let lo = 0, hi = 0, first = 0;
   const tick = () => {
     const x = a.world.displacement(a.doc.layers[0].id).x;
     lo = Math.min(lo, x); hi = Math.max(hi, x);
-    if (performance.now() - t0 < ms) requestAnimationFrame(tick); else resolve([lo, hi]);
+    if (!first && Math.abs(x) > 0.01) first = Math.sign(x);
+    if (performance.now() - t0 < ms) requestAnimationFrame(tick); else resolve([lo, hi, first]);
   };
   tick();
 }), ms);
@@ -359,9 +360,10 @@ test('中ドラッグで平行移動すると揺れ、視点のリセットで�
   await page.mouse.down({ button: 'middle' });
   await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5, { steps: 6 });
   await page.mouse.up({ button: 'middle' });
-  const [lo, hi] = await watching;
+  const [lo, hi, first] = await watching;
   expect(await page.evaluate(() => (window as any).popstage.project.camera.target.x)).toBeLessThan(0);
   // 画像は右へ動くので、塗った部分は左へ遅れ、止めた所で右へ振れ返す
+  expect(first).toBe(-1);
   expect(lo).toBeLessThan(-0.01);
   expect(hi).toBeGreaterThan(0.01);
 

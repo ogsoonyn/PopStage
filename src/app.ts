@@ -538,7 +538,9 @@ export class App extends Emitter<AppEvents> {
 
   start(): void {
     const loop = (now: number) => {
-      const dt = this.prev ? Math.min((now - this.prev) / 1000, 0.1) : 0;
+      const raw = this.prev ? (now - this.prev) / 1000 : 0, dt = Math.min(raw, 0.1);
+      // 物理は 0.1 秒で打ち切るので、その間の平行移動を 1 刻みの動きとして扱うと強く弾みすぎる。測り直す
+      if (raw > 0.1) this.world.cutView();
       this.prev = now;
       this.frame(dt);
       this.frames++; this.fpsTime += dt;
