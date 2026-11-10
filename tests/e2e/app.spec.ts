@@ -4,6 +4,8 @@ import { test, expect, type Page } from '@playwright/test';
 async function boot(page: Page): Promise<void> {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
+  // WebGL のエラー(GL_INVALID_* など)が出たらテストを失敗にする
+  page.on('console', m => { if (/GL_INVALID|WebGL: INVALID/.test(m.text())) glErrors.push(m.text()); });
   await page.goto('/?e2e');
   await page.waitForFunction(() => {
     const a = (window as any).popstage;
@@ -11,6 +13,10 @@ async function boot(page: Page): Promise<void> {
   });
   expect(errors).toEqual([]);
 }
+
+const glErrors: string[] = [];
+test.beforeEach(() => { glErrors.length = 0; });
+test.afterEach(() => { expect(glErrors, 'WebGL のエラー').toEqual([]); });
 
 const weightSum = (page: Page) => page.evaluate(() => (window as any).popstage.activeLayer.weights.data.reduce((s: number, v: number) => s + v, 0));
 
@@ -22,6 +28,9 @@ async function dragOnStage(page: Page, from: [number, number], to: [number, numb
     await page.mouse.move(box.x + box.width * (from[0] + (to[0] - from[0]) * i / 12), box.y + box.height * (from[1] + (to[1] - from[1]) * i / 12));
   }
   await page.mouse.up({ button });
+  // ブラシの円カーソルが写り込まないよう、ポインタを画面の外へ逃がす
+  await page.mouse.move(1, 1);
+  await page.waitForTimeout(100);
 }
 
 test('起動するとサンプルが描画される', async ({ page }) => {
@@ -53,7 +62,12 @@ test('塗ると持ち上がり、塗った矩形だけ転送され、元に戻�
   await page.evaluate(() => (window as any).popstage.weightOp('全消去', (wm: any) => wm.clear()));
   expect(await weightSum(page)).toBe(0);
   const partialBefore = await page.evaluate(() => (window as any).popstage.stage.partialUploads);
+  await page.waitForTimeout(100);
+  const shotBefore = await page.locator('#stage').screenshot();
   await dragOnStage(page, [0.3, 0.4], [0.6, 0.5]);
+  await page.waitForTimeout(100);
+  // CPU 側の値だけでなく、画面(GPU に送られたウェイト)が変わったことも確かめる
+  expect((await page.locator('#stage').screenshot()).equals(shotBefore)).toBe(false);
   const painted = await weightSum(page);
   expect(painted).toBeGreaterThan(0);
   expect(await page.evaluate(() => (window as any).popstage.stage.partialUploads)).toBeGreaterThan(partialBefore);
@@ -66,8 +80,11 @@ test('塗ると持ち上がり、塗った矩形だけ転送され、元に戻�
 
   // 消しゴム(E)で減る
   await page.keyboard.press('e');
+  const shotPainted = await page.locator('#stage').screenshot();
   await dragOnStage(page, [0.3, 0.4], [0.6, 0.5]);
+  await page.waitForTimeout(100);
   expect(await weightSum(page)).toBeLessThan(painted);
+  expect((await page.locator('#stage').screenshot()).equals(shotPainted)).toBe(false);
 });
 
 test('右ドラッグで視点が回り、Home で戻る', async ({ page }) => {

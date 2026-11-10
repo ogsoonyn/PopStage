@@ -136,23 +136,40 @@ export class Stage {
     for (let y = rect.y; y < rect.y + rect.h; y++) data.set(src.subarray(y * w + rect.x, y * w + rect.x + rect.w), base + y * w + rect.x);
     const props = this.renderer.properties.get(tex) as { __webglTexture?: WebGLTexture; __version?: number };
     const gl = this.renderer.getContext();
-    if (!props.__webglTexture || props.__version !== tex.version || !(gl instanceof WebGL2RenderingContext)) {
+    if (this.partialBroken || !props.__webglTexture || props.__version !== tex.version || !(gl instanceof WebGL2RenderingContext)) {
       tex.needsUpdate = true; this.fullUploads++;
       return;
     }
+    // 矩形を詰めた配列にコピーして送る。ROW_LENGTH / SKIP_* を使うとブラウザによって
+    // "invalid unpack params combination" で拒否されるため、unpack の設定はすべて既定値にする
+    const sub = this.subBuffer.length >= rect.w * rect.h ? this.subBuffer.subarray(0, rect.w * rect.h) : (this.subBuffer = new Uint8Array(rect.w * rect.h));
+    for (let y = 0; y < rect.h; y++) sub.set(src.subarray((rect.y + y) * w + rect.x, (rect.y + y) * w + rect.x + rect.w), y * rect.w);
     this.renderer.state.bindTexture(gl.TEXTURE_2D_ARRAY, props.__webglTexture);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    gl.pixelStorei(gl.UNPACK_ROW_LENGTH, w);
-    gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, rect.x);
-    gl.pixelStorei(gl.UNPACK_SKIP_ROWS, rect.y);
-    gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, rect.x, rect.y, index, rect.w, rect.h, 1, gl.RED, gl.UNSIGNED_BYTE, data, base);
     gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+    gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 0);
     gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, 0);
     gl.pixelStorei(gl.UNPACK_SKIP_ROWS, 0);
+    gl.pixelStorei(gl.UNPACK_SKIP_IMAGES, 0);
+    gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, rect.x, rect.y, index, rect.w, rect.h, 1, gl.RED, gl.UNSIGNED_BYTE, sub);
+    // 最初の1回だけ成否を確かめ、失敗する環境では以後すべて全面転送にする
+    if (!this.partialChecked) {
+      this.partialChecked = true;
+      if (gl.getError() !== gl.NO_ERROR) {
+        console.warn('PopStage: 部分転送が使えないため、ウェイトは全面転送に切り替えます');
+        this.partialBroken = true;
+        tex.needsUpdate = true; this.fullUploads++;
+        return;
+      }
+    }
     this.partialUploads++;
   }
+
+  private subBuffer = new Uint8Array(0);
+  private partialChecked = false;
+  private partialBroken = false;
 
   /* ---------- 表示 ---------- */
 
