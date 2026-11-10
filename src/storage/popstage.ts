@@ -4,7 +4,7 @@
  */
 import { zipSync, unzipSync, strToU8, strFromU8, type Zippable } from 'fflate';
 import {
-  LIMITS, PRESETS, MOTIONS, MOTION_PARAMS, createProject, defaultCamera, newId,
+  LIMITS, PRESETS, MOTIONS, MOTION_PARAMS, createProject, createLayer, defaultCamera, newId,
   type Project, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern,
 } from '../model/project';
 import { WeightMap, weightSizeFor } from '../model/weightmap';
@@ -150,8 +150,9 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
   if (!parsed || typeof parsed !== 'object') throw new Error('project.json の形式が不正です');
   const json = migrate(parsed as Record<string, unknown>);
   // 実際に読む分(ドキュメントとレイヤーの上限まで)のファイルだけを展開する
-  const docsJson = (Array.isArray(json.documents) ? json.documents : []).slice(0, MAX_DOCUMENTS);
-  const layersOf = (dj: DocumentJson) => (Array.isArray(dj?.layers) ? dj.layers : []).slice(0, LIMITS.maxLayers);
+  const isObj = <T>(v: unknown): v is T => !!v && typeof v === 'object';
+  const docsJson = (Array.isArray(json.documents) ? json.documents : []).filter(isObj<DocumentJson>).slice(0, MAX_DOCUMENTS);
+  const layersOf = (dj: DocumentJson) => (Array.isArray(dj.layers) ? dj.layers : []).filter(isObj<LayerJson>).slice(0, LIMITS.maxLayers);
   const wanted = new Map<string, number>();
   for (const dj of docsJson) {
     if (typeof dj?.image?.path === 'string') wanted.set(dj.image.path, UNZIP_LIMITS.image);
@@ -177,13 +178,21 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
     strength: unit(p.autoSwing?.strength, 0.5),
   };
 
+  // ID はレイヤーやドキュメントを探す鍵なので、空・重複していたら振り直す
+  const seenIds = new Set<string>();
+  const uniqueId = (v: unknown, prefix: string) => {
+    let id = typeof v === 'string' && v ? v : newId(prefix);
+    while (seenIds.has(id)) id = newId(prefix);
+    seenIds.add(id);
+    return id;
+  };
   for (const dj of docsJson) {
     const imgBytes = own(files, dj.image?.path) ? files[dj.image.path] : undefined;
     if (!imgBytes) throw new Error(`画像 ${dj.image?.path} が見つかりません`);
     const ext = dj.image.path.split('.').pop() ?? 'png';
     const width = Math.round(num(dj.image.width, 1, 1 << 15, 1)), height = Math.round(num(dj.image.height, 1, 1 << 15, 1));
     const doc: Document = {
-      id: str(dj.id, newId('D')), name: str(dj.name, '画像'),
+      id: uniqueId(dj.id, 'D'), name: str(dj.name, '画像'),
       image: { bytes: imgBytes, mime: str(dj.image.mime, 'image/png'), ext, width, height },
       position: vec(dj.position), rotation: vec(dj.rotation), scale: num(dj.scale, 0.01, 100, 1),
       meshDensity: Math.round(num(dj.meshDensity, LIMITS.density.min, LIMITS.density.max, LIMITS.density.def)),
@@ -205,12 +214,14 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
         weights = WeightMap.resampled(new WeightMap(g.width, g.height, g.data), ws.w, ws.h);
       }
       const layer: Layer = {
-        id: str(lj.id, newId('L')), name: str(lj.name, `レイヤー${doc.layers.length + 1}`),
+        id: uniqueId(lj.id, 'L'), name: str(lj.name, `レイヤー${doc.layers.length + 1}`),
         visible: lj.visible !== false, pop: num(lj.pop, LIMITS.pop.min, LIMITS.pop.max, LIMITS.pop.def),
         physics: physicsFrom(lj.physics), weights,
       };
       doc.layers.push(layer);
     }
+    // レイヤーが1枚も無いと塗れないので、空のレイヤーを1枚用意する
+    if (!doc.layers.length) { const l = createLayer(doc); seenIds.add(l.id); doc.layers.push(l); }
     project.documents.push(doc);
   }
   return { project, thumbnail: files['thumbnail.png'] };

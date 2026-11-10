@@ -204,6 +204,21 @@ describe('.popstage', () => {
     expect(project.documents).toEqual([]);
   });
 
+  it('レイヤーの ID が空・重複していたら振り直す。レイヤーが無ければ空のレイヤーを1枚作る。null の要素は無視する', async () => {
+    const json = oneLayer({}) as any;
+    json.documents[0].id = 'X';
+    json.documents[0].layers = [null, { id: 'X', name: 'a', weights: {} }, { id: 'X', name: 'b' }, { id: '', name: 'c' }, 7];
+    const { project } = await deserializeProject(zipOf(json));
+    const ids = [project.documents[0].id, ...project.documents[0].layers.map(l => l.id)];
+    expect(project.documents[0].layers.map(l => l.name)).toEqual(['a', 'b', 'c']);
+    expect(new Set(ids).size).toBe(4);
+    expect(ids[0]).toBe('X');
+
+    json.documents[0].layers = [];
+    const empty = await deserializeProject(zipOf(json));
+    expect(empty.project.documents[0].layers.length).toBe(1);
+  });
+
   it('新しい版のファイルは読めないと伝える', () => {
     expect(() => migrate({ formatVersion: FORMAT_VERSION + 1 })).toThrow(/新しい版/);
     expect(() => migrate({ formatVersion: 'x' })).toThrow();
