@@ -36,6 +36,25 @@ export async function availableFormats(width = 1280, height = 720): Promise<Reco
 
 export const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
+/** 実際に書き出すサイズで、動画のエンコードができるかを調べる(連番PNG・GIF は常に可) */
+export async function canEncodeAt(format: ExportFormat, width: number, height: number): Promise<boolean> {
+  if (format === 'png' || format === 'gif') return true;
+  if (typeof VideoEncoder === 'undefined') return false;
+  try { return await canEncodeVideo(format === 'mp4' ? 'avc' : 'vp9', { width: even(width), height: even(height) }); } catch { return false; }
+}
+
+/**
+ * 書き出し中にメモリへ溜まる量のおおよその見積もり(バイト)。連番PNG と GIF は全フレームをメモリに溜めてから保存する。
+ * 圧縮率は絵柄で大きく変わるので、多めに見積もる(PNG は1画素 1.5 バイト、GIF は 0.8 バイト)。動画は小さいので 0 とする。
+ */
+export function estimateExportBytes(format: ExportFormat, width: number, height: number, frames: number): number {
+  const perPixel = format === 'png' ? 1.5 : format === 'gif' ? 0.8 : 0;
+  return width * height * frames * perPixel;
+}
+
+/** これを超える見積もりのときは、書き出す前に確認する */
+export const EXPORT_MEMORY_WARN = 1.5 * 1024 ** 3;
+
 export function createEncoder(format: ExportFormat, o: EncoderOptions): FrameEncoder {
   switch (format) {
     case 'mp4': return new VideoFrameEncoder('mp4', o);

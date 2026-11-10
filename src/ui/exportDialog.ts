@@ -1,8 +1,8 @@
 /** 書き出しダイアログ。 */
 import type { App } from '../app';
-import { availableFormats, FORMAT_INFO, even, type ExportFormat } from '../export/encoders';
+import { availableFormats, canEncodeAt, estimateExportBytes, EXPORT_MEMORY_WARN, FORMAT_INFO, even, type ExportFormat } from '../export/encoders';
 import type { ExportSettings } from '../export/exporter';
-import { $, saveFile, toast, formatBytes } from './dom';
+import { $, ask, saveFile, toast, formatBytes } from './dom';
 
 const FORMATS: ExportFormat[] = ['mp4', 'webm', 'webm-alpha', 'png', 'gif'];
 
@@ -45,6 +45,10 @@ export function bindExportDialog(app: App): { open: () => void } {
     if (f === 'gif') notes.push('GIF は 256 色・1ビット透過です。サイズを小さく、30fps にすると軽くなります。');
     if (f === 'webm-alpha') notes.push('透過付き WebM は Chrome / Edge で再生できます。動画編集ソフトによっては透過が読めません。');
     if (f === 'png') notes.push('フレームごとの PNG を ZIP にまとめます。動画編集の素材向けです。');
+    if (f === 'png' || f === 'gif') {
+      const s = readSettings(), est = estimateExportBytes(f, s.width, s.height, Math.round(s.duration * s.fps));
+      notes.push(`全フレームをメモリに溜めてから保存します(目安 ${formatBytes(est)} まで)。`);
+    }
     if (available && !available.mp4) notes.push('このブラウザでは MP4 を書き出せません。');
     note.textContent = notes.join(' ');
   }
@@ -102,6 +106,21 @@ export function bindExportDialog(app: App): { open: () => void } {
   start.addEventListener('click', async () => {
     const s = readSettings();
     if (s.width * s.height > app.stage.maxTextureSize ** 2) { toast('サイズが大きすぎます。', 'error'); return; }
+    // 動画は実際のサイズでエンコードできるかを先に確かめる(形式の一覧は 1280×720 で調べている)
+    if (!(await canEncodeAt(s.format, s.width, s.height))) {
+      toast(`このブラウザでは ${s.width}×${s.height} の${FORMAT_INFO[s.format].label}を書き出せません。サイズを小さくしてください。`, 'error', 6000);
+      return;
+    }
+    const est = estimateExportBytes(s.format, s.width, s.height, Math.round(s.duration * s.fps));
+    if (est > EXPORT_MEMORY_WARN) {
+      const r = await ask({
+        title: '書き出すデータが大きくなります',
+        body: `${FORMAT_INFO[s.format].label}は全フレームをメモリに溜めてから保存するため、目安で ${formatBytes(est)} を使います。タブのメモリが足りなくなり、落ちるおそれがあります。
+サイズや長さを減らすか、MP4 / WebM を選ぶと軽くなります。`,
+        yes: 'このまま書き出す', no: 'やめる',
+      });
+      if (!r.ok) return;
+    }
     dur.value = String(+s.duration.toFixed(2));
     running = new AbortController();
     setRunning(true);

@@ -672,6 +672,26 @@ for (const format of ['mp4', 'webm', 'webm-alpha', 'png', 'gif'] as const) {
   });
 }
 
+test('書き出し: 連番PNG で大きく長いときは、メモリの目安を示して確認する', async ({ page }) => {
+  await boot(page);
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+e');
+  await expect(page.locator('#exportDialog')).toBeVisible();
+  await page.locator('#exFormat').selectOption('png');
+  await page.locator('#exW').fill('3840');
+  await page.locator('#exH').fill('3840');
+  await page.locator('#exLoop').uncheck();
+  await page.locator('#exDur').fill('60');
+  await page.locator('#exDur').dispatchEvent('change');
+  await page.locator('#exStart').click();
+  await expect(page.locator('#askTitle')).toHaveText('書き出すデータが大きくなります');
+  await expect(page.locator('#askBody')).toContainText('GB');
+  await page.locator('#askNo').click();
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => (window as any).popstage.exporting)).toBe(false);
+  await expect(page.locator('#exportDialog')).toBeVisible();
+});
+
 test('書き出し: 直前の操作を再生', async ({ page }) => {
   await boot(page);
   const r = await page.evaluate(async () => {
