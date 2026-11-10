@@ -538,7 +538,6 @@ test('自動保存から復元すると、塗った内容と設定が戻る', as
   const before = await page.evaluate(() => {
     const a = (window as any).popstage;
     a.store.patchProject({ background: '#224466' });
-    a.store.emit('change', undefined);
     return a.doc.layers.map((l: any) => l.weights.data.reduce((s: number, v: number) => s + v, 0));
   });
   expect(before[0]).toBeGreaterThan(0);

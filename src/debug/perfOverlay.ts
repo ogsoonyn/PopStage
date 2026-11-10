@@ -25,7 +25,7 @@ const VERDICT: Record<FreezeRecord['verdict'], string> = {
 const COLORS = { physics: '#4ade80', upload: '#facc15', render: '#60a5fa', other: '#9ca3af', freeze: '#f87171' };
 
 function startPerfOverlay(app: App): Running {
-  const stats = new PerfStats(PerformanceObserver.supportedEntryTypes?.includes('longtask') ?? false);
+  const stats = new PerfStats(typeof PerformanceObserver !== 'undefined' && (PerformanceObserver.supportedEntryTypes?.includes('longtask') ?? false));
   const origin = performance.timeOrigin;
   const clock = (t: number) => new Date(origin + t).toLocaleTimeString('ja-JP', { hour12: false }) + '.' + String(Math.floor((origin + t) % 1000)).padStart(3, '0');
 
@@ -121,7 +121,7 @@ function startPerfOverlay(app: App): Running {
     ].join('\n');
     freezes.textContent = stats.freezes.length ? stats.freezes.slice(-5).reverse().map(f => {
       const top = f.events.filter(e => e.kind !== 'loaf' && e.d > 5).sort((a, b) => b.d - a.d).slice(0, 2).map(e => `${e.kind} ${Math.round(e.d)}ms`).join(', ');
-      return `${clock(f.t)} ${Math.round(f.gap)}ms 止まる → ${VERDICT[f.verdict]}(ページの処理 ${f.pageBusy}ms)${top ? `\n  直前: ${top}` : ''}`;
+      return `${clock(f.t)} ${Math.round(f.gap)}ms 止まる → ${VERDICT[f.verdict]}${f.verdict === 'unknown' ? '' : `(ページの処理 ${f.pageBusy}ms)`}${top ? `\n  直前: ${top}` : ''}`;
     }).join('\n') : 'まだありません';
   }
   const drawTimer = window.setInterval(() => { stats.refreshVerdicts(); draw(); }, 250);
