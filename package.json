@@ -12,5 +12,21 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "gifenc": "^1.0.3",
+    "mediabunny": "^1.65.2",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/three": "^0.187.0",
+    "daisyui": "^5.7.50",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.7",
+    "vitest": "^5.1.0"
   }
 }

@@ -1,0 +1,124 @@
+import { describe, it, expect } from 'vitest';
+import { zlibSync, zipSync, strToU8 } from 'fflate';
+import { encodeGrayPng, decodePngToGray } from '../../src/storage/png';
+import { serializeProject, deserializeProject, migrate, FORMAT_VERSION } from '../../src/storage/popstage';
+import { createDocument, createProject, createLayer } from '../../src/model/project';
+
+describe('PNG', () => {
+  it('グレースケールの往復', () => {
+    const w = 37, h = 23, data = new Uint8Array(w * h);
+    for (let i = 0; i < data.length; i++) data[i] = (i * 7 + (i >> 3)) & 0xff;
+    const back = decodePngToGray(encodeGrayPng(w, h, data));
+    expect(back.width).toBe(w); expect(back.height).toBe(h);
+    expect(back.data).toEqual(data);
+  });
+
+  it('RGBA(外部ソフトで保存し直した形)を輝度で読む・Paeth フィルタ', () => {
+    // 2x2 RGBA、各行 Paeth(4) フィルタ
+    const px = [[255, 255, 255, 255], [0, 0, 0, 255], [128, 128, 128, 255], [10, 10, 10, 255]];
+    const raw: number[] = [];
+    const img = (x: number, y: number, c: number) => px[y * 2 + x][c];
+    for (let y = 0; y < 2; y++) {
+      raw.push(4);
+      for (let x = 0; x < 2; x++) for (let c = 0; c < 4; c++) {
+        const a = x > 0 ? img(x - 1, y, c) : 0, b = y > 0 ? img(x, y - 1, c) : 0, cc = x > 0 && y > 0 ? img(x - 1, y - 1, c) : 0;
+        const p = a + b - cc, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - cc);
+        const pred = pa <= pb && pa <= pc ? a : pb <= pc ? b : cc;
+        raw.push((img(x, y, c) - pred) & 0xff);
+      }
+    }
+    const png = buildPng(2, 2, 8, 6, zlibSync(new Uint8Array(raw)));
+    expect([...decodePngToGray(png).data]).toEqual([255, 0, 128, 10]);
+  });
+
+  it('対応外の形式は例外', () => {
+    expect(() => decodePngToGray(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]))).toThrow();
+  });
+});
+
+describe('.popstage', () => {
+  const makeProject = () => {
+    const doc = createDocument({ bytes: new Uint8Array([9, 8, 7, 6]), mime: 'image/jpeg', ext: 'jpg', width: 300, height: 200 }, 'プリン');
+    const l1 = doc.layers[0];
+    for (let i = 0; i < l1.weights.data.length; i += 3) l1.weights.data[i] = i & 0xff;
+    l1.pop = -123; l1.physics = { enabled: false, preset: 'bain', hardness: 0.1, mass: 0.9, weight: 0.3, damping: 0.05 };
+    const l2 = createLayer(doc, '顔'); l2.visible = false; l2.weights.data.fill(77);
+    doc.layers.push(l2);
+    doc.meshDensity = 256;
+    const p = createProject(doc);
+    p.background = '#112233'; p.camera.fov = 25; p.camera.target = { x: 5, y: -3, z: 0 };
+    p.autoSwing = { enabled: false, period: 3, strength: 0.25 };
+    return p;
+  };
+
+  it('保存して読み込むと同じ状態に戻る', async () => {
+    const p = makeProject();
+    const bytes = serializeProject(p, { thumbnail: new Uint8Array([1, 2]) });
+    const { project: q, thumbnail } = await deserializeProject(bytes);
+    expect(thumbnail).toEqual(new Uint8Array([1, 2]));
+    expect(q.background).toBe('#112233');
+    expect(q.camera).toEqual(p.camera);
+    expect(q.autoSwing).toEqual(p.autoSwing);
+    const [d0, d1] = [p.documents[0], q.documents[0]];
+    expect(d1.name).toBe(d0.name);
+    expect(d1.image.bytes).toEqual(d0.image.bytes);
+    expect(d1.image.ext).toBe('jpg');
+    expect(d1.meshDensity).toBe(256);
+    expect(d1.layers.length).toBe(2);
+    for (let i = 0; i < 2; i++) {
+      const a = d0.layers[i], b = d1.layers[i];
+      expect(b.id).toBe(a.id); expect(b.name).toBe(a.name); expect(b.visible).toBe(a.visible);
+      expect(b.pop).toBe(a.pop); expect(b.physics).toEqual(a.physics);
+      expect(b.weights.width).toBe(a.weights.width);
+      expect(b.weights.data).toEqual(a.weights.data);
+    }
+  });
+
+  it('不正な値は範囲内に丸める', async () => {
+    const json = {
+      formatVersion: 1, app: 'PopStage', project: { camera: { fov: 999 } },
+      documents: [{ name: 'x', image: { path: 'images/doc-0.png', width: 10, height: 10 }, meshDensity: 99999,
+        layers: [{ name: 'L', pop: 99999, physics: { hardness: 5, preset: 'zzz' }, weights: { path: 'none.png' } }] }],
+    };
+    const zip = zipSync({ 'project.json': strToU8(JSON.stringify(json)), 'images/doc-0.png': new Uint8Array([1]) });
+    const { project } = await deserializeProject(zip);
+    expect(project.camera.fov).toBe(90);
+    expect(project.documents[0].meshDensity).toBe(512);
+    expect(project.documents[0].layers[0].pop).toBe(500);
+    expect(project.documents[0].layers[0].physics.hardness).toBe(1);
+    expect(project.documents[0].layers[0].physics.preset).toBe('custom');
+  });
+
+  it('新しい版のファイルは読めないと伝える', () => {
+    expect(() => migrate({ formatVersion: FORMAT_VERSION + 1 })).toThrow(/新しい版/);
+    expect(() => migrate({ formatVersion: 'x' })).toThrow();
+  });
+
+  it('ZIP でないものは分かりやすく失敗する', async () => {
+    await expect(deserializeProject(new Uint8Array([1, 2, 3]))).rejects.toThrow(/展開できません/);
+  });
+});
+
+function buildPng(w: number, h: number, depth: number, ctype: number, idat: Uint8Array): Uint8Array {
+  // encodeGrayPng を土台に IHDR と IDAT を差し替える
+  const base = encodeGrayPng(1, 1, new Uint8Array([0]));
+  const crcOf = (bytes: Uint8Array) => {
+    let c = 0xffffffff;
+    for (const b of bytes) { c ^= b; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; }
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Uint8Array) => {
+    const out = new Uint8Array(12 + data.length), dv = new DataView(out.buffer);
+    dv.setUint32(0, data.length);
+    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    out.set(data, 8);
+    dv.setUint32(8 + data.length, crcOf(out.subarray(4, 8 + data.length)));
+    return out;
+  };
+  const ihdr = new Uint8Array(13), dv = new DataView(ihdr.buffer);
+  dv.setUint32(0, w); dv.setUint32(4, h); ihdr[8] = depth; ihdr[9] = ctype;
+  const parts = [base.subarray(0, 8), chunk('IHDR', ihdr), chunk('IDAT', idat), chunk('IEND', new Uint8Array())];
+  const out = new Uint8Array(parts.reduce((s, p) => s + p.length, 0));
+  let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+}
