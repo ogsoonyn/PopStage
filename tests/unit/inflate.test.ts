@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { WeightMap } from '../../src/model/weightmap';
-import { profileAt, inflateShape, popForHeight, rescaleForPop, type InflateParams } from '../../src/paint/inflate';
-import { diffTiles, WeightEdit, PatchLayer, Batch } from '../../src/commands/commands';
-import { Store, createDocument, createProject, LIMITS } from '../../src/model/project';
+import { profileAt, inflateShape, type InflateParams } from '../../src/paint/inflate';
+import { diffTiles, WeightEdit, InsertLayer } from '../../src/commands/commands';
+import { Store, createDocument, createProject, createLayer, LIMITS } from '../../src/model/project';
 import { History } from '../../src/commands/history';
 import { popToSlider, sliderToPop, POP_SLIDER_MAX } from '../../src/ui/popSlider';
 
@@ -79,46 +79,29 @@ describe('図形で膨らませる', () => {
   });
 });
 
-describe('高さがポップ量を超えるとき', () => {
-  it('要るポップ量: 足りていればそのまま、超えたら高さまで上げる', () => {
-    expect(popForHeight(80, 140)).toBe(140);
-    expect(popForHeight(140, 140)).toBe(140);
-    expect(popForHeight(300, 140)).toBe(300);
-    expect(popForHeight(50, 0)).toBe(50);
-  });
-
-  it('ポップ量を上げても、今の塗りの高さ(ウェイト × ポップ量)は変わらない', () => {
-    const src = new Uint8Array([0, 51, 128, 255]);
-    const out = rescaleForPop(src, 100, 200);
-    expect([...out]).toEqual([0, 26, 64, 128]);
-    for (let i = 0; i < src.length; i++) expect(Math.abs(out[i] / 255 * 200 - src[i] / 255 * 100)).toBeLessThanOrEqual(0.5);
-    expect(out).not.toBe(src);
-    // 同じポップ量や、元が 0(高さの手がかりが無い)ときはそのまま写す
-    expect([...rescaleForPop(src, 100, 100)]).toEqual([...src]);
-    expect([...rescaleForPop(src, 0, 200)]).toEqual([...src]);
-  });
-
-  it('ポップ量の変更とウェイトの変更を1手にまとめ、戻すと両方が元に戻る', () => {
-    const store = makeStore(), history = new History(store);
-    const layer = store.doc!.layers[0], wm = layer.weights;
-    layer.pop = 100;
-    wm.data.fill(200);
-    const original = wm.data.slice();
-    // 高さ 300px の膨らみを置く: ポップ量を 300 に上げ、今の塗りを 1/3 に縮めてから重ねる
-    const base = rescaleForPop(original, 100, 300);
-    wm.data.set(base);
-    inflateShape(wm, base, { kind: 'ellipse', cx: 100, cy: 75, rx: 30, ry: 30 }, params({ level: 1 }));
-    layer.pop = 300;
-    const after = wm.data.slice();
-    expect(at(wm, 10, 10)).toBe(67); // 200 × 100/300
-    expect(at(wm, 100, 75)).toBe(255);
-    history.push(new Batch('膨らませる', [new PatchLayer('膨らませる', layer.id, { pop: 100 }, { pop: 300 }), new WeightEdit('膨らませる', layer.id, diffTiles(original, wm))]));
+describe('高さがポップ量を超えるとき(新しいレイヤーに作る)', () => {
+  it('ポップ量 = 高さのレイヤーに頂上 100% で作り、1手で戻すとレイヤーごと消えて元のレイヤーは元のまま', () => {
+    const store = makeStore(), history = new History(store), doc = store.doc!;
+    const source = doc.layers[0];
+    source.pop = 140;
+    for (let i = 0; i < source.weights.data.length; i++) source.weights.data[i] = (i * 7) & 0xff;
+    const sourceBefore = source.weights.data.slice();
+    // 高さ 420px: 元のレイヤーには触れず、ポップ量 420px の新しいレイヤーに頂上 100% で置く
+    const layer = createLayer(doc, '膨らみ1');
+    layer.pop = 420;
+    const wm = layer.weights;
+    inflateShape(wm, wm.data.slice(), { kind: 'ellipse', cx: 100, cy: 75, rx: 30, ry: 30 }, params({ level: 420 / layer.pop }));
+    expect(wm.max()).toBe(255); // 8 ビットの階調をすべて使える
+    history.execute(new InsertLayer('膨らませる', doc.id, layer, 1));
+    expect(doc.layers.map(l => l.name)).toEqual([source.name, '膨らみ1']);
     history.undo();
-    expect(layer.pop).toBe(100);
-    expect(wm.data).toEqual(original);
+    expect(doc.layers).toEqual([source]);
+    expect(source.pop).toBe(140);
+    expect(source.weights.data).toEqual(sourceBefore);
     history.redo();
-    expect(layer.pop).toBe(300);
-    expect(wm.data).toEqual(after);
+    expect(doc.layers[1]).toBe(layer);
+    expect(doc.layers[1].weights.max()).toBe(255);
+    expect(LIMITS.maxLayers).toBe(8);
   });
 });
 

@@ -67,21 +67,3 @@ export function inflateShape(wm: WeightMap, base: Uint8Array, s: InflateShape, p
   }
   return r;
 }
-
-/* ---------- 高さがポップ量を超えるとき ---------- */
-
-/** 頂上を height(px)にするのに要るポップ量。今のポップ量で足りればそのまま */
-export function popForHeight(height: number, pop: number): number {
-  return height > pop ? Math.ceil(height) : pop;
-}
-
-/**
- * ポップ量を oldPop から newPop に上げても、今の塗りの高さ(ウェイト × ポップ量)が変わらないよう、
- * ウェイトを oldPop / newPop 倍した配列を返す。oldPop が 0 のときは(高さの手がかりが無いので)そのまま写す。
- */
-export function rescaleForPop(src: Uint8Array, oldPop: number, newPop: number): Uint8Array {
-  if (oldPop <= 0 || newPop <= 0 || oldPop === newPop) return src.slice();
-  const k = oldPop / newPop, out = new Uint8Array(src.length);
-  for (let i = 0; i < src.length; i++) out[i] = Math.round(src[i] * k);
-  return out;
-}

@@ -168,57 +168,93 @@ test('膨らませる: 範囲をドラッグし、高さを数値で決めて適
   expect(await app(a => a.history.undoLabel)).toMatch(/^膨らませる/);
 });
 
-test('膨らませる: 高さがポップ量を超えるとポップ量を上げ、今の塗りの高さは保ったまま1手で戻せる', async ({ page }) => {
+test('膨らませる: 高さがポップ量を超えると新しいレイヤーに作り、元のレイヤーには触れない。1手で戻せる', async ({ page }) => {
   await boot(page);
   const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
-  await app(a => { (window as any).__orig = a.activeLayer.weights.data.slice(); });
+  const layerCount = () => app(a => a.doc.layers.length as number);
+  // 元のレイヤー(プリン)のウェイトとポップ量を、1バイトずつ比べられるよう控えておく
+  await app(a => { (window as any).__orig = { id: a.activeLayerId, data: a.activeLayer.weights.data.slice(), pop: a.activeLayer.pop }; });
+  const sourceIntact = () => app(a => {
+    const o = (window as any).__orig, l = a.store.findLayer(o.id)?.layer;
+    if (!l || l.pop !== o.pop) return false;
+    const d: Uint8Array = l.weights.data;
+    return d.length === o.data.length && d.every((v: number, i: number) => v === o.data[i]);
+  });
   expect(await app(a => a.activeLayer.pop)).toBe(140);
+  expect(await layerCount()).toBe(1);
 
   await page.keyboard.press('i');
   await dragOnStage(page, [0.3, 0.25], [0.4, 0.35]);
   await expect(page.locator('#inflateDialog')).toHaveJSProperty('open', true);
-  // ポップ量(140px)より高い 420px を指定すると、プレビューの間からポップ量が 420px になる
+  expect(await layerCount()).toBe(1); // ポップ量以下の高さなら、同じレイヤーに作る
+
+  // ポップ量(140px)より高い 420px にすると、プレビューの間から新しいレイヤーが見える
   await page.locator('#inflHeightN').fill('420');
-  await expect.poll(() => app(a => a.activeLayer.pop)).toBe(420);
-  await expect(page.locator('#inflNote')).toContainText('140px → 420px');
-  await expect(page.locator('#pPopN')).toBeDisabled(); // プレビュー中はポップ量を触らせない
-  await expect.poll(() => app(a => a.history.canUndo)).toBe(false); // まだ記録しない
+  await expect.poll(layerCount).toBe(2);
+  await expect(page.locator('#inflNote')).toContainText('ポップ量(140px)を超えるので、新しいレイヤー「膨らみ1」(ポップ量 420px)に作ります');
+  await expect(page.locator('#layerList li')).toHaveCount(2);
+  expect(await sourceIntact()).toBe(true);
+  expect(await app(a => a.history.canUndo)).toBe(false); // プレビュー中は記録しない
+  expect(await app(a => a.dirty)).toBe(false);
+  // 高さを戻すと、同じレイヤーに作る方へ切り替わる(仮のレイヤーは消える)。また上げると戻る
+  await page.locator('#inflHeightN').fill('100');
+  await expect.poll(layerCount).toBe(1);
+  expect(await app(a => a.activeLayer.weights.data.some((v: number, i: number) => v !== (window as any).__orig.data[i]))).toBe(true);
+  await page.locator('#inflHeightN').fill('420');
+  await expect.poll(layerCount).toBe(2);
+  expect(await sourceIntact()).toBe(true);
 
   await page.locator('#inflApply').click();
-  expect(await app(a => a.history.undoLabel)).toMatch(/^膨らませる\(楕円 \d+×\d+px・高さ 420px\)$/);
-  expect(await app(a => a.activeLayer.pop)).toBe(420);
-  expect(await app(a => a.activeLayer.weights.max())).toBe(255); // 新しい膨らみの頂上
-  // 元の塗り(プリン)の高さ(ウェイト × ポップ量)は、ポップ量を上げても変わらない
-  const outside = await app(a => {
-    const wm = a.activeLayer.weights, orig: Uint8Array = (window as any).__orig;
-    let n = 0, bad = 0;
-    for (let i = 0; i < orig.length; i++) {
-      if (orig[i] === 0) continue;
-      const kept = Math.abs(wm.data[i] * 420 - orig[i] * 140) / 255 <= 420 / 255; // 丸めは 1 段まで
-      n++; if (!kept) bad++;
-    }
-    return { n, bad };
-  });
-  expect(outside.n).toBeGreaterThan(1000);
-  // 膨らみと重なった所(元の塗りより高くなった所)を除けば、元の塗りの高さは保たれる
-  expect(outside.bad / outside.n).toBeLessThan(0.05);
+  expect(await layerCount()).toBe(2);
+  expect(await app(a => a.history.undoLabel)).toMatch(/^膨らませる\(楕円 \d+×\d+px・高さ 420px・新しいレイヤー「膨らみ1」\)$/);
+  const added = await app(a => ({ name: a.activeLayer.name, pop: a.activeLayer.pop, max: a.activeLayer.weights.max(), index: a.activeIndex, preset: a.activeLayer.physics.preset }));
+  // 新しいレイヤーが選ばれ、ポップ量 = 高さ、頂上はウェイト 100%、揺れ方は元のレイヤーと同じ
+  expect(added).toEqual({ name: '膨らみ1', pop: 420, max: 255, index: 1, preset: 'puru' });
+  expect(await sourceIntact()).toBe(true);
+  expect(await app(a => a.dirty)).toBe(true);
 
-  // 1手で戻すと、ポップ量もウェイトも元どおり
+  // 1手で戻すと新しいレイヤーごと消え、元のレイヤーはそのまま
   await page.locator('#view').focus();
   await page.keyboard.press('Control+z');
-  expect(await app(a => a.activeLayer.pop)).toBe(140);
-  expect(await app(a => { const o: Uint8Array = (window as any).__orig, d: Uint8Array = a.activeLayer.weights.data; return o.every((v, i) => v === d[i]); })).toBe(true);
+  expect(await layerCount()).toBe(1);
+  expect(await sourceIntact()).toBe(true);
+  expect(await app(a => a.history.canUndo)).toBe(false);
   await page.keyboard.press('Control+Shift+z');
-  expect(await app(a => a.activeLayer.pop)).toBe(420);
+  expect(await layerCount()).toBe(2);
+  await page.keyboard.press('Control+z');
 
-  // キャンセルすると、プレビューで上げたポップ量も元に戻る
+  // キャンセルすると、仮のレイヤーも消えて何も残らない
   await dragOnStage(page, [0.6, 0.25], [0.7, 0.35]);
   await page.locator('#inflHeightN').fill('900');
-  await expect.poll(() => app(a => a.activeLayer.pop)).toBe(900);
+  await expect.poll(layerCount).toBe(2);
   await page.locator('#inflCancel').click();
-  expect(await app(a => a.activeLayer.pop)).toBe(420);
+  expect(await layerCount()).toBe(1);
+  expect(await sourceIntact()).toBe(true);
+  expect(await app(a => a.history.canUndo)).toBe(false);
   await expect(page.locator('#pPopN')).toBeEnabled();
-  await expect(page.locator('#pPopN')).toHaveValue('420');
+  await expect(page.locator('#pPopN')).toHaveValue('140');
+});
+
+test('膨らませる: レイヤーが上限の8枚なら新しいレイヤーは作らず、ポップ量の高さで止める', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  // 8枚にして、いちばん上(最後に足した、何も塗っていないレイヤー)に作る。ポップ量は既定の 80px
+  await app(a => { for (let i = 0; i < 7; i++) a.addLayer(); });
+  expect(await app(a => a.doc.layers.length)).toBe(8);
+  expect(await app(a => a.activeLayer.pop)).toBe(80);
+  const undoBefore = await app(a => a.history.size as number);
+
+  await page.keyboard.press('i');
+  await dragOnStage(page, [0.3, 0.25], [0.4, 0.35]);
+  await page.locator('#inflHeightN').fill('300');
+  await expect(page.locator('#inflNote')).toContainText('レイヤーが上限の 8 枚なので新しいレイヤーを作れません。80px で止まります');
+  expect(await app(a => a.doc.layers.length)).toBe(8);
+  await page.locator('#inflApply').click();
+  expect(await app(a => a.doc.layers.length)).toBe(8);
+  expect(await app(a => a.activeLayer.pop)).toBe(80);
+  expect(await app(a => a.activeLayer.weights.max())).toBe(255); // ポップ量の高さ(80px)で止まる
+  expect(await app(a => a.history.undoLabel)).toMatch(/^膨らませる\(楕円 \d+×\d+px・高さ 80px\)$/);
+  expect(await app(a => a.history.size)).toBe(undoBefore + 1);
 });
 
 test('画像を薄く・ポップを一時OFF: 画面だけが変わり、書き出しには影響しない', async ({ page }) => {

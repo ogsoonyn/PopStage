@@ -333,8 +333,11 @@ export function bindPanels(app: App): { refresh: () => void } {
     const l = app.activeLayer, d = app.doc, p = app.project;
     const disabled = !l;
     document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('#props input, #props select').forEach(el => { if (!el.id.startsWith('v')) el.disabled = disabled; });
-    // 膨らませるのプレビュー中は、高さに合わせてポップ量を上げることがあるので、ポップ量は触らせない
+    // 膨らませるのプレビュー中は、新しいレイヤーに作るかどうかがこのレイヤーのポップ量で決まるので、ポップ量は触らせない。
+    // レイヤー一覧も、仮に入れたレイヤーの名前や表示を変えて記録しないよう、操作できなくする
     if (app.previewingInflate) { $<HTMLInputElement>('pPop').disabled = true; $<HTMLInputElement>('pPopN').disabled = true; }
+    list.inert = app.previewingInflate;
+    list.classList.toggle('opacity-60', app.previewingInflate);
     $('activeLayerName').textContent = l?.name ?? '-';
     if (l) {
       setRange('pPop', popToSlider(l.pop));

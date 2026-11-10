@@ -62,12 +62,14 @@ export function bindInflateDialog(app: App): void {
     set(soft, String(Math.round(st.softness * 100))); set(softN, String(Math.round(st.softness * 100)));
     set(blend, st.blend);
     for (const r of profiles) r.checked = r.value === st.profile;
-    // 高さ = ウェイト × ポップ量。足りないときはポップ量を上げることを知らせる
-    const note = $('inflNote'), raised = s.pop !== s.originalPop;
-    note.textContent = raised
-      ? `ポップ量を ${s.originalPop}px → ${s.pop}px に上げます。${s.originalPop > 0 ? '今の塗りの高さはそのままです。' : '今の塗りもいっしょに持ち上がります。'}`
-      : `頂上は ${st.height}px(ポップ量 ${s.pop}px の ${s.pop > 0 ? Math.round(st.height / s.pop * 100) : 0}%)。右ドラッグで視点を回して確かめられます。`;
-    note.classList.toggle('text-warning', raised);
+    // 高さ = ウェイト × ポップ量。このレイヤーのポップ量を超えるときは、新しいレイヤーに作ることを知らせる
+    const note = $('inflNote'), pop = s.sourcePop;
+    note.textContent = s.newLayer
+      ? `高さがこのレイヤーのポップ量(${pop}px)を超えるので、新しいレイヤー「${s.newLayer.name}」(ポップ量 ${s.newLayer.pop}px)に作ります。このレイヤーは変わりません。`
+      : s.limited
+        ? `高さがこのレイヤーのポップ量(${pop}px)を超えますが、レイヤーが上限の ${LIMITS.maxLayers} 枚なので新しいレイヤーを作れません。${pop}px で止まります。`
+        : `頂上は ${st.height}px(ポップ量 ${pop}px の ${pop > 0 ? Math.round(st.height / pop * 100) : 0}%)。右ドラッグで視点を回して確かめられます。`;
+    note.classList.toggle('text-warning', !!s.newLayer || s.limited);
   }
 
   app.on('inflate', phase => {

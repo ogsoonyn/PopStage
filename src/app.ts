@@ -5,12 +5,12 @@
 import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultMultiCamera, defaultOrthoView, LIMITS, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
 import type { Rect } from './model/weightmap';
-import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, PatchLayer, Batch, weightOperation, diffTiles } from './commands/commands';
+import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from './commands/commands';
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld } from './physics/world';
 import { MotionRecorder } from './physics/recorder';
 import { Stroke, type PaintMode } from './paint/stroke';
-import { inflateShape, popForHeight, rescaleForPop, type InflateProfile, type InflateBlend } from './paint/inflate';
+import { inflateShape, type InflateProfile, type InflateBlend } from './paint/inflate';
 import { serializeProject, serializeProjectBlob, deserializeProject, FILE_EXTENSION, type PngCacheEntry } from './storage/popstage';
 import { autosave } from './storage/autosave';
 import { recent, type RecentKind } from './storage/recent';
@@ -37,13 +37,16 @@ export interface InflateSettings {
   blend: InflateBlend;
 }
 export interface InflateState {
+  /** 範囲を描いたレイヤー */
   readonly layerId: string;
   readonly area: InflateArea;
   readonly settings: InflateSettings & { height: number };
-  /** 始めたときのレイヤーのポップ量 */
-  readonly originalPop: number;
-  /** 高さに合わせて上げたポップ量(上げないときは originalPop と同じ) */
-  readonly pop: number;
+  /** 範囲を描いたレイヤーのポップ量(プレビュー中は変えない) */
+  readonly sourcePop: number;
+  /** 高さがポップ量を超えるので新しいレイヤーに作るときの、そのレイヤーの名前とポップ量 */
+  readonly newLayer: { readonly name: string; readonly pop: number } | null;
+  /** 高さがポップ量を超えるが、レイヤーが上限の枚数なので新しいレイヤーを作れない(ポップ量の高さで止まる) */
+  readonly limited: boolean;
 }
 
 type AppEvents = {
@@ -580,30 +583,38 @@ export class App extends Emitter<AppEvents> {
 
   /* 膨らませる: 範囲(楕円・矩形)を、指定した高さと断面で一括して膨らませる。
      プレビューしながら数値を決め、適用で1手として記録する。
-     高さがポップ量を超えるときは、ポップ量を高さまで上げ、今の塗りの高さが変わらないようウェイトを縮める(同じ1手) */
+     高さが範囲を描いたレイヤーのポップ量を超えるときは、そのレイヤーには触れず、ポップ量 = 高さの新しいレイヤーに作る
+     (今の塗りを縮めてポップ量を上げると、揺れも小さくなり、8 ビットのウェイトの階調も粗くなるため)。
+     新しいレイヤーはプレビューの間だけ仮に挿入し、アンドゥにも「未保存」にも数えない */
 
   private inflateSession: {
     layerId: string; original: Uint8Array; area: InflateArea; settings: InflateSettings & { height: number };
-    originalPop: number; pop: number;
-    /** pop に合わせて縮めた元のウェイト(pop が originalPop と同じなら original と同じ中身) */
-    base: Uint8Array;
+    sourcePop: number;
+    /** プレビュー中に仮に挿入している新しいレイヤー(同じレイヤーに作るときは null) */
+    newLayer: Layer | null;
+    /** 新しいレイヤーに作るときの名前(仮に挿入していなくても決めておく) */
+    newName: string;
+    limited: boolean;
   } | null = null;
 
   get previewingInflate(): boolean { return !!this.inflateSession; }
-  get inflateState(): InflateState | null { return this.inflateSession; }
+  get inflateState(): InflateState | null {
+    const s = this.inflateSession; if (!s) return null;
+    return { layerId: s.layerId, area: s.area, settings: s.settings, sourcePop: s.sourcePop, limited: s.limited, newLayer: s.newLayer && { name: s.newLayer.name, pop: s.newLayer.pop } };
+  }
 
   /** 範囲を描き始める(ドラッグの最初の動きで呼ぶ) */
   beginInflateArea(area: InflateArea): boolean {
-    const layer = this.activeLayer;
-    if (!layer || !this.doc || this.busy) return false;
+    const layer = this.activeLayer, doc = this.doc;
+    if (!layer || !doc || this.busy) return false;
     if (!layer.visible) { toast('非表示のレイヤーには塗れません。', 'warning'); return false; }
-    const st = this.inflateSettings, original = layer.weights.data.slice();
+    const st = this.inflateSettings;
     this.inflateSession = {
-      layerId: layer.id, original, area: { ...area },
+      layerId: layer.id, original: layer.weights.data.slice(), area: { ...area },
       // 高さの初期値は前回の値、初めてならポップ量と同じ(ポップ量が 0 なら既定のポップ量)
-      // 前回の高さは引き継ぐが、このレイヤーのポップ量は超えない(別のレイヤーでいきなりポップ量を上げない)
+      // 前回の高さは引き継ぐが、このレイヤーのポップ量は超えない(いきなり新しいレイヤーに作らない)
       settings: { ...st, height: layer.pop > 0 ? Math.min(st.height ?? layer.pop, layer.pop) : (st.height ?? LIMITS.pop.def) },
-      originalPop: layer.pop, pop: layer.pop, base: original,
+      sourcePop: layer.pop, newLayer: null, newName: nextInflateLayerName(doc), limited: false,
     };
     this.renderInflate();
     this.emit('inflate', 'begin');
@@ -618,54 +629,82 @@ export class App extends Emitter<AppEvents> {
     this.emit('inflate', 'change');
   }
 
-  /** プレビュー中だけレイヤーのポップ量を差し替える(アンドゥには積まず、「未保存」にもしない) */
-  private setPreviewPop(layerId: string, pop: number): void {
-    const layer = this.store.findLayer(layerId)?.layer;
-    if (!layer || layer.pop === pop) return;
-    layer.pop = pop;
-    this.store.emit('layer', { layerId, keys: ['pop'] });
+  /**
+   * プレビュー用の新しいレイヤーを、範囲を描いたレイヤーのすぐ上に仮に入れる / 外す。
+   * 構成が変わったことだけを知らせ(GPU への全面転送とレイヤー一覧の更新)、変更としては数えない
+   */
+  private setPreviewLayer(on: boolean): void {
+    const s = this.inflateSession, doc = this.doc; if (!s || !doc) return;
+    if (on && !s.newLayer) {
+      const f = this.store.findLayer(s.layerId); if (!f) return;
+      const layer = createLayer(doc, s.newName);
+      // 揺れ方は元のレイヤーにそろえる(同じ物の一部として揺れるように)
+      layer.physics = { ...f.layer.physics, motionParams: { ...f.layer.physics.motionParams } };
+      doc.layers.splice(f.index + 1, 0, layer);
+      s.newLayer = layer;
+      this.store.emit('layers', { docId: doc.id });
+    } else if (!on && s.newLayer) {
+      const i = doc.layers.indexOf(s.newLayer);
+      if (i >= 0) doc.layers.splice(i, 1);
+      s.newLayer = null;
+      this.store.emit('layers', { docId: doc.id });
+    }
   }
 
   private renderInflate(): void {
     const s = this.inflateSession, doc = this.doc; if (!s || !doc) return;
-    const layer = this.store.findLayer(s.layerId)?.layer; if (!layer) return;
-    const wm = layer.weights, st = s.settings;
-    const pop = Math.min(LIMITS.pop.max, popForHeight(st.height, s.originalPop));
-    if (pop !== s.pop) {
-      s.pop = pop;
-      s.base = rescaleForPop(s.original, s.originalPop, pop);
-      this.setPreviewPop(s.layerId, pop);
+    const source = this.store.findLayer(s.layerId)?.layer; if (!source) return;
+    const st = s.settings;
+    // 仮のレイヤーは数えずに、もう1枚足せるか
+    const layerCount = doc.layers.length - (s.newLayer ? 1 : 0);
+    const over = st.height > s.sourcePop, useNew = over && layerCount < LIMITS.maxLayers;
+    s.limited = over && !useNew;
+    // 範囲を描いたレイヤーは、新しいレイヤーに作るときは元のまま、そうでなければ元の上に重ねる
+    source.weights.data.set(s.original);
+    this.store.weightsChanged(s.layerId, source.weights.fullRect, false);
+    this.setPreviewLayer(useNew);
+    const target = s.newLayer ?? source, wm = target.weights;
+    if (s.newLayer) {
+      wm.data.fill(0);
+      const pop = Math.min(LIMITS.pop.max, Math.ceil(st.height));
+      if (s.newLayer.pop !== pop) { s.newLayer.pop = pop; this.store.emit('layer', { layerId: s.newLayer.id, keys: ['pop'] }); }
     }
-    wm.data.set(s.base);
+    const base = s.newLayer ? wm.data.slice() : s.original;
     const a = s.area, kx = wm.width / doc.image.width, ky = wm.height / doc.image.height;
-    const level = pop > 0 ? Math.min(1, st.height / pop) : 0;
-    inflateShape(wm, s.base, {
+    const level = target.pop > 0 ? Math.min(1, st.height / target.pop) : 0;
+    inflateShape(wm, base, {
       kind: st.shape, cx: (a.x / doc.image.width + 0.5) * wm.width, cy: (0.5 - a.y / doc.image.height) * wm.height, rx: a.w / 2 * kx, ry: a.h / 2 * ky,
     }, { level, softness: st.softness, profile: st.profile, blend: st.blend });
-    this.store.weightsChanged(s.layerId, wm.fullRect, false);
+    this.store.weightsChanged(target.id, wm.fullRect, false);
   }
 
   endInflate(apply: boolean): void {
-    const s = this.inflateSession; if (!s) return;
+    const s = this.inflateSession, doc = this.doc; if (!s) return;
+    const source = this.store.findLayer(s.layerId)?.layer, newLayer = s.newLayer;
+    if (!apply || !doc || !source) {
+      this.setPreviewLayer(false);
+      if (source) { source.weights.data.set(s.original); this.store.weightsChanged(s.layerId, source.weights.fullRect, false); }
+      this.inflateSession = null;
+      this.emit('inflate', 'end');
+      return;
+    }
     this.inflateSession = null;
-    const layer = this.store.findLayer(s.layerId)?.layer;
-    if (layer) {
-      const wm = layer.weights, st = s.settings;
-      if (!apply) {
-        wm.data.set(s.original);
-        this.store.weightsChanged(s.layerId, wm.fullRect, false);
-        this.setPreviewPop(s.layerId, s.originalPop);
-      } else {
-        this.inflateSettings = { ...st }; // 次に描くときも同じ設定で始める
-        const tiles = diffTiles(s.original, wm), popChanged = s.pop !== s.originalPop;
-        if (!tiles.length && !popChanged) toast('変化はありませんでした。');
-        else {
-          const label = `膨らませる(${st.shape === 'ellipse' ? '楕円' : '矩形'} ${Math.round(s.area.w)}×${Math.round(s.area.h)}px・高さ ${st.height}px)`;
-          const edit = new WeightEdit(label, s.layerId, tiles);
-          // ポップ量を上げたときは、ポップ量とウェイトをまとめて1手にする(戻すと両方が元に戻る)
-          this.history.push(popChanged ? new Batch(label, [new PatchLayer(label, s.layerId, { pop: s.originalPop }, { pop: s.pop }), edit]) : edit);
-          this.store.emit('change', undefined);
-        }
+    const st = s.settings;
+    this.inflateSettings = { ...st }; // 次に描くときも同じ設定で始める
+    const shape = `${st.shape === 'ellipse' ? '楕円' : '矩形'} ${Math.round(s.area.w)}×${Math.round(s.area.h)}px`;
+    if (newLayer) {
+      // 仮に入れたレイヤーをそのまま正式に追加する。戻すとレイヤーごと消え、元のレイヤーは触れていないので元どおり
+      const index = doc.layers.indexOf(newLayer);
+      this.history.push(new InsertLayer(`膨らませる(${shape}・高さ ${st.height}px・新しいレイヤー「${newLayer.name}」)`, doc.id, newLayer, index));
+      this.store.emit('change', undefined);
+      this.setActiveLayer(newLayer.id);
+    } else {
+      const tiles = diffTiles(s.original, source.weights);
+      const height = s.limited ? s.sourcePop : st.height; // 上限の枚数で新しいレイヤーを作れないときは、ポップ量で止まる
+      if (!tiles.length) toast('変化はありませんでした。');
+      else {
+        this.history.push(new WeightEdit(`膨らませる(${shape}・高さ ${height}px)`, s.layerId, tiles));
+        this.store.emit('change', undefined);
       }
     }
     this.emit('inflate', 'end');
@@ -794,6 +833,13 @@ export class App extends Emitter<AppEvents> {
       this.emit('status', undefined);
     }
   }
+}
+
+/** 膨らませるで作るレイヤーの名前(膨らみ1, 膨らみ2, …のうち、まだ無いもの) */
+function nextInflateLayerName(doc: Document): string {
+  let n = 1;
+  while (doc.layers.some(l => l.name === `膨らみ${n}`)) n++;
+  return `膨らみ${n}`;
 }
 
 function nextLayerName(doc: Document): string {
