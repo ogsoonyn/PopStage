@@ -11,6 +11,7 @@ export const vertexShader = /* glsl */ `
   uniform int uLayerCount;
   uniform float uPop[${MAX_LAYERS}];
   uniform vec3 uSwing[${MAX_LAYERS}];
+  uniform float uFlat;
   varying vec2 vUv;
   varying vec2 vP;
   void main() {
@@ -23,6 +24,8 @@ export const vertexShader = /* glsl */ `
       float w = textureLod(uW, vec3(wuv, float(i)), 0.0).r;
       p += w * (vec3(0.0, 0.0, uPop[i]) + uSwing[i]);
     }
+    // ポップ一時OFF: 持ち上げと揺れを消して平らな画像に戻す
+    p = mix(p, position, uFlat);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
   }
 `;
@@ -34,7 +37,7 @@ export const fragmentShader = /* glsl */ `
   uniform int uLayerCount;
   uniform float uPop[${MAX_LAYERS}];
   uniform int uActive;
-  uniform float uOverlay, uGrid, uShade, uBrushOn, uOpacity;
+  uniform float uOverlay, uGrid, uShade, uBrushOn, uOpacity, uFade, uFlat;
   uniform vec2 uGridN, uSize, uWTexel;
   uniform vec3 uBrush;
   varying vec2 vUv;
@@ -46,7 +49,7 @@ export const fragmentShader = /* glsl */ `
       if (i >= uLayerCount) break;
       h += texture(uW, vec3(wuv, float(i))).r * uPop[i];
     }
-    return h;
+    return h * (1.0 - uFlat);
   }
 
   void main() {
@@ -64,11 +67,19 @@ export const fragmentShader = /* glsl */ `
       c.rgb *= clamp(0.45 + 0.8 * l, 0.35, 1.25);
     }
 
-    // 選択中レイヤーのウェイトを半透明の色で重ねる
+    // 画像を薄く: 色を落として半透明にし、塗りの状況を見やすくする
+    if (uFade > 0.5) {
+      float g = dot(c.rgb, vec3(0.299, 0.587, 0.114));
+      c.rgb = mix(c.rgb, vec3(g), 0.7);
+      c.a *= 0.25;
+    }
+
+    // 選択中レイヤーのウェイトを半透明の色で重ねる(画像を薄くしているときは濃く)
     if (uActive >= 0 && uOverlay > 0.5) {
       float w = texture(uW, vec3(wuv, float(uActive))).r;
-      c.rgb = mix(c.rgb, vec3(1.0, 0.2, 0.5), w * 0.5);
-      c.a = max(c.a, w * 0.5);
+      float k = uFade > 0.5 ? 0.9 : 0.5;
+      c.rgb = mix(c.rgb, vec3(1.0, 0.2, 0.5), clamp(w * k / max(max(c.a, w * k), 1e-4), 0.0, 1.0));
+      c.a = max(c.a, w * k);
     }
 
     // グリッド(メッシュの分割線)

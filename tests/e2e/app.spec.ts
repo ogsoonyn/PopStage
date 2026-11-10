@@ -113,6 +113,39 @@ test('全体をぼかす: プレビュー、キャンセル、適用、元に戻
   expect(await snapshot()).toBe(blurred);
 });
 
+test('画像を薄く・ポップを一時OFF: 画面だけが変わり、書き出しには影響しない', async ({ page }) => {
+  await boot(page);
+  await dragOnStage(page, [0.5, 0.5], [0.65, 0.45], 'right'); // 斜めから見て持ち上がりを分かるようにする
+  const frame = () => page.evaluate(() => {
+    const a = (window as any).popstage;
+    return Array.from(a.stage.renderFrame(64, 48, a.project.camera, null) as Uint8ClampedArray).join(',');
+  });
+  const stage = page.locator('#stage');
+  const shot0 = await stage.screenshot(), frame0 = await frame();
+  await page.locator('#view').focus();
+
+  await page.keyboard.press('f');
+  await page.waitForTimeout(100);
+  expect(await page.locator('#vFlat').isChecked()).toBe(true);
+  await expect(page.locator('#sRec')).toContainText('ポップOFF');
+  const shotFlat = await stage.screenshot();
+  expect(shotFlat.equals(shot0)).toBe(false);
+  expect(await frame()).toBe(frame0);
+
+  await page.keyboard.press('Shift+W');
+  await page.waitForTimeout(100);
+  expect(await page.locator('#vFade').isChecked()).toBe(true);
+  expect(await page.locator('#vOverlay').isChecked()).toBe(true);
+  expect((await stage.screenshot()).equals(shotFlat)).toBe(false);
+  expect(await frame()).toBe(frame0);
+
+  await page.locator('#vFade').uncheck();
+  await page.locator('#vFlat').uncheck();
+  await page.mouse.move(1, 1);
+  await page.waitForTimeout(100);
+  expect((await stage.screenshot()).equals(shot0)).toBe(true);
+});
+
 test('右ドラッグで視点が回り、Home で戻る', async ({ page }) => {
   await boot(page);
   const yaw0 = await page.evaluate(() => (window as any).popstage.project.camera.yaw);

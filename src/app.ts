@@ -42,7 +42,7 @@ export class App extends Emitter<AppEvents> {
 
   tool: Tool = 'brush';
   activeLayerId: string | null = null;
-  view: ViewOptions = { overlay: true, grid: false, shade: false };
+  view: ViewOptions = { overlay: true, grid: false, shade: false, fade: false, flat: false };
   paused = false;
   brush: BrushOptions = { size: 64, strength: 0.3, hardness: 0, pressure: 'strength' };
   imageCanvas: HTMLCanvasElement | null = null;
@@ -150,7 +150,12 @@ export class App extends Emitter<AppEvents> {
     this.emit('active', id);
   }
 
-  setViewOption(key: keyof ViewOptions, on: boolean): void { this.view[key] = on; this.syncView(); }
+  setViewOption(key: keyof ViewOptions, on: boolean): void {
+    this.view[key] = on;
+    // 画像を薄くするのは塗りを見るためなので、重ね表示も合わせて入れる
+    if (key === 'fade' && on) this.view.overlay = true;
+    this.syncView();
+  }
 
   setPaused(on: boolean): void {
     this.paused = on;

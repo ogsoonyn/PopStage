@@ -7,7 +7,13 @@ import type { CameraState, Document, Layer, Vec3 } from '../model/project';
 import type { Rect } from '../model/weightmap';
 import { vertexShader, fragmentShader, MAX_LAYERS } from './shaders';
 
-export interface ViewOptions { overlay: boolean; grid: boolean; shade: boolean }
+export interface ViewOptions {
+  overlay: boolean; grid: boolean; shade: boolean;
+  /** 画像を薄くして塗りを見やすくする */
+  fade: boolean;
+  /** ポップ(持ち上げと揺れ)を一時的に消して平らに表示する */
+  flat: boolean;
+}
 
 export interface PickResult {
   x: number; y: number; // ドキュメントのローカル座標(ピクセル)
@@ -49,6 +55,7 @@ export class Stage {
       uSwing: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector3()) },
       uActive: { value: -1 }, uOverlay: { value: 1 }, uGrid: { value: 0 }, uShade: { value: 0 },
       uBrushOn: { value: 0 }, uBrush: { value: new THREE.Vector3() }, uOpacity: { value: 1 },
+      uFade: { value: 0 }, uFlat: { value: 0 },
       uGridN: { value: this.gridN }, uSize: { value: new THREE.Vector2(1, 1) }, uWTexel: { value: new THREE.Vector2(1, 1) },
     };
     this.material = new THREE.ShaderMaterial({
@@ -177,6 +184,8 @@ export class Stage {
     this.uniforms.uOverlay.value = o.overlay ? 1 : 0;
     this.uniforms.uGrid.value = o.grid ? 1 : 0;
     this.uniforms.uShade.value = o.shade ? 1 : 0;
+    this.uniforms.uFade.value = o.fade ? 1 : 0;
+    this.uniforms.uFlat.value = o.flat ? 1 : 0;
     this.uniforms.uActive.value = activeIndex;
   }
 
@@ -249,15 +258,16 @@ export class Stage {
 
   /**
    * 指定サイズでオフスクリーンに描き、上の行から並んだ RGBA(ストレートアルファ)を返す。
-   * ウェイト重ね表示・グリッド・ブラシカーソルは描かない。
+   * ウェイト重ね表示・グリッド・ブラシカーソル・画像を薄く・ポップ一時OFF は反映しない。
    */
   renderFrame(width: number, height: number, cam: CameraState, background: string | null, out?: Uint8ClampedArray): Uint8ClampedArray {
     if (!this.exportTarget || this.exportTarget.width !== width || this.exportTarget.height !== height) {
       this.exportTarget?.dispose();
       this.exportTarget = new THREE.WebGLRenderTarget(width, height, { samples: 4, depthBuffer: true });
     }
-    const u = this.uniforms, saved = [u.uOverlay.value, u.uGrid.value, u.uBrushOn.value];
-    u.uOverlay.value = 0; u.uGrid.value = 0; u.uBrushOn.value = 0;
+    const u = this.uniforms, viewOnly = [u.uOverlay, u.uGrid, u.uBrushOn, u.uFade, u.uFlat];
+    const saved = viewOnly.map(x => x.value);
+    for (const x of viewOnly) x.value = 0;
     const clear = new THREE.Color(), clearAlpha = this.renderer.getClearAlpha();
     this.renderer.getClearColor(clear);
     this.setBackground(background);
@@ -271,7 +281,7 @@ export class Stage {
     this.renderer.setRenderTarget(null);
     this.renderer.setClearColor(clear, clearAlpha);
     this.camera.aspect = aspect;
-    [u.uOverlay.value, u.uGrid.value, u.uBrushOn.value] = saved;
+    viewOnly.forEach((x, i) => { x.value = saved[i]; });
 
     // 下から上へ並んでいるので反転し、乗算済みの色をストレートアルファへ戻す
     const px = out && out.length === raw.length ? out : new Uint8ClampedArray(raw.length);

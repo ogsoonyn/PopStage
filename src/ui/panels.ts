@@ -180,6 +180,8 @@ export function bindPanels(app: App): { refresh: () => void } {
   /* ---------- 表示 ---------- */
 
   $<HTMLInputElement>('vOverlay').addEventListener('change', e => app.setViewOption('overlay', (e.target as HTMLInputElement).checked));
+  $<HTMLInputElement>('vFade').addEventListener('change', e => app.setViewOption('fade', (e.target as HTMLInputElement).checked));
+  $<HTMLInputElement>('vFlat').addEventListener('change', e => app.setViewOption('flat', (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>('vGrid').addEventListener('change', e => app.setViewOption('grid', (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>('vShade').addEventListener('change', e => app.setViewOption('shade', (e.target as HTMLInputElement).checked));
   $<HTMLInputElement>('vPause').addEventListener('change', e => app.setPaused((e.target as HTMLInputElement).checked));
@@ -312,6 +314,8 @@ export function bindPanels(app: App): { refresh: () => void } {
     setRange('pPeriod', Math.round(p.autoSwing.period * 10), `${p.autoSwing.period.toFixed(1)}秒`);
     setRange('pAutoStr', Math.round(p.autoSwing.strength * 100), pct(p.autoSwing.strength * 100));
     $<HTMLInputElement>('vOverlay').checked = app.view.overlay;
+    $<HTMLInputElement>('vFade').checked = app.view.fade;
+    $<HTMLInputElement>('vFlat').checked = app.view.flat;
     $<HTMLInputElement>('vGrid').checked = app.view.grid;
     $<HTMLInputElement>('vShade').checked = app.view.shade;
     $<HTMLInputElement>('vPause').checked = app.paused;
