@@ -252,9 +252,10 @@ export class App extends Emitter<AppEvents> {
   get busy(): boolean { return this.exporting || this.stroking || this.previewingBlur || this.opening; }
   private opening = false;
 
-  async openFile(file: File, handle?: FileSystemFileHandle): Promise<void> {
+  /** confirmed: 未保存の変更を捨ててよいか、呼ぶ側で確かめ済み */
+  async openFile(file: File, handle?: FileSystemFileHandle, opts: { confirmed?: boolean } = {}): Promise<void> {
     if (this.busy) { toast('いまはファイルを開けません。処理が終わってからもう一度お試しください。', 'warning'); return; }
-    await this.whileOpening(() => this.openFileNow(file, handle));
+    await this.whileOpening(() => this.openFileNow(file, handle, !!opts.confirmed));
   }
 
   /** ファイルを開いている間は、ほかのファイルを開かせない(起動時の復元にも使う) */
@@ -263,14 +264,15 @@ export class App extends Emitter<AppEvents> {
     try { return await fn(); } finally { this.opening = false; }
   }
 
-  private async openFileNow(file: File, handle?: FileSystemFileHandle): Promise<void> {
+  private async openFileNow(file: File, handle: FileSystemFileHandle | undefined, confirmed: boolean): Promise<void> {
     if (isProjectFile(file)) {
-      if (!(await this.confirmDiscard())) return;
+      if (!confirmed && !(await this.confirmDiscard())) return;
       const bytes = new Uint8Array(await file.arrayBuffer());
-      if (await this.openProjectBytes(bytes, file.name, handle ?? null)) await this.remember('project', file.name, file.size, handle, () => bytes);
+      // 一覧への記録は待たない(記録が遅れたり失敗したりしても、次のファイルを開けるように)
+      if (await this.openProjectBytes(bytes, file.name, handle ?? null)) void this.remember('project', file.name, file.size, handle, () => bytes);
     } else if (isImageFile(file)) {
-      if (!(await this.confirmDiscard())) return;
-      if (await this.openImage(file)) await this.remember('image', file.name, file.size, handle, async () => new Uint8Array(await file.arrayBuffer()));
+      if (!confirmed && !(await this.confirmDiscard())) return;
+      if (await this.openImage(file)) void this.remember('image', file.name, file.size, handle, async () => new Uint8Array(await file.arrayBuffer()));
     } else {
       toast('PNG / JPEG / WebP の画像か、.popstage ファイルを選んでください。', 'warning');
     }

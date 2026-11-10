@@ -26,7 +26,9 @@ export function bindRecentDialog(app: App): { open: () => Promise<void> } {
     list.replaceChildren(...entries.map(card));
     empty.classList.toggle('hidden', entries.length > 0);
     clear.disabled = entries.length === 0;
-    if (focusIndex >= 0 && entries.length) list.querySelectorAll<HTMLButtonElement>('button.recent-open')[Math.min(focusIndex, entries.length - 1)]?.focus();
+    if (focusIndex < 0) return;
+    if (entries.length) list.querySelectorAll<HTMLButtonElement>('button.recent-open')[Math.min(focusIndex, entries.length - 1)]?.focus();
+    else dlg.querySelector<HTMLButtonElement>('form[method=dialog] button')?.focus(); // 空になったら「閉じる」へ
   }
 
   function card(e: RecentEntry, i: number): HTMLElement {
@@ -36,6 +38,7 @@ export function bindRecentDialog(app: App): { open: () => Promise<void> } {
     btn.type = 'button';
     btn.className = 'recent-open flex flex-col w-full text-left rounded-box border border-base-300 bg-base-100 hover:border-primary focus-visible:outline-2 focus-visible:outline-primary overflow-hidden';
     btn.title = `${e.name}(${formatBytes(e.size)})\nDelete キーで一覧から外す`;
+    btn.setAttribute('aria-keyshortcuts', 'Delete');
     const pic = document.createElement('div');
     pic.className = 'recent-thumb aspect-[4/3] bg-base-200 flex items-center justify-center';
     if (e.thumb) {
@@ -90,13 +93,22 @@ export function bindRecentDialog(app: App): { open: () => Promise<void> } {
     }
     if (e.bytes) {
       const ext = e.name.split('.').pop()?.toLowerCase() ?? '';
-      return new File([e.bytes as BlobPart], e.name, { type: MIME[ext] ?? '' });
+      return new File([e.bytes], e.name, { type: MIME[ext] ?? '' });
     }
     throw new DOMException('中身が残っていません', 'NotFoundError');
   }
 
+  /** ダブルクリックなどで2回目が来ても無視する */
+  let opening = false;
+
   async function openEntry(e: RecentEntry): Promise<void> {
+    if (opening) return;
     if (app.busy) { toast('いまはファイルを開けません。処理が終わってからもう一度お試しください。', 'warning'); return; }
+    opening = true;
+    try { await openEntryNow(e); } finally { opening = false; }
+  }
+
+  async function openEntryNow(e: RecentEntry): Promise<void> {
     let file: File | null;
     try { file = await readEntry(e); } catch (err) {
       if ((err as DOMException).name === 'NotFoundError') {
@@ -107,8 +119,10 @@ export function bindRecentDialog(app: App): { open: () => Promise<void> } {
       return;
     }
     if (!file) return;
+    // 未保存の確認は一覧を出したまま行い、やめたら一覧に戻れるようにする
+    if (!(await app.confirmDiscard())) return;
     dlg.close();
-    await app.openFile(file, e.handle);
+    await app.openFile(file, e.handle, { confirmed: true });
   }
 
   clear.addEventListener('click', async () => {

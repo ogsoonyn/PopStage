@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { trimRecent, RECENT_MAX, COPY_TOTAL, type RecentEntry } from '../../src/storage/recent';
 
 const entry = (id: string, openedAt: number, copy = 0): RecentEntry =>
-  ({ id, name: `${id}.png`, kind: 'image', openedAt, size: copy, bytes: copy ? new Uint8Array(copy) : undefined });
+  ({ id, name: `${id}.png`, kind: 'image', openedAt, size: copy, bytes: copy ? new Blob([new Uint8Array(copy)]) : undefined });
 
 describe('最近開いたファイルの上限', () => {
   it('新しい順に並べ、件数の上限を超えた古いものから外す', () => {

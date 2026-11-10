@@ -24,8 +24,8 @@ export interface RecentEntry {
   thumb?: Blob;
   /** ファイルの場所(Chrome 系) */
   handle?: FileSystemFileHandle;
-  /** 場所を覚えられないときの中身のコピー */
-  bytes?: Uint8Array;
+  /** 場所を覚えられないときの中身のコピー。Blob なら一覧を読むだけでは中身がメモリに載らない */
+  bytes?: Blob;
 }
 
 export interface RecentInput {
@@ -52,7 +52,7 @@ export function trimRecent(entries: readonly RecentEntry[]): { keep: RecentEntry
   const keep: RecentEntry[] = [], drop: string[] = [];
   let copies = 0;
   for (const e of sorted) {
-    const copy = e.bytes?.byteLength ?? 0;
+    const copy = e.bytes?.size ?? 0;
     if (keep.length >= RECENT_MAX || copies + copy > COPY_TOTAL) { drop.push(e.id); continue; }
     copies += copy;
     keep.push(e);
@@ -114,11 +114,12 @@ export const recent = {
     return serial(async () => {
       try {
         const handle = isRealHandle(input.handle) ? input.handle : undefined;
-        let bytes: Uint8Array | undefined;
+        let bytes: Blob | undefined;
         if (!handle) {
           if (!input.bytes || input.size > COPY_MAX) return false;
-          bytes = await input.bytes();
-          if (bytes.byteLength > COPY_MAX) return false;
+          const data = await input.bytes();
+          if (data.byteLength > COPY_MAX) return false;
+          bytes = new Blob([data as BlobPart]);
         }
         const entries = await recent.list();
         const same = await findSame(entries, { name: input.name, kind: input.kind, handle });

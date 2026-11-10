@@ -314,6 +314,9 @@ test('右ドラッグで視点が回り、Home で正面に戻る', async ({ pag
   await boot(page);
   const cam = () => page.evaluate(() => (window as any).popstage.project.camera);
   const yaw0 = (await cam()).yaw;
+  // 開いた直後は、膨らみが分かるよう斜めから見ている
+  expect(Math.abs(yaw0)).toBeGreaterThan(0.1);
+  expect(Math.abs((await cam()).pitch)).toBeGreaterThan(0.1);
   await dragOnStage(page, [0.5, 0.5], [0.7, 0.6], 'right');
   await page.evaluate(() => { const c = (window as any).popstage.project.camera; c.zoom = 2.5; c.target = { x: 40, y: -20, z: 5 }; c.fov = 50; });
   expect((await cam()).yaw).not.toBeCloseTo(yaw0);
@@ -777,6 +780,14 @@ test('見た目の基準画像(揺れ停止・正面寄りの視点)', async ({ 
 
 /* ---------- 最近開いたファイル ---------- */
 
+/** 最近開いたファイルの記録(IndexedDB)を読む。記録は開く処理を待たずに進むので、件数が揃うまで待つのに使う */
+const recentStored = (page: Page) => page.evaluate(async () => {
+  const mod = '/src/storage/recent.ts';
+  const { recent } = await import(/* @vite-ignore */ mod);
+  return (await recent.list()).map((e: any) => ({ name: e.name, handle: !!e.handle, blob: e.bytes instanceof Blob }));
+});
+const waitRecent = (page: Page, n: number) => expect.poll(async () => (await recentStored(page)).length).toBe(n);
+
 async function openRecentDialog(page: Page): Promise<void> {
   await page.locator('#menubar [role=button]', { hasText: 'ファイル' }).click();
   await page.locator('#menubar button[data-cmd=recent]').click();
@@ -802,6 +813,9 @@ test('最近開いたファイル: 開いた画像が縮小画像付きで並び
   await page.evaluate(async () => { const a = (window as any).popstage; await a.openFile((window as any).__png); });
   await makePng(page, 'blue.png', '#33e');
   await page.evaluate(async () => { const a = (window as any).popstage; await a.openFile((window as any).__png); await a.loadSample(); });
+  await waitRecent(page, 2);
+  // コピーは Blob で持つ(一覧を読むだけでは中身がメモリに載らない)
+  expect(await recentStored(page)).toEqual([{ name: 'blue.png', handle: false, blob: true }, { name: 'red.png', handle: false, blob: true }]);
 
   await openRecentDialog(page);
   const cards = page.locator('#recentList li');
@@ -810,12 +824,13 @@ test('最近開いたファイル: 開いた画像が縮小画像付きで並び
   await expect(cards.first()).toContainText('コピー');
   const thumbOk = await cards.first().locator('img').evaluate((img: HTMLImageElement) => img.decode().then(() => img.naturalWidth > 0));
   expect(thumbOk).toBe(true);
-  // 開いた画像を指す最初の項目にフォーカスがあり、Enter で開ける
+  // 最初の項目にフォーカスがある
   await expect(cards.first().locator('button.recent-open')).toBeFocused();
   await cards.nth(1).locator('button.recent-open').click();
   await expect(page.locator('#recentDialog')).not.toHaveAttribute('open', '');
   await expect.poll(() => page.evaluate(() => (window as any).popstage.doc.name)).toBe('red.png');
   // 開き直すと先頭へ移り、重複しない
+  await expect.poll(async () => (await recentStored(page)).map((e: { name: string }) => e.name)).toEqual(['red.png', 'blue.png']);
   await openRecentDialog(page);
   await expect(cards.locator('.recent-name')).toHaveText(['red.png', 'blue.png']);
 });
@@ -826,6 +841,7 @@ test('最近開いたファイル: 一覧から外す・消去する(ファイ�
     await makePng(page, n, c);
     await page.evaluate(async () => { await (window as any).popstage.openFile((window as any).__png); });
   }
+  await waitRecent(page, 3);
   await openRecentDialog(page);
   const names = page.locator('#recentList .recent-name');
   await expect(names).toHaveText(['c.png', 'b.png', 'a.png']);
@@ -844,6 +860,36 @@ test('最近開いたファイル: 一覧から外す・消去する(ファイ�
   await page.locator('#askYes').click();
   await expect(page.locator('#recentEmpty')).toBeVisible();
   await expect(page.locator('#recentDialog')).toHaveAttribute('open', '');
+  expect(await recentStored(page)).toEqual([]);
+});
+
+test('最近開いたファイル: 未保存の確認でやめたら一覧に戻る。記録に失敗しても開ける', async ({ page }) => {
+  await boot(page);
+  await makePng(page, 'keep.png', '#e33');
+  await page.evaluate(async () => { const a = (window as any).popstage; await a.openFile((window as any).__png); await a.loadSample(); a.addLayer(); });
+  await waitRecent(page, 1);
+  expect(await page.evaluate(() => (window as any).popstage.dirty)).toBe(true);
+  await openRecentDialog(page);
+  // ダブルクリックしても確認は1回だけ
+  await page.locator('#recentList button.recent-open').first().dblclick();
+  await expect(page.locator('#askTitle')).toHaveText('保存されていない変更があります');
+  await page.locator('#askNo').click();
+  await expect(page.locator('#recentDialog')).toHaveAttribute('open', '');
+  await expect(page.locator('#askDialog')).not.toHaveAttribute('open', '');
+  expect(await page.evaluate(() => (window as any).popstage.doc.name)).not.toBe('keep.png');
+  await page.locator('#recentList button.recent-open').first().click();
+  await page.locator('#askYes').click();
+  await expect.poll(() => page.evaluate(() => (window as any).popstage.doc.name)).toBe('keep.png');
+  await expect(page.locator('#toasts')).not.toContainText('いまはファイルを開けません');
+
+  // IndexedDB が開けなくても、画像は開ける(一覧に入らないだけ)
+  await makePng(page, 'nodb.png', '#3e3');
+  await page.evaluate(() => { indexedDB.open = () => { throw new Error('IndexedDB は使えません'); }; });
+  await page.evaluate(async () => { await (window as any).popstage.openFile((window as any).__png); });
+  expect(await page.evaluate(() => (window as any).popstage.doc.name)).toBe('nodb.png');
+  await makePng(page, 'next.png', '#33e');
+  await page.evaluate(async () => { await (window as any).popstage.openFile((window as any).__png); });
+  expect(await page.evaluate(() => (window as any).popstage.doc.name)).toBe('next.png');
 });
 
 test('最近開いたファイル: ファイルの場所を覚えて開き直し、保存も元のファイルへ。消えたファイルは一覧から外せる', async ({ page }) => {
@@ -862,17 +908,13 @@ test('最近開いたファイル: ファイルの場所を覚えて開き直し
     await a.save();
     await a.loadSample();
   });
+  await waitRecent(page, 2);
   await openRecentDialog(page);
   const cards = page.locator('#recentList li');
   await expect(cards.locator('.recent-name')).toHaveText(['work.popstage', 'photo.png']);
   await expect(cards.first()).toContainText('プロジェクト');
   await expect(page.locator('#recentList')).not.toContainText('コピー');
-  const stored = await page.evaluate(async () => {
-    const mod = '/src/storage/recent.ts';
-    const { recent } = await import(/* @vite-ignore */ mod);
-    return (await recent.list()).map((e: any) => ({ name: e.name, handle: !!e.handle, bytes: !!e.bytes }));
-  });
-  expect(stored).toEqual([{ name: 'work.popstage', handle: true, bytes: false }, { name: 'photo.png', handle: true, bytes: false }]);
+  expect(await recentStored(page)).toEqual([{ name: 'work.popstage', handle: true, blob: false }, { name: 'photo.png', handle: true, blob: false }]);
 
   // プロジェクトを開き直すと、上書き保存の先も元のファイルになる
   await cards.first().locator('button.recent-open').click();
