@@ -55,6 +55,8 @@ npm run e2e        # E2E テスト(Playwright)
 
 ビルド結果は相対パスで参照し合うので、`dist/` の中身をそのまま任意の静的ホスティングに置けば動きます。
 
+`main` へ push すると、GitHub Actions(`.github/workflows/deploy-pages.yml`)がテストとビルドを行い、GitHub Pages へ公開します。初回だけ、リポジトリの Settings → Pages で Source を「GitHub Actions」にしてください。
+
 ### 使っている主なライブラリ
 
 | 用途 | ライブラリ |
