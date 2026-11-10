@@ -219,6 +219,8 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   function renderList(): void {
     const doc = app.doc;
+    // 作り直してもキーボードのフォーカスを失わないよう、一覧にフォーカスがあったかを覚えておく
+    const hadFocus = list.contains(document.activeElement) && document.activeElement?.tagName === 'LI';
     list.replaceChildren();
     thumbs.clear();
     if (!doc) return;
@@ -229,6 +231,9 @@ export function bindPanels(app: App): { refresh: () => void } {
       li.className = 'flex items-center gap-2 rounded px-1.5 py-1 cursor-pointer hover:bg-base-200';
       li.setAttribute('role', 'option');
       li.setAttribute('aria-selected', String(layer.id === app.activeLayerId));
+      li.setAttribute('aria-label', layer.name);
+      // 一覧の中では選択中の項目だけを Tab で止め、矢印キーで移る(roving tabindex)
+      li.tabIndex = layer.id === app.activeLayerId ? 0 : -1;
       li.dataset.id = layer.id;
 
       const eye = document.createElement('input');
@@ -251,12 +256,34 @@ export function bindPanels(app: App): { refresh: () => void } {
 
       li.append(eye, th, name, info);
       li.addEventListener('click', () => { if (layer.id !== app.activeLayerId) app.setActiveLayer(layer.id); });
+      li.addEventListener('keydown', e => {
+        if (e.target !== li) return;
+        if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); e.stopPropagation(); rename(layer, name); }
+      });
       list.append(li);
     }
+    if (hadFocus) list.querySelector<HTMLElement>('li[aria-selected=true]')?.focus();
   }
 
+  // 上下の矢印・Home・End で選ぶレイヤーを移す
+  list.addEventListener('keydown', e => {
+    if ((e.target as HTMLElement).tagName !== 'LI') return;
+    const items = [...list.querySelectorAll<HTMLElement>('li')];
+    const i = items.indexOf(e.target as HTMLElement);
+    const j = e.key === 'ArrowUp' ? i - 1 : e.key === 'ArrowDown' ? i + 1 : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : -2;
+    if (j === -2) return;
+    e.preventDefault(); e.stopPropagation();
+    const next = items[Math.max(0, Math.min(items.length - 1, j))];
+    if (next.dataset.id && next.dataset.id !== app.activeLayerId) app.setActiveLayer(next.dataset.id);
+    next.focus();
+  });
+
   function updateSelection(): void {
-    list.querySelectorAll('li').forEach(li => li.setAttribute('aria-selected', String(li.dataset.id === app.activeLayerId)));
+    list.querySelectorAll<HTMLElement>('li').forEach(li => {
+      const on = li.dataset.id === app.activeLayerId;
+      li.setAttribute('aria-selected', String(on));
+      li.tabIndex = on ? 0 : -1;
+    });
   }
 
   function rename(layer: Layer, span: HTMLElement): void {
@@ -264,13 +291,15 @@ export function bindPanels(app: App): { refresh: () => void } {
     input.className = 'input input-xs flex-1 min-w-0'; input.value = layer.name;
     span.replaceWith(input); input.focus(); input.select();
     let done = false;
-    const finish = (ok: boolean) => {
+    const finish = (ok: boolean, byKey = false) => {
       if (done) return; done = true;
       const v = input.value.trim();
       if (ok && v && v !== layer.name) history.execute(PatchLayer.from(store, layer.id, { name: v }, '名前の変更'));
       else renderList();
+      // Enter / Esc で終えたときは、項目にフォーカスを戻す(クリックで外したときは奪わない)
+      if (byKey) list.querySelector<HTMLElement>('li[aria-selected=true]')?.focus();
     };
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); e.stopPropagation(); });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true, true); if (e.key === 'Escape') finish(false, true); e.stopPropagation(); });
     input.addEventListener('blur', () => finish(true));
   }
 

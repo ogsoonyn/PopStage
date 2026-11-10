@@ -252,6 +252,35 @@ test('画角のアンドゥは画角だけを戻し、その後に回した視�
   expect((await cam()).fov).toBe(c0.fov + 20);
 });
 
+test('レイヤー一覧はキーボードで選択・名前の変更ができる', async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => { const a = (window as any).popstage; a.addLayer(); a.addLayer(); });
+  const active = () => page.evaluate(() => (window as any).popstage.activeLayer.name as string);
+  const selected = page.locator('#layerList li[aria-selected=true]');
+  // Tab で止まるのは選択中の1項目だけ
+  await expect(page.locator('#layerList li[tabindex="0"]')).toHaveCount(1);
+  await selected.focus();
+  const top = await active();
+  await page.keyboard.press('ArrowDown');
+  expect(await active()).not.toBe(top);
+  await expect(selected).toBeFocused();
+  await page.keyboard.press('End');
+  expect(await active()).toBe('プリン');
+  await page.keyboard.press('Home');
+  expect(await active()).toBe(top);
+  // F2 で名前を変え、Enter で確定するとフォーカスが項目に戻る
+  await page.keyboard.press('F2');
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('かお');
+  await page.keyboard.press('Enter');
+  expect(await active()).toBe('かお');
+  await expect(selected).toBeFocused();
+  // 視点リセット(Home)などのショートカットに取られない
+  await page.evaluate(() => { (window as any).popstage.project.camera.yaw = 1.23; });
+  await page.keyboard.press('Home');
+  expect(await page.evaluate(() => (window as any).popstage.project.camera.yaw)).toBe(1.23);
+});
+
 test('右ドラッグで視点が回り、Home で戻る', async ({ page }) => {
   await boot(page);
   const yaw0 = await page.evaluate(() => (window as any).popstage.project.camera.yaw);
