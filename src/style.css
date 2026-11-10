@@ -44,6 +44,7 @@
   #toolNav > .btn { padding-top: 2px; padding-bottom: 2px; padding-right: 12px; min-height: 0; }
   #toolNav > .divider { margin: 0; height: 8px; }
   #toolNav .nav-icon { display: none; }
+  #toolNav .nav-group > .btn { padding-top: 2px; padding-bottom: 2px; }
 }
 /* 左のメニューの、選択中のレイヤー向けの操作のまとまり */
 #toolNav .nav-icon { font-size: 14px; line-height: 1; }
