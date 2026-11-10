@@ -42,7 +42,9 @@ export function ask(o: AskOptions): Promise<{ ok: boolean; value?: number }> {
     yes.onclick = () => done(true);
     no.onclick = () => done(false);
     input.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); done(true); } };
-    dlg.onclose = () => done(false);
+    // close イベントは閉じた後に遅れて届く。続けて ask() を開いたとき、前の分の close で
+    // 新しいダイアログが閉じないよう、まだ開いているなら無視する(Esc で閉じたときは閉じている)
+    dlg.onclose = () => { if (!dlg.open) done(false); };
     dlg.showModal();
     (o.input ? input : yes).focus();
   });
