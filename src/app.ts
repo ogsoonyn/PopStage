@@ -179,7 +179,7 @@ export class App extends Emitter<AppEvents> {
    * デコードに失敗したら例外を投げ、今の状態には何も触れない。
    * 後から始まった別の読み込みに追い越されたときは何もせず false を返す。
    */
-  async loadProject(project: Project, opts: { fileName?: string | null; handle?: FileSystemFileHandle | null; dirty?: boolean } = {}): Promise<boolean> {
+  async loadProject(project: Project, opts: { fileName?: string | null; handle?: FileSystemFileHandle | null; dirty?: boolean; keepAutosave?: boolean } = {}): Promise<boolean> {
     const doc = project.documents[0];
     if (!doc) throw new Error('プロジェクトに画像が入っていません');
     const token = ++this.syncToken;
@@ -199,14 +199,16 @@ export class App extends Emitter<AppEvents> {
       this.dirty = !!opts.dirty;
       this.applyDocument(canvas);
     } finally { this.loading = false; }
+    // 別の作業に切り替えたので、前の作業の自動保存はもう要らない(復元した作業の読み込みは除く)
+    if (!opts.dirty && !opts.keepAutosave) { clearTimeout(this.autosaveTimer); void autosave.clear(); }
     this.emit('file', undefined);
     return true;
   }
 
-  async loadSample(): Promise<void> {
+  async loadSample(opts: { keepAutosave?: boolean } = {}): Promise<void> {
     const doc = await createSampleDocument();
     const p = createProject(doc);
-    await this.loadProject(p);
+    await this.loadProject(p, { keepAutosave: opts.keepAutosave });
   }
 
   /** 未保存の変更があれば確認する。続けてよければ true。 */
@@ -255,14 +257,17 @@ export class App extends Emitter<AppEvents> {
     } finally { setBusy(false); }
   }
 
-  async openProjectBytes(bytes: Uint8Array, name: string | null, handle: FileSystemFileHandle | null, dirty = false): Promise<void> {
+  /** 開けたら true。開けなければ理由を伝えて false を返し、今の状態は変えない */
+  async openProjectBytes(bytes: Uint8Array, name: string | null, handle: FileSystemFileHandle | null, dirty = false): Promise<boolean> {
     setBusy(true);
     try {
       const { project } = await deserializeProject(bytes, { decodeFallback: browserDecodeGray });
-      if (!(await this.loadProject(project, { fileName: name, handle, dirty }))) return;
+      if (!(await this.loadProject(project, { fileName: name, handle, dirty }))) return false;
       if (name) toast(`「${name}」を開きました。`, 'success');
+      return true;
     } catch (e) {
       toast(e instanceof Error ? e.message : 'プロジェクトを開けませんでした。', 'error', 6000);
+      return false;
     } finally { setBusy(false); }
   }
 

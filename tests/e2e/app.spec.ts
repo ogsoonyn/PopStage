@@ -348,6 +348,57 @@ test('保存して開き直すと同じ状態に戻る', async ({ page }) => {
   expect(result.size).toBeGreaterThan(1000);
 });
 
+/** 自動保存(IndexedDB)を直接読み書きする */
+const autosaveOp = (page: Page, op: 'get' | 'put' | 'clear', entry?: { name: string; bytes: number[] }) => page.evaluate(async ([op, entry]) => {
+  const db: IDBDatabase = await new Promise((res, rej) => {
+    const r = indexedDB.open('popstage', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('autosave');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  const store = db.transaction('autosave', op === 'get' ? 'readonly' : 'readwrite').objectStore('autosave');
+  const req = op === 'get' ? store.get('current') : op === 'clear' ? store.delete('current')
+    : store.put({ savedAt: Date.now(), name: entry!.name, bytes: new Uint8Array(entry!.bytes) }, 'current');
+  const v = await new Promise(res => { req.onsuccess = () => res(req.result); });
+  db.close();
+  return op === 'get' ? (v ? (v as any).name as string : null) : null;
+}, [op, entry] as const);
+
+test('自動保存の復元に失敗したらサンプルで始め、自動保存を残すか消すかを選べる', async ({ page }) => {
+  await page.goto('/?e2e');
+  await autosaveOp(page, 'put', { name: 'broken.popstage', bytes: [1, 2, 3] });
+  const answer = async (yes: boolean) => {
+    await expect(page.locator('#askDialog')).toBeVisible();
+    await page.locator(yes ? '#askYes' : '#askNo').click();
+  };
+  const restoreAndFail = async () => {
+    await page.goto('/?e2e&restore');
+    await expect(page.locator('#askTitle')).toHaveText('前回の作業を復元しますか?');
+    await answer(true);
+    await expect(page.locator('#askTitle')).toHaveText('前回の作業を復元できませんでした');
+  };
+
+  // 残しておく → サンプルが開き、自動保存は残る
+  await restoreAndFail();
+  await answer(false);
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  expect(await autosaveOp(page, 'get')).toBe('broken.popstage');
+
+  // 削除する → 自動保存が消える
+  await restoreAndFail();
+  await answer(true);
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  expect(await autosaveOp(page, 'get')).toBeNull();
+});
+
+test('別のファイルを開くと、前の作業の自動保存は消える', async ({ page }) => {
+  await boot(page);
+  const bytes = await page.evaluate(() => Array.from((window as any).popstage.serialize() as Uint8Array));
+  await autosaveOp(page, 'put', { name: 'old.popstage', bytes: [9, 9, 9] });
+  expect(await autosaveOp(page, 'get')).toBe('old.popstage');
+  expect(await page.evaluate(async (b) => (window as any).popstage.openProjectBytes(new Uint8Array(b), 'new.popstage', null), bytes)).toBe(true);
+  await expect.poll(() => autosaveOp(page, 'get')).toBeNull();
+});
+
 test('ドロップで画像を開ける。ダイアログ表示中・書き出し中は開かない', async ({ page }) => {
   await boot(page);
   const drop = () => page.evaluate(async () => {

@@ -19,6 +19,8 @@ try {
 }
 const params = new URLSearchParams(location.search);
 const e2e = params.has('e2e');
+/** E2E で自動保存の復元を試すときだけ、?e2e&restore で復元の確認を出す */
+const checkRestore = !e2e || params.has('restore');
 (window as unknown as { popstage: App }).popstage = app;
 
 bindStageInput(app, canvas);
@@ -204,17 +206,27 @@ async function boot(): Promise<void> {
   app.stage.resize();
   refreshTool(); refreshCommands();
   app.start();
-  const saved = e2e ? undefined : await autosave.load();
+  const saved = checkRestore ? await autosave.load() : undefined;
   if (saved) {
     const r = await ask({
       title: '前回の作業を復元しますか?',
       body: `「${saved.name}」(${new Date(saved.savedAt).toLocaleString()} に自動保存)が残っています。`,
       yes: '復元する', no: '破棄して新しく始める',
     });
-    if (r.ok) { await app.openProjectBytes(saved.bytes, null, null, true); app.fileName = saved.name; refreshTitle(); return; }
-    await autosave.clear();
+    if (r.ok) {
+      if (await app.openProjectBytes(saved.bytes, null, null, true)) { app.fileName = saved.name; refreshTitle(); return; }
+      // 復元できなかったときはサンプルで始める。壊れた自動保存を残すかは本人に決めてもらう
+      const keep = await ask({
+        title: '前回の作業を復元できませんでした',
+        body: '自動保存のデータを削除しますか? 残しておくと、次回の起動時にもう一度復元を試します。',
+        yes: '削除する', no: '残しておく',
+      });
+      if (keep.ok) await autosave.clear();
+    } else {
+      await autosave.clear();
+    }
   }
-  await app.loadSample();
+  await app.loadSample({ keepAutosave: true });
   if (e2e) app.setPaused(true);
 }
 void boot();
