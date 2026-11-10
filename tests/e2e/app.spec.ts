@@ -178,7 +178,7 @@ test('プリセットで材質・揺らし方・周期が変わり、1手で元�
   });
   const before = await state();
   expect(before).toMatchObject({ preset: 'puru', motion: 'jiggle' });
-  await expect(page.locator('#pPreset option')).toHaveCount(11); // 10 種類 + カスタム
+  await expect(page.locator('#pPreset option')).toHaveCount(12); // 11 種類 + カスタム
 
   await page.selectOption('#pPreset', 'bain');
   expect(await state()).toEqual({ preset: 'bain', motion: 'jump', hardness: 0.25, period: 1.8 });
@@ -191,8 +191,11 @@ test('プリセットで材質・揺らし方・周期が変わり、1手で元�
   await page.keyboard.press('Control+z');
   expect(await state()).toEqual(before);
 
-  // 揺らし方だけ変えるとカスタムになる
+  // 揺らし方は詳細設定の中にあり、変えるとカスタムになる
+  await expect(page.locator('#pMotion')).toBeHidden();
+  await page.locator('#physDetails summary').click();
   await page.selectOption('#pMotion', 'heartbeat');
+  await expect(page.locator('#physSummary')).toContainText('鼓動');
   expect(await state()).toMatchObject({ preset: 'custom', motion: 'heartbeat', hardness: before.hardness });
 });
 

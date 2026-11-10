@@ -88,6 +88,13 @@ export function bindPanels(app: App): { refresh: () => void } {
     const p = physics(); if (!p) return;
     exec('layer', '揺らし方', { physics: { ...p, motion: motionSel.value as MotionPattern, preset: 'custom' } });
   });
+
+  // 詳細設定の開閉は、見る人ごとの好みとしてブラウザに覚えておく(使えなければ毎回閉じた状態)
+  const details = $<HTMLDetailsElement>('physDetails');
+  try { details.open = localStorage.getItem('popstage.physDetails') === 'open'; } catch { /* 無視 */ }
+  details.addEventListener('toggle', () => {
+    try { localStorage.setItem('popstage.physDetails', details.open ? 'open' : 'closed'); } catch { /* 無視 */ }
+  });
   bindRange('pHard', { target: 'layer', keys: ['physics'], label: '硬さ', toPatch: v => physPatch('hardness', v), fmt: pct });
   bindRange('pMass', { target: 'layer', keys: ['physics'], label: '質量', toPatch: v => physPatch('mass', v), fmt: pct });
   bindRange('pDamp', { target: 'layer', keys: ['physics'], label: 'おさまり', toPatch: v => physPatch('damping', v), fmt: pct });
@@ -228,7 +235,8 @@ export function bindPanels(app: App): { refresh: () => void } {
       $<HTMLInputElement>('pSwing').checked = l.physics.enabled;
       presetSel.value = l.physics.preset;
       motionSel.value = l.physics.motion;
-      $('pPresetDesc').textContent = l.physics.preset === 'custom' ? MOTIONS[l.physics.motion].desc : PRESETS[l.physics.preset].desc;
+      $('pPresetDesc').textContent = l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
+      $('physSummary').textContent = `— ${MOTIONS[l.physics.motion].label}`;
       setRange('pHard', Math.round(l.physics.hardness * 100), pct(l.physics.hardness * 100));
       setRange('pMass', Math.round(l.physics.mass * 100), pct(l.physics.mass * 100));
       setRange('pWeight', Math.round(l.physics.weight * 100), pct(l.physics.weight * 100));

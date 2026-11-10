@@ -98,6 +98,7 @@ describe('揺れの物理', () => {
   const cycle = (preset: keyof typeof PRESETS) => {
     const l = layerWith(); l.physics = applyPreset(l.physics, preset);
     const w = new PhysicsWorld(), T = PRESETS[preset].period;
+    w.unitPx = 512; // 長辺 1024px の画像相当
     w.autoSwing = { enabled: true, period: T, strength: 0.5 };
     run(w, [l], Math.ceil(20 / T) * T);
     const xs: number[] = [], ys: number[] = [], zs: number[] = [];
@@ -120,6 +121,17 @@ describe('揺れの物理', () => {
     expect(Math.min(...ys)).toBeLessThan(rest - 0.03);       // 着地で沈み込む
     // 着地後(周期の後半)に静止位置をまたいで何度も弾む
     expect(crossings(ys.slice(Math.round(ys.length * 0.55)), rest)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('ためてぼよん: ポップ量をぐーっと縮めてから、元より大きく膨らんで弾む', () => {
+    const { zs, xs, ys } = cycle('tame');
+    const pop = 80 / 512; // 既定のポップ量 80px を正規化座標へ
+    expect(Math.max(...xs.map(Math.abs), ...ys.map(Math.abs))).toBeLessThan(0.02); // 主に手前方向だけ動く
+    expect(Math.min(...zs)).toBeLessThan(-0.5 * pop); // 半分以上縮む
+    expect(Math.max(...zs)).toBeGreaterThan(0.3 * pop); // 離した勢いで元より 3 割以上膨らむ
+    // 縮める量はポップ量に比例する
+    expect(motionAnchor('charge', 0.55, 1, 0.5, undefined, 2).z).toBeCloseTo(2 * motionAnchor('charge', 0.55, 1, 0.5, undefined, 1).z, 9);
+    expect(motionAnchor('charge', 0.55, 1, 0.5, undefined, 0).z).toBeCloseTo(0, 12);
   });
 
   it('どのプリセットも発散せず、それぞれ違う動きになる', () => {

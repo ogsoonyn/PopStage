@@ -38,6 +38,8 @@ export class PhysicsWorld {
   grabGains = new Map<string, number>();
   /** 外から与えるドキュメントの加速度(画像を振った時など) */
   externalAccel: Vec3 = v3();
+  /** 正規化座標の 1 が何ピクセルか(画像の長辺 / 2)。ポップ量を正規化座標へ直すのに使う */
+  unitPx = 1;
 
   private states = new Map<string, SpringState>();
   private acc = 0;
@@ -71,8 +73,9 @@ export class PhysicsWorld {
       const { k, m, c, g } = coefficients(layer.physics);
       // 土台の位置と速度(速度は1刻み前との差から求める)
       if (on) {
-        motionAnchor(layer.physics.motion, this.time + dt, auto.period, auto.strength, b);
-        motionAnchor(layer.physics.motion, this.time, auto.period, auto.strength, bp);
+        const pop = layer.pop / this.unitPx;
+        motionAnchor(layer.physics.motion, this.time + dt, auto.period, auto.strength, b, pop);
+        motionAnchor(layer.physics.motion, this.time, auto.period, auto.strength, bp, pop);
       } else { zero(b); zero(bp); }
       const bvx = (b.x - bp.x) / dt, bvy = (b.y - bp.y) / dt, bvz = (b.z - bp.z) / dt;
       const gain = grab ? (this.grabGains.get(layer.id) ?? 1) * GRAB_GAIN : 0;

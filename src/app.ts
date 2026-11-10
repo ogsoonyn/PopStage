@@ -121,6 +121,7 @@ export class App extends Emitter<AppEvents> {
     this.stage.rebuildMesh(doc.meshDensity);
     this.stage.setTransform(doc);
     this.stage.setLayers(doc.layers);
+    this.world.unitPx = Math.max(doc.image.width, doc.image.height) / 2;
     this.applyBackground();
     this.syncView();
     this.emit('status', undefined);

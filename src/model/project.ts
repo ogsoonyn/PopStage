@@ -11,7 +11,7 @@ export interface Vec3 { x: number; y: number; z: number }
  * 揺らし方。自動揺らしのとき、塗った部分を支える土台(アンカー)をどう動かすか。
  * 塗った部分はバネで土台に繋がっていて、遅れて付いてくる(physics/motion.ts)。
  */
-export type MotionPattern = 'jiggle' | 'jump' | 'bounce' | 'shiver' | 'float' | 'sway' | 'shake' | 'circle' | 'heartbeat' | 'stretch' | 'none';
+export type MotionPattern = 'charge' | 'jiggle' | 'jump' | 'bounce' | 'shiver' | 'float' | 'sway' | 'shake' | 'circle' | 'heartbeat' | 'stretch' | 'none';
 
 export const MOTIONS: Record<MotionPattern, { label: string; desc: string }> = {
   jiggle: { label: '上下に小刻み', desc: '上下に軽くつついて揺らす' },
@@ -23,11 +23,12 @@ export const MOTIONS: Record<MotionPattern, { label: string; desc: string }> = {
   shake: { label: '左右に振る', desc: '左右に素早く振る' },
   circle: { label: '回転', desc: '円を描いて回る' },
   heartbeat: { label: '鼓動', desc: 'ドクン、ドクンと手前にふくらむ' },
+  charge: { label: 'ためて膨らむ', desc: 'ポップ量をぐーっと縮めてから、いっきにぼよんと膨らませる' },
   stretch: { label: '伸びて戻る', desc: 'ゆっくり引き伸ばして、ぱっと離す' },
   none: { label: 'なし(つかむ操作だけ)', desc: '自動では揺らさない' },
 };
 
-export type PresetName = 'puru' | 'bain' | 'poyo' | 'buru' | 'fuwa' | 'yura' | 'furi' | 'guru' | 'doki' | 'biyo' | 'custom';
+export type PresetName = 'puru' | 'bain' | 'poyo' | 'buru' | 'fuwa' | 'yura' | 'furi' | 'guru' | 'doki' | 'tame' | 'biyo' | 'custom';
 
 /** 揺れのパラメータ。数値はすべて 0〜1 の正規化値。 */
 export interface PhysicsParams {
@@ -120,6 +121,7 @@ export const PRESETS: Record<Exclude<PresetName, 'custom'>, Preset> = {
   furi: { label: 'ふりふり', desc: '左右に素早く振る', hardness: 0.45, mass: 0.35, damping: 0.12, motion: 'shake', period: 1.6 },
   guru: { label: 'ぐるぐる', desc: '円を描いて回る', hardness: 0.2, mass: 0.3, damping: 0.3, motion: 'circle', period: 2 },
   doki: { label: 'どきどき', desc: 'ドクン、ドクンと手前にふくらむ', hardness: 0.55, mass: 0.1, damping: 0.35, motion: 'heartbeat', period: 1 },
+  tame: { label: 'ためてぼよん', desc: 'ぐーっと縮んでから、いっきにぼよんと膨らんで弾む', hardness: 0.3, mass: 0.2, damping: 0.1, motion: 'charge', period: 2 },
   biyo: { label: 'びよーん', desc: 'ゆっくり引き伸ばされて、離すと大きく弾む', hardness: 0.35, mass: 0.2, damping: 0.08, motion: 'stretch', period: 2.4 },
 };
 

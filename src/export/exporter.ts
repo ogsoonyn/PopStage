@@ -48,6 +48,7 @@ export async function runExport(
 
   // 書き出し専用の物理。画面側の状態には触れない
   const world = new PhysicsWorld();
+  world.unitPx = Math.max(doc.image.width, doc.image.height) / 2;
   let samples: RecordSample[] | null = null;
   let camera: CameraState = structuredClone(project.camera);
 

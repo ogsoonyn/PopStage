@@ -4,7 +4,7 @@
  *
  * - 単位は「画像の長辺 = 2」の正規化座標。y が上、z が手前。
  * - どのパターンも周期 T で元に戻る(T の整数倍の長さで書き出せばループする)。
- * - 振れ幅は strength(0〜1)に比例する。
+ * - 振れ幅は strength(0〜1)に比例する。「ためて膨らむ」だけはポップ量にも比例する(pop は正規化座標)。
  */
 import type { MotionPattern, Vec3 } from '../model/project';
 
@@ -24,7 +24,7 @@ function hop(phase: number, start: number, air: number, h: number): number {
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
-export function motionAnchor(pattern: MotionPattern, t: number, period: number, strength: number, out: Vec3 = { x: 0, y: 0, z: 0 }): Vec3 {
+export function motionAnchor(pattern: MotionPattern, t: number, period: number, strength: number, out: Vec3 = { x: 0, y: 0, z: 0 }, pop = 0): Vec3 {
   out.x = out.y = out.z = 0;
   if (strength <= 0 || pattern === 'none') return out;
   const T = Math.max(0.05, period), u = (((t % T) + T) % T) / T, s = strength, th = TAU * u;
@@ -64,6 +64,11 @@ export function motionAnchor(pattern: MotionPattern, t: number, period: number, 
     case 'heartbeat': // ドクン、ドクン、と手前にふくらむ
       out.z = 0.22 * s * (bump(u, 0.06, 0.1) + 0.7 * bump(u, 0.26, 0.1));
       break;
+    case 'charge': { // ポップ量をゆっくり平らに近づけてから、ぱっと元へ戻す(勢いで元より大きく膨らむ)
+      const depth = Math.min(0.95, 1.4 * s);
+      out.z = u < 0.6 ? -depth * pop * smooth(u / 0.6) : 0;
+      break;
+    }
     case 'stretch': // ゆっくり持ち上げて、ぱっと離す
       out.y = u < 0.65 ? 0.2 * s * smooth(u / 0.65) : 0;
       break;
