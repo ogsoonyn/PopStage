@@ -1,5 +1,5 @@
 /**
- * 書き出し形式ごとのエンコーダ(9章)。フレームは上の行から並んだ RGBA(ストレートアルファ)で受け取る。
+ * 書き出し形式ごとのエンコーダ。フレームは上の行から並んだ RGBA(ストレートアルファ)で受け取る。
  */
 import { Output, BufferTarget, Mp4OutputFormat, WebMOutputFormat, CanvasSource, QUALITY_HIGH, canEncodeVideo } from 'mediabunny';
 import { Zip, ZipPassThrough } from 'fflate';

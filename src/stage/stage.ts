@@ -1,5 +1,5 @@
 /**
- * 3Dビュー(5章)。メッシュ生成、シェーダ、カメラ、ピック、書き出し用のオフスクリーン描画。
+ * 3Dビュー。メッシュ生成、シェーダ、カメラ、ピック、書き出し用のオフスクリーン描画。
  * 単位は元画像の 1 ピクセル = 1、画像の中心が原点。
  */
 import * as THREE from 'three';
@@ -57,7 +57,7 @@ export class Stage {
   private orthoCam = new THREE.OrthographicCamera();
   private freeCam = new THREE.PerspectiveCamera(40, 1, 1, 1e6);
   vertexCount = 0;
-  /** 部分転送を使えたか(フェーズ0の検証項目の確認用) */
+  /** ウェイトを部分転送・全面転送した回数(部分転送が効いているかの確認用) */
   partialUploads = 0;
   fullUploads = 0;
 

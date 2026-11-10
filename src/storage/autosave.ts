@@ -1,5 +1,5 @@
 /**
- * IndexedDB への自動保存。タブを閉じても作業が消えないようにする(11章)。
+ * IndexedDB への自動保存。タブを閉じても作業が消えないようにする。
  * 中身は .popstage と同じバイト列。
  */
 const DB_NAME = 'popstage';

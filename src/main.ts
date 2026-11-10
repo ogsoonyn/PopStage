@@ -122,7 +122,7 @@ function refreshTool(): void {
 document.querySelectorAll<HTMLButtonElement>('.tool').forEach(b => b.addEventListener('click', () => app.setTool(b.dataset.tool as Tool)));
 app.on('tool', refreshTool);
 
-/* ---------- ショートカット(8章) ---------- */
+/* ---------- ショートカット ---------- */
 
 const anyDialogOpen = () => !!document.querySelector('dialog[open]');
 

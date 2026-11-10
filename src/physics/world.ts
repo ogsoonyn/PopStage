@@ -1,5 +1,5 @@
 /**
- * 揺れの物理(7章、A案: レイヤー単位のバネ・ダンパ)。DOM と Three.js に依存しない。
+ * 揺れの物理(レイヤー単位のバネ・ダンパ)。DOM と Three.js に依存しない。
  *
  *   m s'' = -k (s - b) - c (s' - b') + F_inertia + F_gravity + F_grab
  *

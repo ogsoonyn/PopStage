@@ -1,5 +1,5 @@
 /**
- * .popstage 形式(4章)。ZIP の中に project.json、元画像、ウェイトマップ(グレースケールPNG)、サムネイルを入れる。
+ * .popstage 形式。ZIP の中に project.json、元画像、ウェイトマップ(グレースケールPNG)、サムネイルを入れる。
  * DOM に依存しない(画像のデコードが必要な場合だけ呼び出し側から関数を渡す)。
  */
 import { zipSync, unzipSync, strToU8, strFromU8, type Zippable } from 'fflate';

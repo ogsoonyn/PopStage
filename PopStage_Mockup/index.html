@@ -84,7 +84,7 @@
       <div class="row"><label for="fov">画角</label><input id="fov" type="range" min="10" max="90" value="40" class="range range-xs"><output id="fovO"></output></div>
     </section>
 
-    <p class="opacity-70 leading-relaxed">設計書の5〜8章を確かめるためのブラウザ版モックです。揺れはA案(レイヤー単位のバネ)、レイヤーは1枚、保存と書き出しはありません。画像はこのブラウザ内だけで処理されます。</p>
+    <p class="opacity-70 leading-relaxed">画面と操作感を確かめるためのブラウザ版モックです。揺れはレイヤー単位のバネ、レイヤーは1枚、保存と書き出しはありません。画像はこのブラウザ内だけで処理されます。</p>
     <p id="err" class="text-error hidden"></p>
   </aside>
 </main>
@@ -321,7 +321,7 @@ window.addEventListener('keydown', e => {
   if (k === ']') { $('size').value = +$('size').value + 10; $('size').dispatchEvent(new Event('input')); }
 });
 
-/* ---------- 揺れ(A案: レイヤー単位のバネ・ダンパ) ---------- */
+/* ---------- 揺れ(レイヤー単位のバネ・ダンパ) ---------- */
 const PRESETS = { puru: [45, 35, 12], bain: [15, 80, 8], buru: [90, 10, 30], fuwa: [12, 20, 70] };
 const sw = { s: new THREE.Vector3(), v: new THREE.Vector3(), acc: 0, autoT: 0, autoDir: 1 };
 const lerp = (a, b, t) => a + (b - a) * t;

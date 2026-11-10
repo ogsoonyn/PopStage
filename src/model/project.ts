@@ -1,5 +1,5 @@
 /**
- * ドキュメントモデル(4章)。DOM と Three.js を参照しない。
+ * ドキュメントモデル。DOM と Three.js を参照しない。
  * 状態の変更はコマンド(commands/)経由で行い、ここは保持と変更通知だけを担う。
  */
 import { Emitter } from '../util/emitter';
@@ -180,7 +180,7 @@ export interface Preset {
   params?: Record<string, number>; // 揺らし方の固有設定(項目名だけで書く。省略時は既定値)
 }
 
-/** 揺れのプリセット(7章)。材質(硬さ・質量・おさまり)と揺らし方の組み合わせ。 */
+/** 揺れのプリセット。材質(硬さ・質量・おさまり)と揺らし方の組み合わせ。 */
 export const PRESETS: Record<Exclude<PresetName, 'custom'>, Preset> = {
   puru: { label: 'ぷるぷる', desc: '上下につついて、細かく震える余韻が残る', hardness: 0.6, mass: 0.04, damping: 0.13, motion: 'jiggle', period: 1.2 },
   bain: { label: 'ばいんばいん', desc: 'ジャンプして着地すると、どすんと沈んで上下に弾む', hardness: 0.25, mass: 0.25, damping: 0.1, motion: 'jump', period: 1.8 },

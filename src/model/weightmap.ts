@@ -70,7 +70,7 @@ export class WeightMap {
     for (let y = 0; y < r.h; y++) this.data.set(src.subarray(y * r.w, (y + 1) * r.w), (r.y + y) * this.width + r.x);
   }
 
-  /* ---------- 一括コマンド(6章) ---------- */
+  /* ---------- 一括コマンド ---------- */
 
   clear(): void { this.data.fill(0); }
 

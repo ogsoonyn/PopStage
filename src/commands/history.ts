@@ -1,6 +1,6 @@
 /**
  * アンドゥスタック。変更はすべてコマンドとして記録する。
- * 100手まで、または差分の合計が 256MB まで保持する(6章)。
+ * 100手まで、または差分の合計が 256MB まで保持する。
  */
 import { Emitter } from '../util/emitter';
 import type { Store } from '../model/project';

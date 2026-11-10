@@ -1,4 +1,4 @@
-/** 書き出しダイアログ(9章)。 */
+/** 書き出しダイアログ。 */
 import type { App } from '../app';
 import { availableFormats, FORMAT_INFO, even, type ExportFormat } from '../export/encoders';
 import type { ExportSettings } from '../export/exporter';
