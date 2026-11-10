@@ -1656,3 +1656,81 @@ test('3面図の自由角度の視点はプロジェクトに保存し、「未�
   await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
   expect(await page.evaluate(() => JSON.stringify((window as any).popstage.multiCam))).toBe(cam);
 });
+
+test('Ctrl か Shift を押しながらだと、回転・平行移動・ズーム・つかむ・3面図が細かく動く', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  const box = (await page.locator('#view').boundingBox())!;
+  const at = (x: number, y: number) => [box.x + box.width * x, box.y + box.height * y] as const;
+  const dragWith = async (mod: string | null, button: 'left' | 'right' | 'middle', dx: number) => {
+    if (mod) await page.keyboard.down(mod);
+    await page.mouse.move(...at(0.5, 0.5));
+    await page.mouse.down({ button });
+    await page.mouse.move(...at(0.5 + dx, 0.5), { steps: 5 });
+    await page.mouse.up({ button });
+    if (mod) await page.keyboard.up(mod);
+  };
+  const yaw = () => app(a => a.project.camera.yaw as number);
+  // 右ドラッグの回転: Ctrl・Shift なら 1/5
+  let y0 = await yaw(); await dragWith(null, 'right', 0.1); const full = (await yaw()) - y0;
+  y0 = await yaw(); await dragWith('Control', 'right', 0.1); const ctrl = (await yaw()) - y0;
+  y0 = await yaw(); await dragWith('Shift', 'right', 0.1); const shift = (await yaw()) - y0;
+  expect(Math.abs(full)).toBeGreaterThan(0.05);
+  expect(ctrl / full).toBeCloseTo(0.2, 1);
+  expect(shift / full).toBeCloseTo(0.2, 1);
+  // 中ドラッグの平行移動
+  const tx = () => app(a => a.project.camera.target.x as number);
+  let t0 = await tx(); await dragWith(null, 'middle', 0.1); const pan = (await tx()) - t0;
+  t0 = await tx(); await dragWith('Control', 'middle', 0.1); const panFine = (await tx()) - t0;
+  expect(panFine / pan).toBeCloseTo(0.2, 1);
+  // ホイールのズーム(Shift を押すと横の量になるブラウザでも効く)
+  const zoom = () => app(a => a.project.camera.zoom as number);
+  await page.mouse.move(...at(0.5, 0.5));
+  let z0 = await zoom(); await page.mouse.wheel(0, 200); await expect.poll(zoom).not.toBe(z0); const zFull = Math.log((await zoom()) / z0);
+  z0 = await zoom(); await page.keyboard.down('Control'); await page.mouse.wheel(0, 200); await page.keyboard.up('Control');
+  await expect.poll(zoom).not.toBe(z0); const zCtrl = Math.log((await zoom()) / z0);
+  expect(zCtrl / zFull).toBeCloseTo(0.2, 1);
+  z0 = await zoom(); await page.keyboard.down('Shift'); await page.mouse.wheel(0, 200); await page.keyboard.up('Shift');
+  await expect.poll(zoom).not.toBe(z0);
+
+  // つかむ: 引っ張る量が 1/5
+  await page.keyboard.press('g');
+  const grabX = async (mod: string | null) => {
+    if (mod) await page.keyboard.down(mod);
+    await page.mouse.move(...at(0.5, 0.45));
+    await page.mouse.down();
+    await page.mouse.move(...at(0.55, 0.45), { steps: 4 });
+    const g = await app(a => a.world.grab.x as number);
+    await page.mouse.up();
+    if (mod) await page.keyboard.up(mod);
+    return g;
+  };
+  const gFull = await grabX(null), gFine = await grabX('Control');
+  expect(gFine / gFull).toBeCloseTo(0.2, 1);
+
+  // 3面図: 正面は Shift で細かく平行移動。自由角度の Shift+左は平行移動のまま(細かくしない)、Ctrl なら細かく回る
+  await page.locator('#view').focus();
+  await page.keyboard.press('m');
+  const cellDrag = async (kind: string, mod: string | null, button: 'left' | 'middle') => {
+    const b = (await page.locator(`#multiView [data-kind=${kind}]`).boundingBox())!;
+    if (mod) await page.keyboard.down(mod);
+    await page.mouse.move(b.x + b.width * 0.4, b.y + b.height * 0.5);
+    await page.mouse.down({ button });
+    await page.mouse.move(b.x + b.width * 0.6, b.y + b.height * 0.5, { steps: 5 });
+    await page.mouse.up({ button });
+    if (mod) await page.keyboard.up(mod);
+  };
+  const ox = () => app(a => a.multiOrtho.pan.x as number);
+  let o0 = await ox(); await cellDrag('front', null, 'left'); const oFull = (await ox()) - o0;
+  o0 = await ox(); await cellDrag('front', 'Shift', 'left'); const oFine = (await ox()) - o0;
+  expect(oFine / oFull).toBeCloseTo(0.2, 1);
+  const free = () => app(a => ({ yaw: a.multiCam.yaw as number, x: a.multiCam.target.x as number, y: a.multiCam.target.y as number, z: a.multiCam.target.z as number }));
+  let f0 = await free(); await cellDrag('free', null, 'middle'); let f1 = await free();
+  const panLen = Math.hypot(f1.x - f0.x, f1.y - f0.y, f1.z - f0.z);
+  f0 = await free(); await cellDrag('free', 'Shift', 'left'); f1 = await free();
+  expect(f1.yaw).toBeCloseTo(f0.yaw); // 回らずに平行移動
+  expect(Math.hypot(f1.x - f0.x, f1.y - f0.y, f1.z - f0.z) / panLen).toBeCloseTo(1, 1);
+  f0 = await free(); await cellDrag('free', null, 'left'); const rFull = (await free()).yaw - f0.yaw;
+  f0 = await free(); await cellDrag('free', 'Control', 'left'); const rFine = (await free()).yaw - f0.yaw;
+  expect(rFine / rFull).toBeCloseTo(0.2, 1);
+});

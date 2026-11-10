@@ -10,6 +10,7 @@ import type { App } from '../app';
 import { defaultMultiCamera, defaultOrthoView } from '../model/project';
 import type { SubViewKind, ViewRect } from '../stage/stage';
 import { $ } from './dom';
+import { fineFactor, wheelDelta } from './fine';
 
 export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: () => void } {
   const panel = $('multiView');
@@ -37,9 +38,13 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
    * セルの上のドラッグ。どのボタンで何をするかは modeOf が決め、null なら受け付けない。
    * アンドゥには積まない(自由角度だけは move の中で「未保存」にする)
    */
+  /** modeOf に渡すため、ポインタのイベントからボタンと修飾キーだけを写す */
+  const pick = (e: PointerEvent) => ({ button: e.button, buttons: e.buttons, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey });
+
   function bindDrag<M extends string>(el: HTMLElement, modeOf: (e: PointerEvent) => M | null, cursor: (m: M) => string,
     move: (m: M, dx: number, dy: number) => void): void {
-    let drag: { id: number; x: number; y: number; mode: M } | null = null;
+    // shift: Shift を押して始めたドラッグ。Shift で操作が変わるセル(自由角度の Shift+左 = 平行移動)では、細かくする意味に取らない
+    let drag: { id: number; x: number; y: number; mode: M; shift: boolean } | null = null;
     el.addEventListener('pointerdown', e => {
       if (drag) return;
       const mode = modeOf(e);
@@ -49,12 +54,14 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
       const active = document.activeElement as HTMLElement | null;
       if (active && active !== document.body) active.blur();
       el.setPointerCapture(e.pointerId);
-      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, mode };
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, mode, shift: e.shiftKey && modeOf({ ...pick(e), shiftKey: false } as PointerEvent) !== mode };
       el.style.cursor = cursor(mode);
     });
     el.addEventListener('pointermove', e => {
       if (!drag || e.pointerId !== drag.id) return;
-      move(drag.mode, e.clientX - drag.x, e.clientY - drag.y);
+      // Ctrl か Shift を押している間は細かく動かす
+      const f = fineFactor(e, !drag.shift);
+      move(drag.mode, (e.clientX - drag.x) * f, (e.clientY - drag.y) * f);
       drag.x = e.clientX; drag.y = e.clientY;
     });
     const end = (e: PointerEvent) => {
@@ -83,7 +90,7 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
   free.addEventListener('wheel', e => {
     e.preventDefault();
     const cam = app.multiCam;
-    cam.zoom = Math.max(0.2, Math.min(10, cam.zoom * Math.exp(e.deltaY * 0.0012)));
+    cam.zoom = Math.max(0.2, Math.min(10, cam.zoom * Math.exp(wheelDelta(e) * 0.0012 * fineFactor(e))));
     app.cameraChanged();
   }, { passive: false });
 
@@ -99,7 +106,7 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
     el.addEventListener('wheel', e => {
       e.preventDefault();
       const r = el.getBoundingClientRect();
-      app.stage.zoomOrtho(app.multiOrtho, kind, Math.exp(-e.deltaY * 0.0012),
+      app.stage.zoomOrtho(app.multiOrtho, kind, Math.exp(-wheelDelta(e) * 0.0012 * fineFactor(e)),
         e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
     }, { passive: false });
   }

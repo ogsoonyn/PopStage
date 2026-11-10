@@ -7,11 +7,13 @@
  */
 import type { App } from '../app';
 import type { PaintMode } from '../paint/stroke';
+import { fineFactor, wheelDelta } from './fine';
 
 type DragMode = 'orbit' | 'pan' | 'shake' | 'grab' | 'paint' | 'area' | null;
 
 export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDown: () => boolean } {
-  const drag = { mode: null as DragMode, id: -1, lx: 0, ly: 0, sx: 0, sy: 0 };
+  /** gx, gy: つかんだまま動かした量(px、Ctrl・Shift で細かくした分を含む) */
+  const drag = { mode: null as DragMode, id: -1, lx: 0, ly: 0, sx: 0, sy: 0, gx: 0, gy: 0 };
   /** 膨らませる範囲を描き始めた点(元画像のローカル座標) */
   let areaStart: { x: number; y: number } | null = null;
   let space = false, alt = false, hover: { x: number; y: number; inside: boolean } | null = null;
@@ -58,7 +60,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     const p = app.stage.pick(e.clientX, e.clientY);
     hover = p ? { x: p.x, y: p.y, inside: p.inside } : null;
     if (drag.mode && e.pointerId === drag.id) {
-      const dx = e.clientX - drag.lx, dy = e.clientY - drag.ly;
+      // 回転・平行移動・揺らす・つかむは、Ctrl か Shift を押している間だけ細かく動かす(押し直しても跳ばない)
+      const f = fineFactor(e), dx = (e.clientX - drag.lx) * f, dy = (e.clientY - drag.ly) * f;
       drag.lx = e.clientX; drag.ly = e.clientY;
       const cam = app.project.camera;
       if (drag.mode === 'orbit') {
@@ -72,7 +75,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
         t.y += -dx * k * right.y + dy * k * up.y;
         t.z += -dx * k * right.z + dy * k * up.z;
       } else if (drag.mode === 'grab') {
-        moveGrab(e);
+        drag.gx += dx; drag.gy += dy;
+        moveGrab();
       } else if (drag.mode === 'area') {
         moveArea(e);
       } else if (drag.mode === 'paint') {
@@ -104,7 +108,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
     const cam = app.project.camera;
-    cam.zoom = Math.max(0.05, Math.min(10, cam.zoom * Math.exp(e.deltaY * 0.0012)));
+    cam.zoom = Math.max(0.05, Math.min(10, cam.zoom * Math.exp(wheelDelta(e) * 0.0012 * fineFactor(e))));
     app.emit('status', undefined);
     app.cameraChanged();
   }, { passive: false });
@@ -121,12 +125,13 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     for (const [id, w] of gains) gains.set(id, max < 0.05 ? 1 : Math.max(0.15, w / max));
     app.world.grabGains = gains;
     app.world.grab = { x: 0, y: 0, z: 0 };
+    drag.gx = drag.gy = 0;
     drag.mode = 'grab';
   }
 
-  function moveGrab(e: PointerEvent): void {
+  function moveGrab(): void {
     const cam = app.project.camera, k = app.stage.pixelToWorld(cam), { right, up } = app.stage.screenAxes();
-    const dx = (e.clientX - drag.sx) * k, dy = -(e.clientY - drag.sy) * k, norm = 2 / app.imageLong;
+    const dx = drag.gx * k, dy = -drag.gy * k, norm = 2 / app.imageLong;
     app.world.grab = {
       x: (right.x * dx + up.x * dy) * norm,
       y: (right.y * dx + up.y * dy) * norm,
