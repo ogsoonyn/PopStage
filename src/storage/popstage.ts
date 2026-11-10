@@ -4,8 +4,8 @@
  */
 import { zipSync, unzipSync, strToU8, strFromU8, type Zippable } from 'fflate';
 import {
-  LIMITS, PRESETS, createProject, defaultCamera, newId,
-  type Project, type Document, type Layer, type PhysicsParams, type PresetName,
+  LIMITS, PRESETS, MOTIONS, createProject, defaultCamera, newId,
+  type Project, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern,
 } from '../model/project';
 import { WeightMap, weightSizeFor } from '../model/weightmap';
 import { encodeGrayPng, decodePngToGray, type GrayImage } from './png';
@@ -102,12 +102,15 @@ const vec = (v: unknown) => {
 
 function physicsFrom(v: unknown): PhysicsParams {
   const o = (v ?? {}) as Record<string, unknown>;
-  const preset = (['puru', 'bain', 'buru', 'fuwa', 'custom'] as PresetName[]).includes(o.preset as PresetName) ? (o.preset as PresetName) : 'custom';
+  const preset: PresetName = o.preset === 'custom' || (typeof o.preset === 'string' && o.preset in PRESETS) ? (o.preset as PresetName) : 'custom';
   const base = PRESETS.puru;
+  // 揺らし方の項目が無い古いファイルは、プリセットから補う。カスタムならこれまでの動き(左右に振る)にする
+  const motion: MotionPattern = typeof o.motion === 'string' && o.motion in MOTIONS ? (o.motion as MotionPattern)
+    : preset !== 'custom' ? PRESETS[preset].motion : 'shake';
   return {
     enabled: o.enabled !== false, preset,
     hardness: unit(o.hardness, base.hardness), mass: unit(o.mass, base.mass),
-    weight: unit(o.weight, 0.15), damping: unit(o.damping, base.damping),
+    weight: unit(o.weight, 0.15), damping: unit(o.damping, base.damping), motion,
   };
 }
 

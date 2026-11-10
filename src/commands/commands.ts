@@ -54,6 +54,16 @@ export class PatchProject implements Command {
   revert(store: Store): void { store.patchProject(deepCopy(this.before)); }
 }
 
+/** 複数の変更を1手にまとめる(プリセットで材質と周期を同時に変えるときなど)。 */
+export class Batch implements Command {
+  readonly bytes: number;
+  constructor(readonly label: string, private commands: Command[]) {
+    this.bytes = commands.reduce((s, c) => s + c.bytes, 0);
+  }
+  apply(store: Store): void { for (const c of this.commands) c.apply(store); }
+  revert(store: Store): void { for (const c of [...this.commands].reverse()) c.revert(store); }
+}
+
 /* ---------- レイヤー構成 ---------- */
 
 export class InsertLayer implements Command {

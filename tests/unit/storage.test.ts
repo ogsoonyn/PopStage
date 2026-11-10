@@ -41,7 +41,7 @@ describe('.popstage', () => {
     const doc = createDocument({ bytes: new Uint8Array([9, 8, 7, 6]), mime: 'image/jpeg', ext: 'jpg', width: 300, height: 200 }, 'プリン');
     const l1 = doc.layers[0];
     for (let i = 0; i < l1.weights.data.length; i += 3) l1.weights.data[i] = i & 0xff;
-    l1.pop = -123; l1.physics = { enabled: false, preset: 'bain', hardness: 0.1, mass: 0.9, weight: 0.3, damping: 0.05 };
+    l1.pop = -123; l1.physics = { enabled: false, preset: 'bain', hardness: 0.1, mass: 0.9, weight: 0.3, damping: 0.05, motion: 'stretch' };
     const l2 = createLayer(doc, '顔'); l2.visible = false; l2.weights.data.fill(77);
     doc.layers.push(l2);
     doc.meshDensity = 256;
@@ -87,6 +87,18 @@ describe('.popstage', () => {
     expect(project.documents[0].layers[0].pop).toBe(500);
     expect(project.documents[0].layers[0].physics.hardness).toBe(1);
     expect(project.documents[0].layers[0].physics.preset).toBe('custom');
+  });
+
+  it('揺らし方の項目が無い古いファイルは、プリセットから補う', async () => {
+    const layer = (physics: object) => ({ name: 'L', physics, weights: { path: 'none.png' } });
+    const json = {
+      formatVersion: 1, app: 'PopStage', project: {},
+      documents: [{ name: 'x', image: { path: 'images/doc-0.png', width: 10, height: 10 },
+        layers: [layer({ preset: 'bain' }), layer({ preset: 'custom' }), layer({ preset: 'puru', motion: 'circle' }), layer({ motion: 'zzz' })] }],
+    };
+    const zip = zipSync({ 'project.json': strToU8(JSON.stringify(json)), 'images/doc-0.png': new Uint8Array([1]) });
+    const { project } = await deserializeProject(zip);
+    expect(project.documents[0].layers.map(l => l.physics.motion)).toEqual(['jump', 'shake', 'circle', 'shake']);
   });
 
   it('新しい版のファイルは読めないと伝える', () => {

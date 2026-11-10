@@ -168,9 +168,32 @@ test('スライダーの変更は1手として元に戻せる', async ({ page })
   for (let i = 0; i < 5; i++) await page.keyboard.press('Control+z');
   expect(await page.evaluate(() => (window as any).popstage.activeLayer.pop)).toBe(pop0);
 
+});
+
+test('プリセットで材質・揺らし方・周期が変わり、1手で元に戻せる', async ({ page }) => {
+  await boot(page);
+  const state = () => page.evaluate(() => {
+    const a = (window as any).popstage;
+    return { preset: a.activeLayer.physics.preset, motion: a.activeLayer.physics.motion, hardness: a.activeLayer.physics.hardness, period: a.project.autoSwing.period };
+  });
+  const before = await state();
+  expect(before).toMatchObject({ preset: 'puru', motion: 'jiggle' });
+  await expect(page.locator('#pPreset option')).toHaveCount(11); // 10 種類 + カスタム
+
   await page.selectOption('#pPreset', 'bain');
-  expect(await page.evaluate(() => (window as any).popstage.activeLayer.physics.preset)).toBe('bain');
-  await expect(page.locator('#pHardO')).toHaveText('15');
+  expect(await state()).toEqual({ preset: 'bain', motion: 'jump', hardness: 0.25, period: 1.8 });
+  await expect(page.locator('#pHardO')).toHaveText('25');
+  await expect(page.locator('#pMotion')).toHaveValue('jump');
+  await expect(page.locator('#pPresetDesc')).toContainText('ジャンプ');
+  await expect(page.locator('#pPeriodO')).toHaveText('1.8秒');
+
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+z');
+  expect(await state()).toEqual(before);
+
+  // 揺らし方だけ変えるとカスタムになる
+  await page.selectOption('#pMotion', 'heartbeat');
+  expect(await state()).toMatchObject({ preset: 'custom', motion: 'heartbeat', hardness: before.hardness });
 });
 
 test('保存して開き直すと同じ状態に戻る', async ({ page }) => {

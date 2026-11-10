@@ -1,8 +1,8 @@
 /** 右パネル(レイヤー一覧とプロパティ)とツールオプション。 */
 import type { App } from '../app';
-import { PRESETS, LIMITS, type Layer, type PhysicsParams, type PresetName, type Project, type Document } from '../model/project';
-import { PatchLayer, PatchDocument, PatchProject } from '../commands/commands';
-import { $ } from './dom';
+import { PRESETS, PRESET_ORDER, MOTIONS, LIMITS, applyPreset, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type Project, type Document } from '../model/project';
+import { PatchLayer, PatchDocument, PatchProject, Batch } from '../commands/commands';
+import { $, toast } from './dom';
 import { drawWeightThumb } from './imageio';
 
 type Target = 'layer' | 'doc' | 'project';
@@ -66,12 +66,27 @@ export function bindPanels(app: App): { refresh: () => void } {
     exec('layer', 'ポップ量', { pop: v });
   });
   $<HTMLInputElement>('pSwing').addEventListener('change', e => exec('layer', '揺れの切替', { physics: { ...physics()!, enabled: (e.target as HTMLInputElement).checked } }));
-  $<HTMLSelectElement>('pPreset').addEventListener('change', e => {
-    const name = (e.target as HTMLSelectElement).value as PresetName, p = physics();
-    if (!p) return;
-    if (name === 'custom') { exec('layer', 'プリセット', { physics: { ...p, preset: 'custom' } }); return; }
-    const pr = PRESETS[name];
-    exec('layer', `プリセット「${pr.label}」`, { physics: { ...p, preset: name, hardness: pr.hardness, mass: pr.mass, damping: pr.damping } });
+  // プリセットと揺らし方の選択肢はモデルの定義から作る
+  const presetSel = $<HTMLSelectElement>('pPreset'), motionSel = $<HTMLSelectElement>('pMotion');
+  presetSel.replaceChildren(...PRESET_ORDER.map(k => new Option(PRESETS[k].label, k)), new Option('カスタム', 'custom'));
+  motionSel.replaceChildren(...(Object.keys(MOTIONS) as MotionPattern[]).map(k => new Option(MOTIONS[k].label, k)));
+
+  // プリセットは材質と揺らし方を変え、自動揺らしの周期もおすすめの値にする。まとめて1手
+  presetSel.addEventListener('change', () => {
+    const name = presetSel.value as PresetName, l = app.activeLayer;
+    if (!l) return;
+    if (name === 'custom') { exec('layer', 'プリセット', { physics: { ...l.physics, preset: 'custom' } }); return; }
+    const pr = PRESETS[name], label = `プリセット「${pr.label}」`;
+    history.execute(new Batch(label, [
+      PatchLayer.from(store, l.id, { physics: applyPreset(l.physics, name) }, label),
+      PatchProject.from(store, { autoSwing: { ...app.project.autoSwing, period: pr.period } }, label),
+    ]));
+    if (!app.project.autoSwing.enabled) toast('「自動で揺らす」がオフなので、自動では動きません。「つかむ」で揺らすか、自動揺らしをオンにしてください。', 'info', 5000);
+    else if (!l.physics.enabled) toast('このレイヤーは「揺れ」がオフです。', 'info');
+  });
+  motionSel.addEventListener('change', () => {
+    const p = physics(); if (!p) return;
+    exec('layer', '揺らし方', { physics: { ...p, motion: motionSel.value as MotionPattern, preset: 'custom' } });
   });
   bindRange('pHard', { target: 'layer', keys: ['physics'], label: '硬さ', toPatch: v => physPatch('hardness', v), fmt: pct });
   bindRange('pMass', { target: 'layer', keys: ['physics'], label: '質量', toPatch: v => physPatch('mass', v), fmt: pct });
@@ -211,7 +226,9 @@ export function bindPanels(app: App): { refresh: () => void } {
       setRange('pPop', l.pop);
       if (document.activeElement !== $('pPopN')) $<HTMLInputElement>('pPopN').value = String(l.pop);
       $<HTMLInputElement>('pSwing').checked = l.physics.enabled;
-      $<HTMLSelectElement>('pPreset').value = l.physics.preset;
+      presetSel.value = l.physics.preset;
+      motionSel.value = l.physics.motion;
+      $('pPresetDesc').textContent = l.physics.preset === 'custom' ? MOTIONS[l.physics.motion].desc : PRESETS[l.physics.preset].desc;
       setRange('pHard', Math.round(l.physics.hardness * 100), pct(l.physics.hardness * 100));
       setRange('pMass', Math.round(l.physics.mass * 100), pct(l.physics.mass * 100));
       setRange('pWeight', Math.round(l.physics.weight * 100), pct(l.physics.weight * 100));

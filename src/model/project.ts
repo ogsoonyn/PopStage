@@ -7,7 +7,27 @@ import { WeightMap, weightSizeFor, type Rect } from './weightmap';
 
 export interface Vec3 { x: number; y: number; z: number }
 
-export type PresetName = 'puru' | 'bain' | 'buru' | 'fuwa' | 'custom';
+/**
+ * 揺らし方。自動揺らしのとき、塗った部分を支える土台(アンカー)をどう動かすか。
+ * 塗った部分はバネで土台に繋がっていて、遅れて付いてくる(physics/motion.ts)。
+ */
+export type MotionPattern = 'jiggle' | 'jump' | 'bounce' | 'shiver' | 'float' | 'sway' | 'shake' | 'circle' | 'heartbeat' | 'stretch' | 'none';
+
+export const MOTIONS: Record<MotionPattern, { label: string; desc: string }> = {
+  jiggle: { label: '上下に小刻み', desc: '上下に軽くつついて揺らす' },
+  jump: { label: 'ジャンプ', desc: '沈み込んで跳び、着地で弾む' },
+  bounce: { label: '連続ジャンプ', desc: '小さく弾み続ける' },
+  shiver: { label: '震え', desc: '細かく速く震える' },
+  float: { label: '漂う', desc: 'ゆっくり8の字に漂う' },
+  sway: { label: 'ゆっくり左右', desc: '左右にゆったり揺れる' },
+  shake: { label: '左右に振る', desc: '左右に素早く振る' },
+  circle: { label: '回転', desc: '円を描いて回る' },
+  heartbeat: { label: '鼓動', desc: 'ドクン、ドクンと手前にふくらむ' },
+  stretch: { label: '伸びて戻る', desc: 'ゆっくり引き伸ばして、ぱっと離す' },
+  none: { label: 'なし(つかむ操作だけ)', desc: '自動では揺らさない' },
+};
+
+export type PresetName = 'puru' | 'bain' | 'poyo' | 'buru' | 'fuwa' | 'yura' | 'furi' | 'guru' | 'doki' | 'biyo' | 'custom';
 
 /** 揺れのパラメータ。数値はすべて 0〜1 の正規化値。 */
 export interface PhysicsParams {
@@ -17,6 +37,7 @@ export interface PhysicsParams {
   mass: number;     // 質量 → m
   weight: number;   // 重さ → 重力の係数
   damping: number;  // おさまり → 減衰係数 c
+  motion: MotionPattern; // 揺らし方
 }
 
 export interface Layer {
@@ -75,22 +96,47 @@ export const LIMITS = {
   pop: { min: -500, max: 500, def: 80 },
   density: { min: 16, max: 512, def: 128 },
   fov: { min: 10, max: 90, def: 40 },
-  period: { min: 0.3, max: 10, def: 1.6 },
+  period: { min: 0.3, max: 10, def: 1.2 },
 } as const;
 
-export const PRESETS: Record<Exclude<PresetName, 'custom'>, { label: string; hardness: number; mass: number; damping: number }> = {
-  puru: { label: 'ぷるぷる', hardness: 0.45, mass: 0.35, damping: 0.12 },
-  bain: { label: 'ばいんばいん', hardness: 0.15, mass: 0.8, damping: 0.08 },
-  buru: { label: 'ぶるぶる', hardness: 0.9, mass: 0.1, damping: 0.3 },
-  fuwa: { label: 'ふわふわ', hardness: 0.12, mass: 0.2, damping: 0.7 },
+export interface Preset {
+  label: string;
+  desc: string;
+  hardness: number;
+  mass: number;
+  damping: number;
+  motion: MotionPattern;
+  period: number; // おすすめの自動揺らしの周期(秒)
+}
+
+/** 揺れのプリセット(7章)。材質(硬さ・質量・おさまり)と揺らし方の組み合わせ。 */
+export const PRESETS: Record<Exclude<PresetName, 'custom'>, Preset> = {
+  puru: { label: 'ぷるぷる', desc: '上下につついて、細かく震える余韻が残る', hardness: 0.6, mass: 0.04, damping: 0.13, motion: 'jiggle', period: 1.2 },
+  bain: { label: 'ばいんばいん', desc: 'ジャンプして着地すると、どすんと沈んで上下に弾む', hardness: 0.25, mass: 0.25, damping: 0.1, motion: 'jump', period: 1.8 },
+  poyo: { label: 'ぽよんぽよん', desc: '小さく弾み続ける', hardness: 0.4, mass: 0.15, damping: 0.19, motion: 'bounce', period: 0.8 },
+  buru: { label: 'ぶるぶる', desc: '細かく速く震える', hardness: 0.9, mass: 0.05, damping: 0.3, motion: 'shiver', period: 2 },
+  fuwa: { label: 'ふわふわ', desc: 'ゆっくり漂って、すぐに落ち着く', hardness: 0.1, mass: 0.3, damping: 0.6, motion: 'float', period: 3 },
+  yura: { label: 'ゆらゆら', desc: '左右にゆったり揺れる', hardness: 0.15, mass: 0.4, damping: 0.25, motion: 'sway', period: 2.5 },
+  furi: { label: 'ふりふり', desc: '左右に素早く振る', hardness: 0.45, mass: 0.35, damping: 0.12, motion: 'shake', period: 1.6 },
+  guru: { label: 'ぐるぐる', desc: '円を描いて回る', hardness: 0.2, mass: 0.3, damping: 0.3, motion: 'circle', period: 2 },
+  doki: { label: 'どきどき', desc: 'ドクン、ドクンと手前にふくらむ', hardness: 0.55, mass: 0.1, damping: 0.35, motion: 'heartbeat', period: 1 },
+  biyo: { label: 'びよーん', desc: 'ゆっくり引き伸ばされて、離すと大きく弾む', hardness: 0.35, mass: 0.2, damping: 0.08, motion: 'stretch', period: 2.4 },
 };
+
+export const PRESET_ORDER = Object.keys(PRESETS) as Exclude<PresetName, 'custom'>[];
+
+/** プリセットの値を物理パラメータに当てはめる(重さと有効/無効はそのまま)。 */
+export function applyPreset(p: PhysicsParams, name: Exclude<PresetName, 'custom'>): PhysicsParams {
+  const pr = PRESETS[name];
+  return { ...p, preset: name, hardness: pr.hardness, mass: pr.mass, damping: pr.damping, motion: pr.motion };
+}
 
 let idSeq = 0;
 export const newId = (prefix: string) => `${prefix}${Date.now().toString(36)}${(idSeq++).toString(36)}`;
 
 export function defaultPhysics(): PhysicsParams {
   const p = PRESETS.puru;
-  return { enabled: true, preset: 'puru', hardness: p.hardness, mass: p.mass, weight: 0.15, damping: p.damping };
+  return { enabled: true, preset: 'puru', hardness: p.hardness, mass: p.mass, weight: 0.15, damping: p.damping, motion: p.motion };
 }
 
 export function createLayer(doc: Pick<Document, 'image' | 'layers'>, name?: string): Layer {

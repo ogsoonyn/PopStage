@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { PhysicsWorld, coefficients, autoSwingAccel, PHYSICS_DT } from '../../src/physics/world';
+import { PhysicsWorld, coefficients, PHYSICS_DT } from '../../src/physics/world';
+import { motionAnchor } from '../../src/physics/motion';
 import { MotionRecorder } from '../../src/physics/recorder';
-import { createDocument, PRESETS, defaultCamera, type Layer } from '../../src/model/project';
+import { createDocument, PRESETS, PRESET_ORDER, MOTIONS, applyPreset, defaultCamera, type Layer, type MotionPattern } from '../../src/model/project';
 
 const image = { bytes: new Uint8Array(), mime: 'image/png', ext: 'png', width: 100, height: 100 };
 const layerWith = (patch: Partial<Layer['physics']> = {}): Layer => {
@@ -65,14 +66,71 @@ describe('揺れの物理', () => {
     expect(w.displacement(a.id)).toEqual({ x: 0, y: 0, z: 0 });
   });
 
-  it('自動揺らしは周期 T ごとに同じ加速度になる(ループ書き出しの前提)', () => {
-    const a = { enabled: true, period: 1.7, strength: 0.6 };
-    for (const t of [0.1, 0.42, 0.9, 1.3]) {
-      expect(autoSwingAccel(t, a).x).toBeCloseTo(autoSwingAccel(t + 1.7 * 3, a).x, 6);
+  it('どの揺らし方も周期 T ごとに同じ位置に戻る(ループ書き出しの前提)', () => {
+    for (const m of Object.keys(MOTIONS) as MotionPattern[]) {
+      for (const t of [0.05, 0.31, 0.77, 1.2, 1.66]) {
+        const p = motionAnchor(m, t, 1.7, 0.6), q = motionAnchor(m, t + 1.7 * 3, 1.7, 0.6);
+        expect(q.x, m).toBeCloseTo(p.x, 6); expect(q.y, m).toBeCloseTo(p.y, 6); expect(q.z, m).toBeCloseTo(p.z, 6);
+      }
     }
-    // 1周期の積分(速度変化)は x で打ち消し合う
-    let sum = 0; for (let t = 0; t < 1.7; t += 0.0005) sum += autoSwingAccel(t, a).x * 0.0005;
-    expect(Math.abs(sum)).toBeLessThan(1e-3);
+  });
+
+  it('揺らし方の向き: 上下に小刻みは y だけ、鼓動は z だけ、ゆっくり左右は x だけ', () => {
+    const axes = (m: MotionPattern) => {
+      let x = 0, y = 0, z = 0;
+      for (let t = 0; t < 2; t += 0.005) { const p = motionAnchor(m, t, 2, 1); x = Math.max(x, Math.abs(p.x)); y = Math.max(y, Math.abs(p.y)); z = Math.max(z, Math.abs(p.z)); }
+      return { x, y, z };
+    };
+    const j = axes('jiggle'); expect(j.x).toBe(0); expect(j.z).toBe(0); expect(j.y).toBeGreaterThan(0.05);
+    const h = axes('heartbeat'); expect(h.x).toBe(0); expect(h.y).toBe(0); expect(h.z).toBeGreaterThan(0.05);
+    const s = axes('sway'); expect(s.y).toBe(0); expect(s.z).toBe(0); expect(s.x).toBeGreaterThan(0.05);
+    expect(axes('none')).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('ジャンプ: 跳んでいる間は上、着地後は地面(0)', () => {
+    const T = 2, at = (u: number) => motionAnchor('jump', u * T, T, 1).y;
+    expect(at(0.33)).toBeGreaterThan(0.25); // 跳躍の頂点付近
+    expect(at(0.05)).toBeLessThan(0);       // 踏み切り前に沈み込む
+    expect(at(0.8)).toBe(0);                // 着地後
+  });
+
+  /** プリセットを当てて慣らしたあと、1周期ぶんの変位を記録する */
+  const cycle = (preset: keyof typeof PRESETS) => {
+    const l = layerWith(); l.physics = applyPreset(l.physics, preset);
+    const w = new PhysicsWorld(), T = PRESETS[preset].period;
+    w.autoSwing = { enabled: true, period: T, strength: 0.5 };
+    run(w, [l], Math.ceil(20 / T) * T);
+    const xs: number[] = [], ys: number[] = [], zs: number[] = [];
+    for (let i = 0; i < Math.round(T / PHYSICS_DT); i++) { w.step([l]); const d = w.displacement(l.id); xs.push(d.x); ys.push(d.y); zs.push(d.z); }
+    return { xs, ys, zs, rest: -coefficients(l.physics).g * coefficients(l.physics).m / coefficients(l.physics).k };
+  };
+  const crossings = (v: number[], c: number) => { let n = 0; for (let i = 1; i < v.length; i++) if ((v[i - 1] - c) * (v[i] - c) < 0) n++; return n; };
+
+  it('ぷるぷる: 横には動かず、上下に何度も震える', () => {
+    const { xs, ys, rest } = cycle('puru');
+    expect(Math.max(...xs.map(Math.abs))).toBeLessThan(1e-9);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.03);
+    expect(crossings(ys, rest)).toBeGreaterThanOrEqual(6);
+  });
+
+  it('ばいんばいん: 跳び上がり、着地で静止位置より沈み込んでから上下に弾む', () => {
+    const { xs, ys, rest } = cycle('bain');
+    expect(Math.max(...xs.map(Math.abs))).toBeLessThan(1e-9);
+    expect(Math.max(...ys)).toBeGreaterThan(0.08);           // 跳ぶ
+    expect(Math.min(...ys)).toBeLessThan(rest - 0.03);       // 着地で沈み込む
+    // 着地後(周期の後半)に静止位置をまたいで何度も弾む
+    expect(crossings(ys.slice(Math.round(ys.length * 0.55)), rest)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('どのプリセットも発散せず、それぞれ違う動きになる', () => {
+    const sig = PRESET_ORDER.map(p => {
+      const { xs, ys, zs } = cycle(p);
+      const all = [...xs, ...ys, ...zs].map(Math.abs);
+      expect(Math.max(...all), p).toBeLessThan(0.6);
+      expect(Math.max(...all), p).toBeGreaterThan(0.005);
+      return [xs, ys, zs].map(v => (Math.max(...v) - Math.min(...v)).toFixed(3)).join('/') + ':' + crossings(ys, ys[0]);
+    });
+    expect(new Set(sig).size).toBe(PRESET_ORDER.length);
   });
 
   it('十分に慣らしたあとは周期ごとに同じ状態に戻る', () => {
