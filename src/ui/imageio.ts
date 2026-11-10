@@ -11,7 +11,9 @@ export async function fileToAsset(file: File): Promise<ImageAsset> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const mime = file.type in IMAGE_TYPES ? file.type : sniffMime(bytes);
   if (!mime) throw new Error('PNG / JPEG / WebP の画像を選んでください。');
-  const bmp = await createImageBitmap(new Blob([bytes], { type: mime }));
+  let bmp: ImageBitmap;
+  try { bmp = await createImageBitmap(new Blob([bytes], { type: mime })); }
+  catch { throw new Error('画像を読み込めませんでした(壊れているか、対応していない形式です)。'); }
   const asset: ImageAsset = { bytes, mime, ext: IMAGE_TYPES[mime], width: bmp.width, height: bmp.height };
   bmp.close();
   return asset;
@@ -24,9 +26,14 @@ function sniffMime(b: Uint8Array): string | null {
   return null;
 }
 
-/** 表示用に、最大 maxSize に縮めたキャンバスへ描く。 */
-export async function assetToCanvas(asset: ImageAsset, maxSize: number): Promise<HTMLCanvasElement> {
-  const bmp = await createImageBitmap(new Blob([asset.bytes as BlobPart], { type: asset.mime }), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+/** 表示用に、最大 maxSize に縮めたキャンバスへ描く。画像が壊れていれば日本語のメッセージで例外を投げる。 */
+export async function decodeForDisplay(asset: ImageAsset, maxSize: number): Promise<HTMLCanvasElement> {
+  let bmp: ImageBitmap;
+  try {
+    bmp = await createImageBitmap(new Blob([asset.bytes as BlobPart], { type: asset.mime }), { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+  } catch {
+    throw new Error('画像を読み込めませんでした(壊れているか、対応していない形式です)。');
+  }
   const s = Math.min(1, maxSize / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
   c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s));

@@ -13,7 +13,7 @@ import { serializeProject, deserializeProject, FILE_EXTENSION } from './storage/
 import { autosave } from './storage/autosave';
 import { runExport, type ExportSettings } from './export/exporter';
 import { Emitter } from './util/emitter';
-import { assetToCanvas, canvasAlpha, browserDecodeGray, fileToAsset, rgbaToPng, isProjectFile, isImageFile } from './ui/imageio';
+import { decodeForDisplay, canvasAlpha, browserDecodeGray, fileToAsset, rgbaToPng, isProjectFile, isImageFile } from './ui/imageio';
 import { createSampleDocument } from './ui/sample';
 import { ask, saveFile, setBusy, toast } from './ui/dom';
 
@@ -78,7 +78,6 @@ export class App extends Emitter<AppEvents> {
 
   private wireStore(): void {
     const s = this.store;
-    s.on('replace', () => { void this.syncDocument(); });
     s.on('document', ({ keys }) => {
       const doc = this.doc; if (!doc) return;
       if (keys.includes('meshDensity')) this.stage.rebuildMesh(doc.meshDensity);
@@ -111,13 +110,10 @@ export class App extends Emitter<AppEvents> {
     });
   }
 
-  /** ドキュメント全体を Stage へ反映する(読み込み時など)。 */
-  private async syncDocument(): Promise<void> {
-    const token = ++this.syncToken;
+  /** ドキュメント全体を Stage へ反映する(読み込み時など)。canvas はデコード済みの表示用画像。 */
+  private applyDocument(canvas: HTMLCanvasElement): void {
     const doc = this.doc;
     if (!doc) return;
-    const canvas = await assetToCanvas(doc.image, Math.min(4096, this.stage.maxTextureSize));
-    if (token !== this.syncToken) return;
     this.imageCanvas = canvas;
     this.stage.setImage(canvas, doc.image.width, doc.image.height);
     this.stage.rebuildMesh(doc.meshDensity);
@@ -173,7 +169,17 @@ export class App extends Emitter<AppEvents> {
 
   /* ---------- 読み込み ---------- */
 
+  /**
+   * プロジェクトを読み込む。先に画像をデコードし、成功してから状態を一度に差し替える。
+   * デコードに失敗したら例外を投げ、今の状態には何も触れない。
+   */
   async loadProject(project: Project, opts: { fileName?: string | null; handle?: FileSystemFileHandle | null; dirty?: boolean } = {}): Promise<void> {
+    const doc = project.documents[0];
+    if (!doc) throw new Error('プロジェクトに画像が入っていません');
+    const token = ++this.syncToken;
+    const canvas = await decodeForDisplay(doc.image, Math.min(4096, this.stage.maxTextureSize));
+    // デコード中に別の読み込みが始まっていたら、こちらは捨てる
+    if (token !== this.syncToken) return;
     this.loading = true;
     try {
       this.store.replace(project);
@@ -185,7 +191,7 @@ export class App extends Emitter<AppEvents> {
       this.fileName = opts.fileName ?? null;
       this.fileHandle = opts.handle ?? null;
       this.dirty = !!opts.dirty;
-      await this.syncDocument();
+      this.applyDocument(canvas);
     } finally { this.loading = false; }
     this.emit('file', undefined);
   }
@@ -236,7 +242,6 @@ export class App extends Emitter<AppEvents> {
     setBusy(true);
     try {
       const { project } = await deserializeProject(bytes, { decodeFallback: browserDecodeGray });
-      if (!project.documents.length) throw new Error('プロジェクトに画像が入っていません');
       await this.loadProject(project, { fileName: name, handle, dirty });
       if (name) toast(`「${name}」を開きました。`, 'success');
     } catch (e) {

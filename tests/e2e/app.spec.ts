@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
 
 // ?e2e: 自動保存の復元を聞かず、揺れを止めた状態で起動する
 async function boot(page: Page): Promise<void> {
@@ -328,6 +329,32 @@ test('保存して開き直すと同じ状態に戻る', async ({ page }) => {
   expect(result.after).toBe(result.before);
   expect(result.bg).toBe('#336699');
   expect(result.size).toBeGreaterThan(1000);
+});
+
+test('中の画像が壊れた .popstage を開いても、今の状態は何も変わらない', async ({ page }) => {
+  await boot(page);
+  const good = await page.evaluate(async () => Array.from((window as any).popstage.serialize() as Uint8Array));
+  // 画像だけでたらめなバイト列に差し替え、名前とレイヤーの寸法も変えておく
+  const files = unzipSync(new Uint8Array(good));
+  const json = JSON.parse(strFromU8(files['project.json']));
+  json.documents[0].name = 'BROKEN';
+  json.documents[0].image.width = 300; json.documents[0].image.height = 200;
+  const imagePath: string = json.documents[0].image.path;
+  files['project.json'] = strToU8(JSON.stringify(json));
+  files[imagePath] = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4, 5, 6, 7, 8]);
+  const broken = Array.from(zipSync(files));
+
+  const r = await page.evaluate(async (bytes) => {
+    const a = (window as any).popstage;
+    const snap = () => ({ name: a.doc.name, file: a.fileName, undo: a.history.canUndo, image: a.stage.imageSize.w, weightTex: a.stage.weightSize.w, layerW: a.doc.layers[0].weights.width });
+    a.weightOp('反転', (wm: any) => wm.invert()); // 元に戻せる操作を1つ積んでおく
+    const before = snap();
+    await a.openProjectBytes(new Uint8Array(bytes), 'broken.popstage', null);
+    return { before, after: snap() };
+  }, broken);
+  expect(r.before.undo).toBe(true);
+  expect(r.after).toEqual(r.before);
+  await expect(page.locator('#toasts')).toContainText('画像を読み込めませんでした');
 });
 
 for (const format of ['mp4', 'webm', 'webm-alpha', 'png', 'gif'] as const) {
