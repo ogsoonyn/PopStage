@@ -121,8 +121,15 @@ export function pistonOffset(
   if (sum > 0.95) { const k = 0.95 / sum; up *= k; top *= k; down *= k; }
   const sharp = P('sharp'), ease = (v: number) => sharp * v + (1 - sharp) * 0.5 * (1 - Math.cos(Math.PI * v));
   const y = u < up ? ease(u / up) : u < up + top ? 1 : u < up + top + down ? 1 - ease((u - up - top) / down) : 0;
-  out.y = 0.2 * strength * P('height') * y;
+  out.y = PISTON_STROKE * strength * P('height') * y;
   return out;
+}
+
+/** ピストンのストローク(正規化座標)。強さ 100%・ストローク 100% のときの上下の幅 */
+const PISTON_STROKE = 0.2;
+/** ピストンで画像全体がいちばん上がったときのずれ(正規化座標) */
+export function pistonReach(strength: number, params?: Record<string, number>): number {
+  return Math.max(0, PISTON_STROKE * strength * motionParam(params, 'piston', 'height'));
 }
 
 /**

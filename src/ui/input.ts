@@ -5,6 +5,8 @@
  *   左ドラッグ: 選択中のツール(ブラシ中に Alt で一時的に消しゴム。膨らませるでは範囲を描き、Shift で正円・正方形)
  *   「揺らす」の左ドラッグ: カメラを画像に付けたまま振る。画面上は動かず、平行移動と同じ揺れだけが出る
  *   Ctrl(⌘)か Shift を押している間は、回転・平行移動・ズーム・つかむ・揺らすの動きを 1/5 にする(ui/fine.ts)
+ *   揺らし方「ピストン」で画像全体が動いている間は、塗り・膨らませる範囲のドラッグ中だけ画像を止め(app.holdImage)、
+ *   止まっているポインタの下のブラシの円は毎フレーム当て直す
  */
 import type { App } from '../app';
 import type { PaintMode } from '../paint/stroke';
@@ -20,6 +22,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   let space = false, alt = false, hover: { x: number; y: number; inside: boolean } | null = null;
   /** ポインタがキャンバスの上にあるか。Space の平行移動はフォーカスの場所ではなくこれで決める */
   let pointerInside = false;
+  /** 最後のポインタの位置(画像が動いたときに当て直す)と、前のフレームで画像がずれていたか */
+  let last: { x: number; y: number } | null = null, shifted = false;
 
   const isPaintTool = () => app.tool === 'brush' || app.tool === 'erase' || app.tool === 'smooth';
   const paintMode = (): PaintMode => (app.tool === 'brush' && alt ? 'erase' : (app.tool as PaintMode));
@@ -52,14 +56,26 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     else if (e.button === 0 && app.tool === 'inflate') startArea(e);
     else if (e.button === 0 && isPaintTool()) {
       const p = app.stage.pick(e.clientX, e.clientY);
-      if (p && app.beginStroke(paintMode(), p.x, p.y, pressureOf(e))) drag.mode = 'paint';
+      if (p && app.beginStroke(paintMode(), p.x, p.y, pressureOf(e))) { drag.mode = 'paint'; app.holdImage(true); }
     }
     updateCursor();
+  });
+
+  // 画像全体が動いている間(ピストン)は、ポインタが止まっていても、その下の画像の位置でブラシの円を描き直す
+  app.on('frame', () => {
+    const now = app.imageShifted;
+    if ((now || shifted) && pointerInside && last && !drag.mode) {
+      const p = app.stage.pick(last.x, last.y);
+      hover = p ? { x: p.x, y: p.y, inside: p.inside } : null;
+      updateCursor();
+    }
+    shifted = now;
   });
 
   canvas.addEventListener('pointermove', e => {
     const p = app.stage.pick(e.clientX, e.clientY);
     hover = p ? { x: p.x, y: p.y, inside: p.inside } : null;
+    last = { x: e.clientX, y: e.clientY };
     if (drag.mode && e.pointerId === drag.id) {
       // 回転・平行移動・揺らす・つかむは、Ctrl か Shift を押している間だけ細かく動かす(押し直しても跳ばない)
       const f = fineFactor(e), dx = (e.clientX - drag.lx) * f, dy = (e.clientY - drag.ly) * f;
@@ -97,6 +113,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (drag.mode === 'paint') app.endStroke();
     if (drag.mode === 'grab') { app.world.grab = null; app.world.grabGains.clear(); }
     if (drag.mode === 'area') areaStart = null;
+    if (drag.mode === 'paint' || drag.mode === 'area') app.holdImage(false);
     if ((drag.mode === 'orbit' || drag.mode === 'pan') && (e.clientX !== drag.sx || e.clientY !== drag.sy)) app.cameraChanged();
     drag.mode = null; drag.id = -1;
     updateCursor();
@@ -104,7 +121,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
   canvas.addEventListener('pointerenter', () => { pointerInside = true; });
-  canvas.addEventListener('pointerleave', () => { pointerInside = false; hover = null; updateCursor(); });
+  canvas.addEventListener('pointerleave', () => { pointerInside = false; hover = null; last = null; updateCursor(); });
 
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
@@ -146,10 +163,11 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (!p) return;
     areaStart = { x: p.x, y: p.y };
     drag.mode = 'area';
+    app.holdImage(true);
   }
 
   // Esc などでプレビューが終わったら、描いている途中の範囲も捨てる(次に動かしたときに始め直さない)
-  app.on('inflate', phase => { if (phase === 'end' && drag.mode === 'area') { drag.mode = null; areaStart = null; updateCursor(); } });
+  app.on('inflate', phase => { if (phase === 'end' && drag.mode === 'area') { drag.mode = null; areaStart = null; app.holdImage(false); updateCursor(); } });
 
   function moveArea(e: PointerEvent): void {
     const p = app.stage.pick(e.clientX, e.clientY);
@@ -160,7 +178,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (w < 2 || h < 2) return;
     const area = { x: areaStart.x + Math.sign(dx || 1) * w / 2, y: areaStart.y + Math.sign(dy || 1) * h / 2, w: Math.round(w), h: Math.round(h) };
     if (app.previewingInflate) app.updateInflate({ area });
-    else if (!app.beginInflateArea(area)) { drag.mode = null; areaStart = null; }
+    else if (!app.beginInflateArea(area)) { drag.mode = null; areaStart = null; app.holdImage(false); }
   }
 
   window.addEventListener('keydown', e => {

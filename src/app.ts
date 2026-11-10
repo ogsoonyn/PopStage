@@ -57,7 +57,12 @@ type AppEvents = {
   file: void;
   /** 膨らませるプレビューの開始・変更・終了 */
   inflate: 'begin' | 'change' | 'end';
+  /** 描画ループで1フレーム描いた(画像全体が動いている間に、ブラシの円を当て直すのに使う) */
+  frame: void;
 };
+
+/** 画像全体のずれ(ピストン)の飛びをならす時定数(秒)。自動揺らしの切り替えや、塗り終わりで止めていた画像を戻すとき */
+const BASE_EASE = 0.05;
 
 /**
  * 動作の重さの計測の受け口。デバッグ表示(?debug、debug/perfOverlay.ts)を開いたときだけ付く。
@@ -108,6 +113,11 @@ export class App extends Emitter<AppEvents> {
   dirty = false;
   /** 変更のたびに増える番号。保存中に変更があったかを見分けるのに使う */
   private revision = 0;
+  /**
+   * 画面に出している画像全体のずれ(ピストン、元画像のピクセル)。ライブ表示だけの値で、物理と書き出しには関わらない。
+   * 塗り・膨らませる範囲のドラッグ中は止めて(held)、当たり判定がずれないようにする。設定の切り替えで飛ぶ分は fix でならす
+   */
+  private base = { shown: { x: 0, y: 0, z: 0 }, live: { x: 0, y: 0, z: 0 }, fix: { x: 0, y: 0, z: 0 }, key: '', held: null as Vec3 | null };
   /** レイヤーごとのウェイトの重心(元画像のピクセル、ためて膨らむ2 の広がりの中心)。ウェイトが変わったら捨てる */
   private centers = new Map<string, { x: number; y: number }>();
   /** まだ GPU へ送っていない、レイヤーごとの変わった矩形 */
@@ -830,6 +840,38 @@ export class App extends Emitter<AppEvents> {
     requestAnimationFrame(loop);
   }
 
+  /**
+   * 画像全体のずれ(ピストン)を画面上で止める / 戻す。塗りや膨らませる範囲のドラッグの間、当たり判定(pick)が
+   * 画像の動きでずれないようにする。物理はそのまま進む。戻すときは、止めていた所から BASE_EASE でならして動きに戻す
+   */
+  holdImage(on: boolean): void {
+    const b = this.base;
+    if (on) { b.held ??= { ...b.shown }; return; }
+    if (!b.held) return;
+    b.fix = { x: b.held.x - b.live.x, y: b.held.y - b.live.y, z: b.held.z - b.live.z };
+    b.held = null;
+  }
+
+  /** 画像全体が画面上で元の位置からずれているか(ブラシの円を毎フレーム当て直すかの判断に使う) */
+  get imageShifted(): boolean { const s = this.base.shown; return s.x !== 0 || s.y !== 0 || s.z !== 0; }
+
+  /** ライブ表示の画像全体のずれを決めて Stage へ入れる(applySwing の後に呼ぶ) */
+  private showBase(dt: number, doc: Document): void {
+    const w = this.world, b = this.base, k = this.imageLong / 2, g = w.baseOffset(doc.layers);
+    const live = { x: g.x * k, y: g.y * k, z: g.z * k };
+    // 自動揺らし・一時停止・周期・強さ・動かすレイヤーとその設定が変わると、画像が飛ぶ。その差を fix に入れてならす
+    const d = w.baseDriver(doc.layers), a = w.autoSwing;
+    const key = d ? `${d.id}|${a.period}|${a.strength}|${JSON.stringify(d.physics.motionParams)}` : '';
+    if (key !== b.key) { b.fix.x += b.live.x - live.x; b.fix.y += b.live.y - live.y; b.fix.z += b.live.z - live.z; b.key = key; }
+    const e = Math.exp(-dt / BASE_EASE);
+    b.fix.x *= e; b.fix.y *= e; b.fix.z *= e;
+    if (Math.abs(b.fix.x) + Math.abs(b.fix.y) + Math.abs(b.fix.z) < 0.05) b.fix = { x: 0, y: 0, z: 0 };
+    b.live = live;
+    b.shown = b.held ? { ...b.held } : { x: live.x + b.fix.x, y: live.y + b.fix.y, z: live.z + b.fix.z };
+    this.stage.setBaseOffset(b.shown);
+    this.stage.setBaseReach(w.baseReach(doc.layers) * k);
+  }
+
   /** 溜まっているウェイトの変更を GPU へ送る(描画・書き出しの直前に呼ぶ) */
   flushWeights(): void {
     for (const [id, rect] of this.pendingUploads) {
@@ -847,11 +889,13 @@ export class App extends Emitter<AppEvents> {
     this.world.autoSwing = this.project.autoSwing;
     this.world.advance(dt, doc.layers, this.recordStep);
     this.applySwing(this.world, doc);
+    this.showBase(dt, doc);
     if (p) t = p.lap('physics', t, performance.now());
     this.flushWeights();
     if (p) t = p.lap('upload', t, performance.now());
     this.stage.render(this.project.camera, this.multiCam, this.multiOrtho);
     if (p) p.lap('render', t, performance.now());
+    this.emit('frame', undefined);
   }
 
   /* ---------- 書き出し ---------- */

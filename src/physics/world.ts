@@ -14,7 +14,7 @@
  * 積分は半陰的オイラー法、刻みは 1/120 秒固定。
  */
 import type { Layer, PhysicsParams, AutoSwing, Vec3 } from '../model/project';
-import { motionAnchor, motionSpread, pistonOffset } from './motion';
+import { motionAnchor, motionSpread, pistonOffset, pistonReach } from './motion';
 
 export const PHYSICS_DT = 1 / 120;
 const MAX_DISPLACEMENT = 1.2;
@@ -96,10 +96,20 @@ export class PhysicsWorld {
    */
   baseOffset(layers: readonly Layer[], t = this.time, out: Vec3 = v3()): Vec3 {
     zero(out);
-    const auto = this.autoSwing;
-    if (this.paused || !auto.enabled) return out;
-    const l = layers.find(l => l.visible && l.physics.enabled && l.physics.motion === 'piston');
+    const l = this.baseDriver(layers), auto = this.autoSwing;
     return l ? pistonOffset(t, auto.period, auto.strength, out, l.physics.motionParams) : out;
+  }
+
+  /** 画像全体の動きを決めるレイヤー(無ければ画像は動かない) */
+  baseDriver(layers: readonly Layer[]): Layer | undefined {
+    if (this.paused || !this.autoSwing.enabled) return undefined;
+    return layers.find(l => l.visible && l.physics.enabled && l.physics.motion === 'piston');
+  }
+
+  /** 画像全体がいちばん上がったときのずれ(正規化座標)。3面図の図の大きさを決めるのに使う */
+  baseReach(layers: readonly Layer[]): number {
+    const l = this.baseDriver(layers);
+    return l ? pistonReach(this.autoSwing.strength, l.physics.motionParams) : 0;
   }
 
   /** 固定刻みで1回進める。 */

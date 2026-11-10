@@ -67,6 +67,8 @@ export class Stage {
   private baseOffset = new THREE.Vector3();
   /** ずれを除いた、画像の置き場所の行列。3面図の正投影の図はこれに合わせるので、画像全体の動きも図の中に見える */
   private restMatrix = new THREE.Matrix4();
+  /** 画像全体がいちばん上がったときのずれ(元画像のピクセル)。3面図の図に、上がった画像も収まるようにする */
+  private baseReach = 0;
   private tmp = new THREE.Vector3();
   vertexCount = 0;
   /** ウェイトを部分転送・全面転送した回数(部分転送が効いているかの確認用) */
@@ -138,6 +140,7 @@ export class Stage {
 
   /** 画像全体のずれ(画像のローカル座標、元画像のピクセル)。描画の前に毎回入れる */
   setBaseOffset(v: Vec3): void { this.baseOffset.set(v.x, v.y, v.z); }
+  setBaseReach(px: number): void { this.baseReach = Math.max(0, px); }
 
   /** メッシュをドキュメントの位置へ置く。offset が true なら画像全体のずれも足す(ずれは画像と一緒に回転・拡大する) */
   private place(offset: boolean): void {
@@ -337,7 +340,9 @@ export class Stage {
   private orthoScale(): number {
     const { w, h } = this.imageSize, { min, max } = this.depthRange();
     const depth = Math.max(max - min, Math.max(w, h) * 0.02);
-    const ext: Record<string, [number, number]> = { front: [w, h], right: [depth, h], bottom: [w, depth] };
+    // 図の中心は画像の元の位置なので、上がった分は上下の両側に足す(ピストン)
+    const hh = h + 2 * this.baseReach;
+    const ext: Record<string, [number, number]> = { front: [w, hh], right: [depth, hh], bottom: [w, depth] };
     let k = 0;
     for (const v of this.subViews) {
       const e = ext[v.kind]; if (!e) continue;
@@ -361,7 +366,7 @@ export class Stage {
   private clampOrthoPan(view: OrthoView): void {
     const { min, max } = this.depthRange(), { w, h } = this.imageSize, margin = Math.max(w, h) * 0.25;
     const p = view.pan, c = (v: number, lim: number) => Math.max(-lim, Math.min(lim, v));
-    p.x = c(p.x, w / 2 + margin); p.y = c(p.y, h / 2 + margin); p.z = c(p.z, Math.max(Math.abs(min), Math.abs(max)) + margin);
+    p.x = c(p.x, w / 2 + margin); p.y = c(p.y, h / 2 + this.baseReach + margin); p.z = c(p.z, Math.max(Math.abs(min), Math.abs(max)) + margin);
   }
 
   /** 3面図の正投影の図を、画面上で (dx, dy) px ドラッグしたぶん平行移動する(画像がポインタに付いてくる向き) */

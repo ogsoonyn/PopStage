@@ -808,6 +808,7 @@ test('揺らし方「ピストン」: 画像全体が上下に動き、塗った
   await expect(page.locator('#pPresetDesc')).toContainText('画像ごと');
   await page.locator('#view').focus();
   await page.keyboard.press('p'); // 一時停止を解除
+  await page.waitForTimeout(600); // 動き出しの飛びをならし終えるまで待つ
 
   type Sample = { g: number; s: number; mesh: number; pickY: number };
   // 描画フレームごとに、画像全体の位置(正規化座標)・塗った所の画像に対する変位・メッシュの位置・画面中央の当たり判定を記録する
@@ -850,10 +851,100 @@ test('揺らし方「ピストン」: 画像全体が上下に動き、塗った
   expect(range((await sample(1.3)).map(x => x.mesh))).toBeGreaterThan(0.08 * k);
   await page.keyboard.press('m');
 
-  // 揺れを一時停止すると、画像も元の位置で止まる
+  // 揺れを一時停止すると、画像もなめらかに元の位置へ戻って止まる
   await page.keyboard.press('p');
+  await page.waitForTimeout(600);
   const paused = await sample(0.5);
   for (const x of paused) { expect(x.g).toBe(0); expect(x.mesh).toBe(0); expect(x.s).toBe(0); }
+});
+
+test('ピストン: 動いている間に塗っても線はまっすぐで、ブラシの円は止まったポインタの下に付いてくる', async ({ page }) => {
+  await boot(page);
+  await page.selectOption('#pPreset', 'zun');
+  await page.evaluate(() => { const a = (window as any).popstage; a.weightOp('全消去', (wm: any) => wm.clear()); a.setViewOption('overlay', false); a.setPaused(false); });
+  await page.waitForTimeout(600);
+  const k = await page.evaluate(() => (window as any).popstage.imageLong / 2);
+  const box = (await page.locator('#view').boundingBox())!;
+  // フレームごとに、物理の画像の位置・画面のメッシュの位置・塗っている途中か・ブラシの円の位置を記録する
+  await page.evaluate(() => {
+    const a = (window as any).popstage, out: any[] = ((window as any).__frames = []);
+    const tick = () => {
+      out.push({ g: a.world.baseOffset(a.doc.layers).y, mesh: a.stage.mesh.position.y, stroking: a.stroking, brush: a.stage.uniforms.uBrush.value.y, on: a.stage.uniforms.uBrushOn.value });
+      if ((window as any).__frames === out) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  // 止まったポインタの下で、画像が動くとブラシの円の位置(画像の座標)も変わる
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await page.waitForTimeout(1300);
+  // 横にゆっくり塗る(1.5 秒ほど。その間に画像は何度も上下する)
+  await page.mouse.move(box.x + box.width * 0.35, box.y + box.height * 0.5);
+  await page.mouse.down();
+  for (let i = 1; i <= 40; i++) { await page.mouse.move(box.x + box.width * (0.35 + 0.3 * i / 40), box.y + box.height * 0.5); await page.waitForTimeout(35); }
+  await page.mouse.up();
+  await page.mouse.move(1, 1);
+  const frames: { g: number; mesh: number; stroking: boolean; brush: number; on: number }[] = await page.evaluate(() => { const f = (window as any).__frames; (window as any).__frames = null; return f; });
+  const range = (v: number[]) => Math.max(...v) - Math.min(...v);
+  const hovering = frames.filter(f => !f.stroking && f.on === 1).slice(0, 40);
+  expect(range(hovering.map(f => f.brush))).toBeGreaterThan(0.04 * k);
+  // 塗っている間も物理の画像は動き続けるが、画面の画像は止めておく
+  const during = frames.filter(f => f.stroking);
+  expect(during.length).toBeGreaterThan(10);
+  expect(range(during.map(f => f.g))).toBeGreaterThan(0.08);
+  expect(range(during.map(f => f.mesh))).toBe(0);
+
+  // 塗れた線は画像の上でまっすぐ(列ごとの重心の行が一直線に並ぶ。斜めから見ているので傾きはあってよい)
+  const res = await page.evaluate(() => {
+    const wm = (window as any).popstage.activeLayer.weights, W = wm.width, H = wm.height, pts: [number, number][] = [];
+    for (let x = 0; x < W; x++) {
+      let s = 0, sy = 0;
+      for (let y = 0; y < H; y++) { const v = wm.data[y * W + x]; s += v; sy += v * y; }
+      if (s > 255 * 3) pts.push([x, sy / s]);
+    }
+    const mid = pts.slice(Math.floor(pts.length * 0.15), Math.ceil(pts.length * 0.85)), n = mid.length;
+    const mx = mid.reduce((a, p) => a + p[0], 0) / n, my = mid.reduce((a, p) => a + p[1], 0) / n;
+    const b = mid.reduce((a, p) => a + (p[0] - mx) * (p[1] - my), 0) / mid.reduce((a, p) => a + (p[0] - mx) ** 2, 0);
+    return { n, H, worst: Math.max(...mid.map(p => Math.abs(p[1] - (my + b * (p[0] - mx))))) };
+  });
+  expect(res.n).toBeGreaterThan(20);
+  expect(res.worst).toBeLessThan(res.H * 0.006);
+});
+
+test('ピストン: 3面図に上がった画像が収まり、回転・拡大した画像ではずれも一緒に回る', async ({ page }) => {
+  await boot(page);
+  await page.selectOption('#pPreset', 'zun');
+  await page.evaluate(() => {
+    const a = (window as any).popstage, l = a.activeLayer;
+    a.store.patchLayer(l.id, { physics: { ...l.physics, motionParams: { 'piston.height': 3 } } }); // ストロークを最大に
+    a.setPaused(false);
+  });
+  await page.locator('#view').focus();
+  await page.keyboard.press('m');
+  await expect(page.locator('#multiView')).toBeVisible();
+  await page.waitForTimeout(300);
+  const fit = await page.evaluate(() => {
+    const a = (window as any).popstage, st = a.stage, scale = st.orthoScale();
+    const reach = a.world.baseReach(a.doc.layers) * a.imageLong / 2;
+    const half = (kind: string) => scale * st.subViews.find((v: any) => v.kind === kind).rect.h / 2;
+    return { reach, need: a.doc.image.height / 2 + reach, front: half('front'), right: half('right') };
+  });
+  expect(fit.reach).toBeGreaterThan(100);
+  expect(fit.front).toBeGreaterThanOrEqual(fit.need);
+  expect(fit.right).toBeGreaterThanOrEqual(fit.need);
+  await page.keyboard.press('m');
+
+  // 画像を 90° 回して 2 倍にすると、上へのずれは画像と一緒に回って 2 倍になる
+  const pos = await page.evaluate(() => {
+    const a = (window as any).popstage, st = a.stage, d = a.doc;
+    a.exporting = true; // 描画ループを止めて、ずれを手で入れる
+    a.store.patchDocument(d.id, { rotation: { x: 0, y: 0, z: Math.PI / 2 }, scale: 2, position: { x: 5, y: 0, z: 0 } });
+    st.setBaseOffset({ x: 0, y: 10, z: 0 });
+    st.render(a.project.camera);
+    const p = st.mesh.position, out = [p.x, p.y, p.z];
+    a.exporting = false;
+    return out;
+  });
+  expect(pos[0]).toBeCloseTo(5 - 20, 6); expect(pos[1]).toBeCloseTo(0, 6); expect(pos[2]).toBeCloseTo(0, 6);
 });
 
 test('揺らし方「ためて膨らむ2」: 離した直後に、塗った範囲が画像の面内でも外へ広がる', async ({ page }) => {
