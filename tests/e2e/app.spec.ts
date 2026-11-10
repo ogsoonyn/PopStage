@@ -555,7 +555,9 @@ test('自動保存は塗った内容を反映し、失敗したらステータ�
     if (!v) return -1;
     const mod = '/src/storage/popstage.ts';
     const { deserializeProject } = await import(/* @vite-ignore */ mod);
-    const { project } = await deserializeProject(v.bytes);
+    // 自動保存は Blob で入る(古い版は Uint8Array)
+    const bytes = v.bytes instanceof Blob ? new Uint8Array(await v.bytes.arrayBuffer()) : v.bytes;
+    const { project } = await deserializeProject(bytes);
     return project.documents[0].layers[0].weights.data.reduce((s: number, x: number) => s + x, 0) as number;
   });
   // 1回目: 塗って自動保存させる
@@ -932,4 +934,37 @@ test('最近開いたファイル: ファイルの場所を覚えて開き直し
   await page.locator('#askYes').click();
   await expect(cards.locator('.recent-name')).toHaveText(['work.popstage']);
   expect(await page.evaluate(() => (window as any).popstage.fileName)).toBe('work.popstage');
+});
+
+test('パフォーマンスのデバッグ表示は ?debug かショートカットで出し、止まった所を記録して書き出せる', async ({ page }) => {
+  await boot(page);
+  // ふだんは計測しない
+  expect(await page.evaluate(() => (window as any).popstage.perf)).toBeNull();
+  await expect(page.locator('#perfOverlay')).toHaveCount(0);
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+Shift+Alt+KeyP');
+  await expect(page.locator('#perfOverlay')).toBeVisible();
+  await page.keyboard.press('Control+Shift+Alt+KeyP');
+  await expect(page.locator('#perfOverlay')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).popstage.perf)).toBeNull();
+
+  await page.goto('/?e2e&debug');
+  await page.waitForFunction(() => { const a = (window as any).popstage; return a?.doc && a.stage.hasDocument && a.perf; });
+  await expect(page.locator('#perfOverlay')).toContainText('fps');
+  expect(await page.evaluate(() => (window as any).popstage.loops)).toBe(1);
+  // メインスレッドを 400ms 止めると、「このページの処理」で止まったと記録される
+  await page.evaluate(() => new Promise<void>(res => requestAnimationFrame(() => { const t = performance.now(); while (performance.now() - t < 400) { /* 止める */ } res(); })));
+  await expect(page.locator('#perfOverlay')).toContainText('止まる → このページの処理', { timeout: 5000 });
+  // 「記録を保存」で書き出す JSON を横取りして確かめる
+  await page.evaluate(() => {
+    const orig = URL.createObjectURL;
+    URL.createObjectURL = (b: Blob | MediaSource) => { (window as any).__saved = (b as Blob).text(); return orig(b); };
+  });
+  await page.locator('#perfOverlay [data-act=save]').click();
+  const data = JSON.parse(await page.evaluate(() => (window as any).__saved));
+  expect(data.freezes.length).toBeGreaterThan(0);
+  expect(data.freezes[0].gap).toBeGreaterThan(350);
+  expect(data.freezes[0].verdict).toBe('page');
+  expect(data.frames.length).toBeGreaterThan(10);
+  expect(data.document.layers).toBe(1);
 });

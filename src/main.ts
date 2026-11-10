@@ -24,6 +24,10 @@ const e2e = params.has('e2e');
 const checkRestore = !e2e || params.has('restore');
 (window as unknown as { popstage: App }).popstage = app;
 
+/** パフォーマンスのデバッグ表示(?debug か Ctrl+Shift+Alt+P)。使うときだけ読み込む */
+const togglePerf = () => void import('./debug/perfOverlay').then(m => m.togglePerfOverlay(app)).catch(e => console.error(e));
+if (params.has('debug')) togglePerf();
+
 bindStageInput(app, canvas);
 const multiView = bindMultiView(app, canvas);
 bindPanels(app);
@@ -138,6 +142,7 @@ window.addEventListener('keydown', e => {
   if (isTyping(e) || anyDialogOpen()) return;
   const k = e.key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
   const hit = (name: string) => { e.preventDefault(); runCommand(name); };
+  if (ctrl && e.shiftKey && e.altKey && e.code === 'KeyP') { e.preventDefault(); togglePerf(); return; }
   if (ctrl) {
     if (k === 'z') return hit(e.shiftKey ? 'redo' : 'undo');
     if (k === 'y') return hit('redo');

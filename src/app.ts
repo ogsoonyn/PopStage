@@ -10,7 +10,7 @@ import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld } from './physics/world';
 import { MotionRecorder } from './physics/recorder';
 import { Stroke, type PaintMode } from './paint/stroke';
-import { serializeProject, deserializeProject, FILE_EXTENSION } from './storage/popstage';
+import { serializeProject, serializeProjectBlob, deserializeProject, FILE_EXTENSION, type PngCacheEntry } from './storage/popstage';
 import { autosave } from './storage/autosave';
 import { recent, type RecentKind } from './storage/recent';
 import { runExport, type ExportSettings } from './export/exporter';
@@ -31,6 +31,19 @@ type AppEvents = {
   status: void;
   file: void;
 };
+
+/**
+ * 動作の重さの計測の受け口。デバッグ表示(?debug、debug/perfOverlay.ts)を開いたときだけ付く。
+ * 付いていないときは null の確認だけで済むので、ふだんの負荷は増えない。
+ */
+export interface PerfProbe {
+  /** requestAnimationFrame の時刻でフレームの始まりを知らせる */
+  frame(now: number): void;
+  /** t0 から now までを、その処理の時間として今のフレームに足す。now を返す */
+  lap(section: 'physics' | 'upload' | 'render', t0: number, now: number): number;
+  /** 自動保存などの単発の処理 */
+  event(e: { t: number; d: number; kind: string; detail?: string }): void;
+}
 
 const PROJECT_TYPES: FilePickerAcceptType[] = [{ description: 'PopStage プロジェクト', accept: { 'application/zip': [FILE_EXTENSION] } }];
 const AUTOSAVE_DELAY = 2000;
@@ -61,7 +74,7 @@ export class App extends Emitter<AppEvents> {
   /** まだ GPU へ送っていない、レイヤーごとの変わった矩形 */
   private pendingUploads = new Map<string, Rect>();
   /** 自動保存用に、変わっていないレイヤーのウェイト PNG を使い回す(手動の保存では使わない) */
-  private pngCache = new Map<string, Uint8Array>();
+  private pngCache = new Map<string, PngCacheEntry>();
   /** 直近の自動保存が失敗していればその理由 */
   autosaveError: string | null = null;
   /** 実行中の自動保存(終わるのを待ってから自動保存を消すため) */
@@ -75,6 +88,10 @@ export class App extends Emitter<AppEvents> {
   private stroke: { stroke: Stroke; layerId: string; label: string } | null = null;
   private syncToken = 0;
   fps = 0;
+  /** 計測(デバッグ表示を開いたときだけ) */
+  perf: PerfProbe | null = null;
+  /** 描画ループを始めた回数。1 より多ければループが重なっている */
+  loops = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     super();
@@ -104,9 +121,13 @@ export class App extends Emitter<AppEvents> {
     });
     s.on('replace', () => this.pngCache.clear());
     s.on('layers', () => {
-      this.pngCache.clear();
       const doc = this.doc; if (!doc) return;
+      // 並べ替え・追加・削除ではウェイトは変わらないので、PNG は作り直さない(無くなったレイヤーの分だけ捨てる)
+      const ids = new Set(doc.layers.map(l => l.id));
+      for (const id of this.pngCache.keys()) if (!ids.has(id)) this.pngCache.delete(id);
+      const t = performance.now();
       this.stage.setLayers(doc.layers);
+      this.perf?.event({ t, d: performance.now() - t, kind: 'layers', detail: 'レイヤー構成の変更(ウェイトの全面転送)' });
       this.pendingUploads.clear(); // 全レイヤーを送り直したので、溜めていた分は要らない
       if (!this.activeLayerId || !s.findLayer(this.activeLayerId)) this.setActiveLayer(doc.layers[0]?.id ?? null);
       else this.syncView();
@@ -255,7 +276,9 @@ export class App extends Emitter<AppEvents> {
   /** confirmed: 未保存の変更を捨ててよいか、呼ぶ側で確かめ済み */
   async openFile(file: File, handle?: FileSystemFileHandle, opts: { confirmed?: boolean } = {}): Promise<void> {
     if (this.busy) { toast('いまはファイルを開けません。処理が終わってからもう一度お試しください。', 'warning'); return; }
+    const t = performance.now();
     await this.whileOpening(() => this.openFileNow(file, handle, !!opts.confirmed));
+    this.perf?.event({ t, d: performance.now() - t, kind: 'open', detail: `${file.name}(${(file.size / 1e6).toFixed(1)}MB、確認の待ち時間も含む)` });
   }
 
   /** ファイルを開いている間は、ほかのファイルを開かせない(起動時の復元にも使う) */
@@ -332,8 +355,10 @@ export class App extends Emitter<AppEvents> {
     if (!this.doc) return undefined;
     this.flushWeights();
     try {
-      const w = 320, h = 240;
-      return await rgbaToPng(this.stage.renderFrame(w, h, this.project.camera, this.project.background), w, h);
+      const w = 320, h = 240, t = performance.now();
+      const px = this.stage.renderFrame(w, h, this.project.camera, this.project.background);
+      this.perf?.event({ t, d: performance.now() - t, kind: 'thumbnail' });
+      return await rgbaToPng(px, w, h);
     } catch { return undefined; }
   }
 
@@ -397,9 +422,16 @@ export class App extends Emitter<AppEvents> {
         if (!this.dirty || !this.doc) return;
         if (this.stroke || this.previewingBlur) { this.scheduleAutosave(); return; }
         try {
-          const bytes = serializeProject(this.project, { pngCache: this.pngCache });
+          const t = performance.now();
+          const bytes = serializeProjectBlob(this.project, { pngCache: this.pngCache });
+          const t1 = performance.now();
           const run = autosave.save({ savedAt: Date.now(), name: this.suggestedName(), bytes })
             .then(() => { this.lastAutosave = new Date(); this.autosaveError = null; this.emit('status', undefined); }, fail);
+          if (this.perf) {
+            const p = this.perf;
+            p.event({ t, d: t1 - t, kind: 'autosave', detail: `${(bytes.size / 1e6).toFixed(1)}MB を直列化(メインスレッド)` });
+            void run.then(() => p.event({ t: t1, d: performance.now() - t1, kind: 'autosave-write', detail: 'IndexedDB への書き込み完了まで(非同期)' }));
+          }
           this.autosaving = this.autosaving.then(() => run);
         } catch (e) { fail(e); }
       });
@@ -558,7 +590,9 @@ export class App extends Emitter<AppEvents> {
   private fpsTime = 0;
 
   start(): void {
+    this.loops++;
     const loop = (now: number) => {
+      this.perf?.frame(now);
       const raw = this.prev ? (now - this.prev) / 1000 : 0, dt = Math.min(raw, 0.1);
       // 物理は 0.1 秒で打ち切るので、その間の平行移動を 1 刻みの動きとして扱うと強く弾みすぎる。測り直す
       if (raw > 0.1) this.world.cutView();
@@ -583,11 +617,16 @@ export class App extends Emitter<AppEvents> {
   frame(dt: number): void {
     const doc = this.doc;
     if (this.exporting || !doc || !this.stage.hasDocument) return;
+    const p = this.perf;
+    let t = p ? performance.now() : 0;
     this.world.autoSwing = this.project.autoSwing;
     this.world.advance(dt, doc.layers, this.recordStep);
     this.applySwing(this.world, doc);
+    if (p) t = p.lap('physics', t, performance.now());
     this.flushWeights();
+    if (p) t = p.lap('upload', t, performance.now());
     this.stage.render(this.project.camera, this.multiCam);
+    if (p) p.lap('render', t, performance.now());
   }
 
   /* ---------- 書き出し ---------- */

@@ -2,7 +2,8 @@
  * .popstage 形式。ZIP の中に project.json、元画像、ウェイトマップ(グレースケールPNG)、サムネイルを入れる。
  * DOM に依存しない(画像のデコードが必要な場合だけ呼び出し側から関数を渡す)。
  */
-import { zipSync, unzipSync, strToU8, strFromU8, type Zippable } from 'fflate';
+import { unzipSync, strToU8, strFromU8 } from 'fflate';
+import { zipParts, concatParts, type ZipEntry } from './zip';
 import {
   LIMITS, PRESETS, MOTIONS, MOTION_PARAMS, createProject, createLayer, defaultCamera, newId,
   type Project, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern,
@@ -68,11 +69,40 @@ export function migrate(json: Record<string, unknown>): ProjectJson {
  * プロジェクトを .popstage のバイト列にする。
  * pngCache を渡すと、レイヤー ID ごとのウェイト PNG を使い回す(ウェイトを変えたら呼び出し側で消すこと)。
  */
-export function serializeProject(project: Project, opts: { thumbnail?: Uint8Array; pngCache?: Map<string, Uint8Array> } = {}): Uint8Array {
-  const files: Zippable = {};
+export function serializeProject(project: Project, opts: SerializeOptions = {}): Uint8Array {
+  return concatParts(projectParts(project, opts));
+}
+
+export interface SerializeOptions {
+  thumbnail?: Uint8Array;
+  /** レイヤー ID ごとのウェイト PNG。data が今のウェイトの配列と同じときだけ使い回す */
+  pngCache?: Map<string, PngCacheEntry>;
+}
+export interface PngCacheEntry { data: Uint8Array; png: Uint8Array }
+
+/** 元画像を Blob にしたもの(自動保存のたびに数十MB をコピーしないよう、画像ごとに1回だけ作る) */
+const imageBlobs = new WeakMap<Uint8Array, Blob>();
+
+/**
+ * serializeProject と同じ中身を Blob で返す(自動保存用)。
+ * 元画像は ZIP にコピーせず、画像ごとに作っておいた Blob をそのまま並べるので、画像が大きくてもほとんど止まらない。
+ */
+export function serializeProjectBlob(project: Project, opts: SerializeOptions = {}): Blob {
+  const images = new Set(project.documents.map(d => d.image.bytes));
+  return new Blob(projectParts(project, opts).map(p => {
+    if (!images.has(p)) return p as BlobPart;
+    let b = imageBlobs.get(p);
+    if (!b) { b = new Blob([p as BlobPart]); imageBlobs.set(p, b); }
+    return b;
+  }), { type: 'application/zip' });
+}
+
+function projectParts(project: Project, opts: SerializeOptions): Uint8Array[] {
+  const files: ZipEntry[] = [];
   const docs: DocumentJson[] = project.documents.map((doc, di) => {
     const imagePath = `images/doc-${di}.${doc.image.ext}`;
-    files[imagePath] = [doc.image.bytes, { level: 0 }];
+    // 元画像のバイト列は読み込んだあと書き換えないので、CRC を使い回せる
+    files.push({ name: imagePath, data: doc.image.bytes, stable: true });
     return {
       id: doc.id, name: doc.name,
       image: { path: imagePath, mime: doc.image.mime, width: doc.image.width, height: doc.image.height },
@@ -80,9 +110,11 @@ export function serializeProject(project: Project, opts: { thumbnail?: Uint8Arra
       meshDensity: doc.meshDensity, opacity: doc.opacity,
       layers: doc.layers.map((layer, li) => {
         const path = `weights/doc-${di}-layer-${li}.png`;
-        let png = opts.pngCache?.get(layer.id);
-        if (!png) { png = encodeGrayPng(layer.weights.width, layer.weights.height, layer.weights.data); opts.pngCache?.set(layer.id, png); }
-        files[path] = [png, { level: 0 }];
+        const data = layer.weights.data, cached = opts.pngCache?.get(layer.id);
+        let png = cached && cached.data === data ? cached.png : undefined;
+        if (!png) { png = encodeGrayPng(layer.weights.width, layer.weights.height, data); opts.pngCache?.set(layer.id, { data, png }); }
+        // キャッシュした PNG は作り直すまで書き換えないので、CRC を使い回せる
+        files.push({ name: path, data: png, stable: !!opts.pngCache });
         return {
           id: layer.id, name: layer.name, visible: layer.visible, pop: layer.pop, physics: { ...layer.physics, motionParams: { ...layer.physics.motionParams } },
           weights: { path, width: layer.weights.width, height: layer.weights.height },
@@ -95,9 +127,9 @@ export function serializeProject(project: Project, opts: { thumbnail?: Uint8Arra
     project: { background: project.background, camera: structuredClone(project.camera), fps: project.fps, autoSwing: { ...project.autoSwing } },
     documents: docs,
   };
-  files['project.json'] = strToU8(JSON.stringify(json, null, 2));
-  if (opts.thumbnail) files['thumbnail.png'] = [opts.thumbnail, { level: 0 }];
-  return zipSync(files, { level: 6 });
+  files.push({ name: 'project.json', data: strToU8(JSON.stringify(json, null, 2)), level: 6 });
+  if (opts.thumbnail) files.push({ name: 'thumbnail.png', data: opts.thumbnail });
+  return zipParts(files);
 }
 
 /* ---------- 読み込み ---------- */
