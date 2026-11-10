@@ -45,7 +45,12 @@ describe('PNG', () => {
     expect(() => decodePngToGray(png)).toThrow(/truncated/);
   });
 
-  it('寸法より多く展開されるデータは、寸法の分だけで止める', () => {
+  it('展開後のデータが大きくなりすぎる寸法(色数・ビット深度込み)は確保する前に弾く', () => {
+    const png = buildPng(4000, 4000, 16, 6, zlibSync(new Uint8Array(16))); // 約 128MB
+    expect(() => decodePngToGray(png)).toThrow(/too large/);
+  });
+
+  it('寸法より多いデータが入っていても、寸法どおりの画像として読める', () => {
     const raw = new Uint8Array(4 << 20); // 2x2 に対して 4MB
     const g = decodePngToGray(buildPng(2, 2, 8, 0, zlibSync(raw)));
     expect(g.width).toBe(2); expect([...g.data]).toEqual([0, 0, 0, 0]);
@@ -153,12 +158,28 @@ describe('.popstage', () => {
     expect(await bg('#123')).toBeNull();
   });
 
-  it('展開後が上限を超えるファイルが入っていたら読まない。使わないファイルは展開しない', async () => {
-    const big = new Uint8Array(UNZIP_LIMITS.thumbnail + 1);
-    await expect(deserializeProject(zipOf(oneLayer({}), { 'thumbnail.png': big }))).rejects.toThrow(/大きすぎます/);
-    const junk = new Uint8Array(UNZIP_LIMITS.json + 1);
-    const { project } = await deserializeProject(zipOf(oneLayer({}), { 'junk.bin': junk }));
+  it('必要なファイルの展開後のサイズが上限を超えていたら読まない', async () => {
+    const zip = declareSize(zipOf(oneLayer({})), 'images/doc-0.png', UNZIP_LIMITS.image + 1);
+    await expect(deserializeProject(zip)).rejects.toThrow(/大きすぎます/);
+  });
+
+  it('1つずつは上限内でも、合計が上限を超えたら読まない(ZIP 爆弾)', async () => {
+    const json = oneLayer({}) as any;
+    json.documents[0].layers = Array.from({ length: 8 }, (_, i) => ({ name: `L${i}`, weights: { path: `w${i}.png` } }));
+    const extra: Record<string, Uint8Array> = {};
+    for (let i = 0; i < 8; i++) extra[`w${i}.png`] = new Uint8Array([1]);
+    let zip: Uint8Array = zipOf(json, extra);
+    for (let i = 0; i < 8; i++) zip = declareSize(zip, `w${i}.png`, UNZIP_LIMITS.weights); // 8 × 64MB + 画像 > 512MB
+    await expect(deserializeProject(zip)).rejects.toThrow(/合計/);
+  });
+
+  it('使わないファイルは展開しない。サムネイルが大きすぎるときは捨てて読み込みは続ける', async () => {
+    // 展開しようとすれば 4GB を確保して失敗するエントリ
+    let zip: Uint8Array = declareSize(zipOf(oneLayer({}), { 'junk.bin': new Uint8Array([1]), 'thumbnail.png': new Uint8Array([2]) }), 'junk.bin', 0xfffffff0);
+    zip = declareSize(zip, 'thumbnail.png', UNZIP_LIMITS.thumbnail + 1);
+    const { project, thumbnail } = await deserializeProject(zip);
     expect(project.documents.length).toBe(1);
+    expect(thumbnail).toBeUndefined();
   });
 
   it('project.json が壊れている・形が違うときは分かりやすく失敗する', async () => {
@@ -199,4 +220,15 @@ function buildPng(w: number, h: number, depth: number, ctype: number, idat: Uint
   const out = new Uint8Array(parts.reduce((s, p) => s + p.length, 0));
   let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
   return out;
+}
+
+/** ZIP の中央ディレクトリに書かれた「展開後のサイズ」を書き換える(実際のデータはそのまま) */
+function declareSize(zip: Uint8Array, name: string, size: number): Uint8Array {
+  const out = zip.slice(), dv = new DataView(out.buffer);
+  for (let p = 0; p + 46 <= out.length; p++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) continue;
+    const n = dv.getUint16(p + 28, true);
+    if (new TextDecoder().decode(out.subarray(p + 46, p + 46 + n)) === name) { dv.setUint32(p + 24, size, true); return out; }
+  }
+  throw new Error(`entry ${name} not found`);
 }

@@ -196,10 +196,10 @@ test('3面図: 横に4つの図が出て、自由角度はドラッグで回り�
   expect(Math.abs(x2)).toBeLessThan(1); expect(Math.abs(y2)).toBeLessThan(1);
 });
 
-test('ツールボタンにフォーカスが残っていても、Space+ドラッグは平行移動になり塗らない', async ({ page }) => {
+for (const target of ['[data-tool=brush]', '#pPreset']) test(`${target} にフォーカスが残っていても、Space+ドラッグは平行移動になり塗らない`, async ({ page }) => {
   await boot(page);
-  await page.locator('[data-tool=brush]').click();
-  await expect(page.locator('[data-tool=brush]')).toBeFocused();
+  await page.locator(target).focus();
+  await expect(page.locator(target)).toBeFocused();
   const before = await page.evaluate(() => ({ t: { ...(window as any).popstage.project.camera.target }, undo: (window as any).popstage.history.canUndo }));
   const sum0 = await weightSum(page);
   const box = (await page.locator('#view').boundingBox())!;
@@ -365,12 +365,13 @@ test('上書き保存の最中に変更すると、保存後も「未保存」�
     const dirty1 = a.dirty;
 
     // 書き込みを待っている間に変更すると「未保存」のまま
-    let release2!: () => void;
+    let release2!: () => void, writing!: () => void;
     const gate2 = new Promise<void>(res => { release2 = res; });
-    a.fileHandle = { name: 'slow.popstage', createWritable: async () => ({ write: async () => { await gate2; }, close: async () => {} }) };
+    const started = new Promise<void>(res => { writing = res; });
+    a.fileHandle = { name: 'slow.popstage', createWritable: async () => ({ write: async () => { writing(); await gate2; }, close: async () => {} }) };
     a.store.patchLayer(a.activeLayerId, { pop: 20 });
     const p = a.save();
-    await new Promise(r => setTimeout(r, 50)); // 直列化が済み、書き込みを待っているところ
+    await started; // 直列化が済み、書き込みを待っているところ
     a.store.patchLayer(a.activeLayerId, { pop: 30 });
     release2();
     const ok2 = await p;

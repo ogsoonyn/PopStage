@@ -54,6 +54,8 @@ export class App extends Emitter<AppEvents> {
   dirty = false;
   /** 変更のたびに増える番号。保存中に変更があったかを見分けるのに使う */
   private revision = 0;
+  /** 実行中の自動保存(終わるのを待ってから自動保存を消すため) */
+  private autosaving: Promise<void> = Promise.resolve();
   exporting = false;
   lastSaved: Date | null = null;
   lastAutosave: Date | null = null;
@@ -175,14 +177,15 @@ export class App extends Emitter<AppEvents> {
   /**
    * プロジェクトを読み込む。先に画像をデコードし、成功してから状態を一度に差し替える。
    * デコードに失敗したら例外を投げ、今の状態には何も触れない。
+   * 後から始まった別の読み込みに追い越されたときは何もせず false を返す。
    */
-  async loadProject(project: Project, opts: { fileName?: string | null; handle?: FileSystemFileHandle | null; dirty?: boolean } = {}): Promise<void> {
+  async loadProject(project: Project, opts: { fileName?: string | null; handle?: FileSystemFileHandle | null; dirty?: boolean } = {}): Promise<boolean> {
     const doc = project.documents[0];
     if (!doc) throw new Error('プロジェクトに画像が入っていません');
     const token = ++this.syncToken;
     const canvas = await decodeForDisplay(doc.image, Math.min(4096, this.stage.maxTextureSize));
     // デコード中に別の読み込みが始まっていたら、こちらは捨てる
-    if (token !== this.syncToken) return;
+    if (token !== this.syncToken) return false;
     this.loading = true;
     try {
       this.store.replace(project);
@@ -197,6 +200,7 @@ export class App extends Emitter<AppEvents> {
       this.applyDocument(canvas);
     } finally { this.loading = false; }
     this.emit('file', undefined);
+    return true;
   }
 
   async loadSample(): Promise<void> {
@@ -233,7 +237,7 @@ export class App extends Emitter<AppEvents> {
       p.background = prev.background;
       p.autoSwing = { ...prev.autoSwing };
       p.camera.fov = prev.camera.fov;
-      await this.loadProject(p);
+      if (!(await this.loadProject(p))) return;
       this.setTool('brush');
       toast(`「${file.name}」を開きました。動かしたい所を塗ってください。`, 'success');
     } catch (e) {
@@ -245,7 +249,7 @@ export class App extends Emitter<AppEvents> {
     setBusy(true);
     try {
       const { project } = await deserializeProject(bytes, { decodeFallback: browserDecodeGray });
-      await this.loadProject(project, { fileName: name, handle, dirty });
+      if (!(await this.loadProject(project, { fileName: name, handle, dirty }))) return;
       if (name) toast(`「${name}」を開きました。`, 'success');
     } catch (e) {
       toast(e instanceof Error ? e.message : 'プロジェクトを開けませんでした。', 'error', 6000);
@@ -285,7 +289,9 @@ export class App extends Emitter<AppEvents> {
       this.lastSaved = new Date();
       if (this.revision === revision) {
         this.dirty = false;
-        void autosave.clear();
+        // 予約中の自動保存は取り消し、実行中のものがあれば終わってから消す(古い内容が後から書き込まれないように)
+        clearTimeout(this.autosaveTimer);
+        void this.autosaving.then(() => { if (!this.dirty) return autosave.clear(); });
       } else {
         this.scheduleAutosave();
       }
@@ -303,7 +309,9 @@ export class App extends Emitter<AppEvents> {
     this.autosaveTimer = window.setTimeout(() => {
       if (!this.dirty || !this.doc || this.stroke) { if (this.stroke) this.scheduleAutosave(); return; }
       try {
-        void autosave.save({ savedAt: Date.now(), name: this.suggestedName(), bytes: this.serialize() }).then(() => { this.lastAutosave = new Date(); this.emit('status', undefined); });
+        const run = autosave.save({ savedAt: Date.now(), name: this.suggestedName(), bytes: this.serialize() })
+          .then(() => { this.lastAutosave = new Date(); this.emit('status', undefined); }, e => { console.warn('autosave failed', e); });
+        this.autosaving = this.autosaving.then(() => run);
       } catch (e) { console.warn('autosave failed', e); }
     }, AUTOSAVE_DELAY);
   }

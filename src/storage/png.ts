@@ -7,8 +7,10 @@ import { zlibSync, unzlibSync } from 'fflate';
 
 const SIG = [137, 80, 78, 71, 13, 10, 26, 10];
 
-/** 読み込めるウェイト PNG の一辺の上限。これより大きい寸法を名乗るものは展開前に弾く */
-export const MAX_PNG_SIDE = 8192;
+/** 読み込めるウェイト PNG の一辺の上限。ウェイトは 1024 までに縮めるので、余裕をみてもこれで足りる */
+export const MAX_PNG_SIDE = 4096;
+/** 展開後の画像データの上限(バイト)。確保する前にこれで弾く */
+export const MAX_PNG_RAW = 64 << 20;
 
 /** PNG のヘッダ(IHDR)から寸法を読む。PNG でなければ null */
 export function readPngSize(bytes: Uint8Array): { width: number; height: number } | null {
@@ -95,6 +97,7 @@ export function decodePngToGray(bytes: Uint8Array): GrayImage {
   const bpp = channels * (depth / 8), stride = width * bpp;
   // 展開後の大きさは寸法から決まるので、その大きさの出力先を渡して、それ以上は展開させない
   const expected = (stride + 1) * height;
+  if (expected > MAX_PNG_RAW) throw new Error(`PNG: ${width}x${height} is too large`);
   const raw = unzlibSync(comp, { out: new Uint8Array(expected) });
   if (raw.length < expected) throw new Error('PNG: image data is truncated');
   const img = new Uint8Array(stride * height);

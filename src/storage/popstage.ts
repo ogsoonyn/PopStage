@@ -14,7 +14,10 @@ export const FORMAT_VERSION = 1;
 export const FILE_EXTENSION = '.popstage';
 
 /** 展開する1ファイルあたりの上限(バイト)。ZIP 爆弾でメモリを使い切らないよう、宣言サイズで弾く */
-export const UNZIP_LIMITS = { json: 16 << 20, image: 256 << 20, weights: 64 << 20, thumbnail: 8 << 20 };
+export const UNZIP_LIMITS = { json: 16 << 20, image: 256 << 20, weights: 64 << 20, thumbnail: 8 << 20, total: 512 << 20 };
+
+/** 読み込むドキュメント数の上限(アプリが使うのは先頭だけだが、形式としては複数持てる) */
+const MAX_DOCUMENTS = 8;
 
 /** プロトタイプを辿らずに、自前のキーかどうかを調べる(`constructor` などを通さない) */
 const own = (o: object, k: unknown): boolean => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
@@ -146,15 +149,18 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
   try { parsed = JSON.parse(strFromU8(pj)); } catch { throw new Error('project.json を読めませんでした(壊れています)'); }
   if (!parsed || typeof parsed !== 'object') throw new Error('project.json の形式が不正です');
   const json = migrate(parsed as Record<string, unknown>);
-  const docsJson = Array.isArray(json.documents) ? json.documents : [];
-  const wanted = new Map<string, number>([['thumbnail.png', UNZIP_LIMITS.thumbnail]]);
+  // 実際に読む分(ドキュメントとレイヤーの上限まで)のファイルだけを展開する
+  const docsJson = (Array.isArray(json.documents) ? json.documents : []).slice(0, MAX_DOCUMENTS);
+  const layersOf = (dj: DocumentJson) => (Array.isArray(dj?.layers) ? dj.layers : []).slice(0, LIMITS.maxLayers);
+  const wanted = new Map<string, number>();
   for (const dj of docsJson) {
     if (typeof dj?.image?.path === 'string') wanted.set(dj.image.path, UNZIP_LIMITS.image);
-    for (const lj of Array.isArray(dj?.layers) ? dj.layers : []) {
+    for (const lj of layersOf(dj)) {
       if (typeof lj?.weights?.path === 'string') wanted.set(lj.weights.path, UNZIP_LIMITS.weights);
     }
   }
-  const files = unzipEntries(bytes, wanted);
+  // サムネイルは読み込みに要らないので、大きすぎるときは黙って捨てる
+  const files = unzipEntries(bytes, wanted, new Map([['thumbnail.png', UNZIP_LIMITS.thumbnail]]));
 
   const project = createProject();
   const p = json.project ?? {} as ProjectJson['project'];
@@ -184,7 +190,7 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
       opacity: unit(dj.opacity, 1), layers: [],
     };
     const ws = weightSizeFor(width, height);
-    for (const lj of (Array.isArray(dj.layers) ? dj.layers : []).slice(0, LIMITS.maxLayers)) {
+    for (const lj of layersOf(dj)) {
       const wb = files[lj.weights?.path];
       let weights = new WeightMap(ws.w, ws.h);
       if (wb) {
@@ -210,20 +216,34 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
   return { project, thumbnail: files['thumbnail.png'] };
 }
 
-/** wanted に挙げたファイルだけを展開する。宣言サイズが上限を超えるものがあれば読み込みをやめる */
-function unzipEntries(bytes: Uint8Array, wanted: Map<string, number>): Record<string, Uint8Array> {
-  const tooLarge: string[] = [];
-  let files: Record<string, Uint8Array>;
+/**
+ * wanted に挙げたファイルだけを展開する。宣言サイズが1ファイルの上限、または合計の上限を超えたら読み込みをやめる。
+ * optional に挙げたファイルは、上限を超えていれば展開せずに捨てる。
+ * 先に宣言サイズだけを調べてから展開するので、上限を超えるファイルのためにメモリを確保することはない。
+ */
+function unzipEntries(bytes: Uint8Array, wanted: Map<string, number>, optional = new Map<string, number>()): Record<string, Uint8Array> {
+  const broken = () => new Error('.popstage ファイルを展開できませんでした(壊れているか、形式が違います)');
+  // 1回目: 展開せず、展開する予定のエントリの宣言サイズを調べる(同じ名前が重なっていてもすべて数える)
+  const tooLarge: string[] = [], skip = new Set<string>();
+  let total = 0;
   try {
-    files = unzipSync(bytes, {
+    unzipSync(bytes, {
       filter: f => {
-        const limit = wanted.get(f.name);
-        if (limit === undefined) return false;
-        if (f.originalSize > limit) { tooLarge.push(f.name); return false; }
-        return true;
+        const must = wanted.get(f.name), opt = optional.get(f.name);
+        if (must !== undefined) {
+          if (f.originalSize > must) tooLarge.push(f.name);
+          total += f.originalSize;
+        } else if (opt !== undefined) {
+          if (f.originalSize > opt) skip.add(f.name); else total += f.originalSize;
+        }
+        return false;
       },
     });
-  } catch { throw new Error('.popstage ファイルを展開できませんでした(壊れているか、形式が違います)'); }
+  } catch { throw broken(); }
+  if (total > UNZIP_LIMITS.total) throw new Error('.popstage の中身が大きすぎます(展開後の合計が上限を超えています)');
   if (tooLarge.length) throw new Error(`.popstage の中のファイルが大きすぎます(${tooLarge.join(', ')})`);
-  return files;
+  // 2回目: 調べた分だけを展開する
+  try {
+    return unzipSync(bytes, { filter: f => (wanted.has(f.name) || optional.has(f.name)) && !skip.has(f.name) });
+  } catch { throw broken(); }
 }

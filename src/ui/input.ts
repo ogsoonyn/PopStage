@@ -123,7 +123,9 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (e.key === 'Alt') { alt = true; e.preventDefault(); }
     // ボタンなどにフォーカスが残っていても、ポインタがキャンバス上にあれば平行移動にする。
     // キャンバスの外では Space をボタンの押下などに使えるよう、横取りしない
-    if (e.code === 'Space' && !isTyping(e) && (space || pointerInside || drag.mode !== null || e.target === canvas || e.target === document.body)) {
+    // ダイアログの表示中は、ボタンなどを Space で押せるよう横取りしない
+    const dialogOpen = !!document.querySelector('dialog[open]');
+    if (e.code === 'Space' && !isTextEntry(e) && !dialogOpen && (space || pointerInside || drag.mode !== null || e.target === canvas || e.target === document.body)) {
       if (!space) { space = true; updateCursor(); }
       e.preventDefault();
     }
@@ -138,6 +140,12 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   window.addEventListener('blur', () => { space = false; alt = false; });
 
   return { isSpaceDown: () => space };
+}
+
+/** 文字を打つ欄(テキスト・数値の入力欄など)にいるか。Space をキャンバスの平行移動に使うかの判定に使う */
+function isTextEntry(e: Event): boolean {
+  const t = e.target as HTMLElement | null;
+  return !!t && (t.matches('textarea, input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=color]):not([type=button]):not([type=submit]):not([type=file])') || t.isContentEditable);
 }
 
 export function isTyping(e: Event): boolean {
