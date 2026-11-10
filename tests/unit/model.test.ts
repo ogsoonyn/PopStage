@@ -150,6 +150,29 @@ describe('ウェイトの編集とタイル差分', () => {
     expect(st.data[5 * 100 + 49]).toBe(0); // ブラシの外は変わらない
   });
 
+  it('ぼかしはブラシサイズに比例して広くならす(なだらかな所でも効く)', () => {
+    const make = () => { const wm = new WeightMap(512, 512); for (let y = 0; y < 512; y++) for (let x = 256; x < 512; x++) wm.data[y * 512 + x] = 255; return wm; };
+    const width = (wm: WeightMap) => { let n = 0; for (let x = 0; x < 512; x++) { const v = wm.data[250 * 512 + x]; if (v > 25 && v < 230) n++; } return n; };
+    // くっきりした段差: 1回なぞると、ブラシ半径(32px)と同じくらいの幅までならされる
+    const sharp = make();
+    const s1 = new Stroke(sharp, 'smooth', { size: 64, strength: 0.3, hardness: 0 });
+    for (let y = 100; y <= 400; y += 2) s1.addPoint(256, y);
+    expect(width(sharp)).toBeGreaterThanOrEqual(25);
+    // もともとなだらかな所: 以前は最大 1 しか変わらなかった
+    const soft = make(); soft.gaussianBlur(24);
+    const before = soft.data.slice(), w0 = width(soft);
+    const s2 = new Stroke(soft, 'smooth', { size: 64, strength: 0.3, hardness: 0 });
+    for (let y = 100; y <= 400; y += 2) s2.addPoint(256, y);
+    let maxd = 0; for (let i = 0; i < before.length; i++) maxd = Math.max(maxd, Math.abs(before[i] - soft.data[i]));
+    expect(maxd).toBeGreaterThan(10);
+    expect(width(soft)).toBeGreaterThan(w0);
+    // 大きいブラシほど広くならす
+    const a = make(), b = make();
+    const sa = new Stroke(a, 'smooth', { size: 32, strength: 0.5, hardness: 0 }), sb = new Stroke(b, 'smooth', { size: 160, strength: 0.5, hardness: 0 });
+    for (let y = 100; y <= 400; y += 2) { sa.addPoint(256, y); sb.addPoint(256, y); }
+    expect(width(b)).toBeGreaterThan(width(a) * 2);
+  });
+
   it('一括処理は変わったタイルだけ記録する', () => {
     const store = makeStore(), h = new History(store), layer = store.doc!.layers[0];
     layer.weights.data[0] = 10;

@@ -31,7 +31,7 @@
       <li><button data-cmd="undo"><span>元に戻す <span data-label="undo" class="opacity-60"></span></span><kbd class="kbd kbd-xs ml-auto">Ctrl+Z</kbd></button></li>
       <li><button data-cmd="redo"><span>やり直す <span data-label="redo" class="opacity-60"></span></span><kbd class="kbd kbd-xs ml-auto">Ctrl+Shift+Z</kbd></button></li>
       <li class="menu-title pt-2">選択中のレイヤーのウェイト</li>
-      <li><button data-cmd="smoothAll">全体をなめらかに…</button></li>
+      <li><button data-cmd="smoothAll">全体をぼかす(ガウス)…</button></li>
       <li><button data-cmd="normalize">正規化(最大を100%に)</button></li>
       <li><button data-cmd="invert">反転</button></li>
       <li><button data-cmd="fromAlpha">アルファから生成</button></li>
@@ -127,6 +127,11 @@
     <div class="overflow-y-auto flex-1 p-3 flex flex-col gap-4" id="props">
       <section class="flex flex-col gap-2">
         <h2 class="font-bold">レイヤー: <span id="activeLayerName"></span></h2>
+        <div class="flex flex-wrap gap-1">
+          <button class="btn btn-xs" data-cmd="smoothAll" title="レイヤー全体にガウスぼかしをかける">全体をぼかす…</button>
+          <button class="btn btn-xs" data-cmd="normalize" title="最大値が100%になるよう全体を拡大">正規化</button>
+          <button class="btn btn-xs" data-cmd="invert">反転</button>
+        </div>
         <div class="prop"><label for="pPop">ポップ量</label><input id="pPop" type="range" min="-500" max="500" class="range range-xs"><input id="pPopN" type="number" min="-500" max="500" class="input input-xs w-16 text-right"></div>
         <label class="flex items-center justify-between">揺れ <input id="pSwing" type="checkbox" class="toggle toggle-sm"></label>
         <div class="prop"><label for="pPreset">プリセット</label>
@@ -228,6 +233,25 @@
         <button type="button" id="exStart" class="btn btn-sm btn-primary">書き出す</button>
       </div>
     </form>
+  </div>
+</dialog>
+
+<!-- 全体をぼかす(ガウス)。3Dビューでプレビューが見えるよう背景を暗くしない -->
+<dialog id="blurDialog" class="modal modal-bottom">
+  <div class="modal-box max-w-xl mx-auto mb-10 shadow-2xl border border-base-300">
+    <h3 class="font-bold text-lg">全体をぼかす(ガウス)</h3>
+    <p id="blurTarget" class="text-sm opacity-70 pt-1 pb-3"></p>
+    <div class="flex items-center gap-3">
+      <span class="shrink-0">半径</span>
+      <input id="blurRadius" type="range" min="0" max="200" value="16" class="range range-sm range-primary flex-1">
+      <input id="blurRadiusN" type="number" min="0" max="200" class="input input-sm w-20 text-right">
+      <span class="shrink-0">px</span>
+    </div>
+    <p class="text-xs opacity-60 pt-2">スライダーを動かすと 3D ビューにその場で反映されます。半径は元画像のピクセル単位です。</p>
+    <div class="modal-action mt-3">
+      <button id="blurCancel" class="btn btn-sm">キャンセル</button>
+      <button id="blurApply" class="btn btn-sm btn-primary">適用</button>
+    </div>
   </div>
 </dialog>
 

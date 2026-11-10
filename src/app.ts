@@ -4,7 +4,7 @@
  */
 import { Store, createProject, createDocument, createLayer, cloneLayer, defaultCamera, LIMITS, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
-import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation } from './commands/commands';
+import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from './commands/commands';
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld } from './physics/world';
 import { MotionRecorder } from './physics/recorder';
@@ -331,13 +331,43 @@ export class App extends Emitter<AppEvents> {
     else toast('変化はありませんでした。');
   }
 
-  async smoothAll(): Promise<void> {
-    const r = await ask({ title: '全体をなめらかに', body: '選択中のレイヤー全体にガウスぼかしをかけます。', input: { label: '半径(px)', value: 16, min: 1, max: 200 } });
-    if (!r.ok || !r.value || !this.doc) return;
-    const layer = this.activeLayer; if (!layer) return;
-    const radius = r.value * (layer.weights.width / this.doc.image.width);
-    this.weightOp('全体をなめらかに', wm => wm.gaussianBlur(radius));
+  /* 全体をぼかす(ガウス): プレビューしながら半径を決め、適用で1手として記録する */
+
+  private blurPreview: { layerId: string; original: Uint8Array } | null = null;
+
+  beginBlurPreview(): boolean {
+    const layer = this.activeLayer; if (!layer || this.blurPreview) return false;
+    this.blurPreview = { layerId: layer.id, original: layer.weights.data.slice() };
+    return true;
   }
+
+  /** radius は元画像のピクセル単位。0 で元に戻した状態を表示する。 */
+  previewBlur(radius: number): void {
+    const p = this.blurPreview, doc = this.doc; if (!p || !doc) return;
+    const layer = this.store.findLayer(p.layerId)?.layer; if (!layer) return;
+    const wm = layer.weights;
+    wm.data.set(p.original);
+    if (radius > 0) wm.gaussianBlur(radius * (wm.width / doc.image.width));
+    this.store.weightsChanged(p.layerId, wm.fullRect, false);
+  }
+
+  endBlurPreview(apply: boolean, radius: number): void {
+    const p = this.blurPreview; if (!p) return;
+    this.blurPreview = null;
+    const layer = this.store.findLayer(p.layerId)?.layer; if (!layer) return;
+    const wm = layer.weights;
+    if (!apply) {
+      wm.data.set(p.original);
+      this.store.weightsChanged(p.layerId, wm.fullRect, false);
+      return;
+    }
+    const tiles = diffTiles(p.original, wm);
+    if (!tiles.length) { toast('変化はありませんでした。'); return; }
+    this.history.push(new WeightEdit(`全体をぼかす(半径 ${radius}px)`, p.layerId, tiles));
+    this.store.emit('change', undefined);
+  }
+
+  get previewingBlur(): boolean { return !!this.blurPreview; }
 
   fromAlpha(): void {
     const c = this.imageCanvas, layer = this.activeLayer; if (!c || !layer) return;

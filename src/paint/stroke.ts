@@ -16,7 +16,9 @@ export interface BrushSettings {
 
 /** 1スタンプの最大加算量(強さ 100% のとき、ウェイト 0〜1 に対して) */
 const STAMP_GAIN = 0.35;
-const SMOOTH_R = 3;
+/** ぼかしツールが平均を取る半径(ブラシ半径に対する比)。ブラシが大きいほど広くならす */
+const SMOOTH_RATIO = 0.5;
+export const smoothRadius = (brushR: number) => Math.max(2, Math.round(brushR * SMOOTH_RATIO));
 
 export function falloff(d: number, hardness: number): number {
   if (d >= 1) return 0;
@@ -91,7 +93,7 @@ export class Stroke {
   }
 
   private stamp(cx: number, cy: number, r: number, strength: number): void {
-    const rect = this.clip(cx, cy, r, this.mode === 'smooth' ? SMOOTH_R : 0);
+    const rect = this.clip(cx, cy, r, this.mode === 'smooth' ? smoothRadius(r) : 0);
     if (!rect) return;
     this.ensureTiles(rect);
     const W = this.map.width, work = this.work, h = this.settings.hardness;
@@ -115,24 +117,49 @@ export class Stroke {
     this.dirty = this.dirty ? union(this.dirty, rect) : rect;
   }
 
-  /** 周囲と平均化して段差をならす(分離可能なボックスぼかしとブラシ形状で混ぜる)。 */
+  /**
+   * 周囲と平均化して段差をならす。半径はブラシに比例させ、累積和によるボックスぼかしを
+   * 縦横に2回ずつかける(ガウスに近い形になり、計算量は半径に依存しない)。結果はブラシ形状で混ぜる。
+   */
   private smooth(rect: Rect, cx: number, cy: number, r: number, strength: number): void {
-    const W = this.map.width, w = rect.w, hgt = rect.h, work = this.work;
-    const src = new Float32Array(w * hgt), tmp = new Float32Array(w * hgt);
-    for (let y = 0; y < hgt; y++) for (let x = 0; x < w; x++) src[y * w + x] = work[(rect.y + y) * W + rect.x + x];
-    for (let y = 0; y < hgt; y++) for (let x = 0; x < w; x++) {
-      let s = 0, n = 0;
-      for (let k = -SMOOTH_R; k <= SMOOTH_R; k++) { const xx = x + k; if (xx >= 0 && xx < w) { s += src[y * w + xx]; n++; } }
-      tmp[y * w + x] = s / n;
-    }
+    const W = this.map.width, w = rect.w, h = rect.h, work = this.work, R = smoothRadius(r);
+    const src = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) src[y * w + x] = work[(rect.y + y) * W + rect.x + x];
+    const a = src.slice(), b = new Float32Array(w * h);
+    for (let pass = 0; pass < 2; pass++) { boxRows(a, b, w, h, R); boxCols(b, a, w, h, R); }
     const mix = Math.min(1, strength * 2.5);
-    for (let y = 0; y < hgt; y++) for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
       const f = falloff(Math.hypot((rect.x + x + 0.5 - cx) / r, (rect.y + y + 0.5 - cy) / r), this.settings.hardness) * mix;
       if (f <= 0) continue;
-      let s = 0, n = 0;
-      for (let k = -SMOOTH_R; k <= SMOOTH_R; k++) { const yy = y + k; if (yy >= 0 && yy < hgt) { s += tmp[yy * w + x]; n++; } }
-      const i = (rect.y + y) * W + rect.x + x;
-      work[i] = src[y * w + x] * (1 - f) + (s / n) * f;
+      const k = y * w + x;
+      work[(rect.y + y) * W + rect.x + x] = src[k] * (1 - f) + a[k] * f;
+    }
+  }
+}
+
+/** 横方向の移動平均(端は端の値を延長)。 */
+function boxRows(src: Float32Array, dst: Float32Array, w: number, h: number, r: number): void {
+  const n = 2 * r + 1;
+  for (let y = 0; y < h; y++) {
+    const o = y * w;
+    let acc = 0;
+    for (let k = -r; k <= r; k++) acc += src[o + Math.max(0, Math.min(w - 1, k))];
+    for (let x = 0; x < w; x++) {
+      dst[o + x] = acc / n;
+      acc += src[o + Math.min(w - 1, x + r + 1)] - src[o + Math.max(0, x - r)];
+    }
+  }
+}
+
+/** 縦方向の移動平均(端は端の値を延長)。 */
+function boxCols(src: Float32Array, dst: Float32Array, w: number, h: number, r: number): void {
+  const n = 2 * r + 1;
+  for (let x = 0; x < w; x++) {
+    let acc = 0;
+    for (let k = -r; k <= r; k++) acc += src[Math.max(0, Math.min(h - 1, k)) * w + x];
+    for (let y = 0; y < h; y++) {
+      dst[y * w + x] = acc / n;
+      acc += src[Math.min(h - 1, y + r + 1) * w + x] - src[Math.max(0, y - r) * w + x];
     }
   }
 }

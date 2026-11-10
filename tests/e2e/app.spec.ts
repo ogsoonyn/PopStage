@@ -87,6 +87,32 @@ test('塗ると持ち上がり、塗った矩形だけ転送され、元に戻�
   expect((await page.locator('#stage').screenshot()).equals(shotPainted)).toBe(false);
 });
 
+test('全体をぼかす: プレビュー、キャンセル、適用、元に戻す', async ({ page }) => {
+  await boot(page);
+  const snapshot = () => page.evaluate(() => Array.from((window as any).popstage.activeLayer.weights.data as Uint8Array).join(','));
+  const original = await snapshot();
+  await page.locator('aside button[data-cmd=smoothAll]').click();
+  await expect(page.locator('#blurDialog')).toHaveJSProperty('open', true);
+  await page.locator('#blurRadiusN').fill('60');
+  await page.waitForTimeout(150);
+  expect(await snapshot()).not.toBe(original); // プレビュー中は表示用にぼかされる
+  await page.locator('#blurCancel').click();
+  expect(await snapshot()).toBe(original);     // キャンセルで元どおり
+  expect(await page.evaluate(() => (window as any).popstage.history.canUndo)).toBe(false);
+
+  await page.locator('aside button[data-cmd=smoothAll]').click();
+  await page.locator('#blurRadius').fill('40');
+  await page.locator('#blurApply').click();
+  const blurred = await snapshot();
+  expect(blurred).not.toBe(original);
+  expect(await page.evaluate(() => (window as any).popstage.history.undoLabel)).toBe('全体をぼかす(半径 40px)');
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+z');
+  expect(await snapshot()).toBe(original);
+  await page.keyboard.press('Control+Shift+z');
+  expect(await snapshot()).toBe(blurred);
+});
+
 test('右ドラッグで視点が回り、Home で戻る', async ({ page }) => {
   await boot(page);
   const yaw0 = await page.evaluate(() => (window as any).popstage.project.camera.yaw);

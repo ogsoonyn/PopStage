@@ -21,4 +21,7 @@
 #layerList li[aria-selected="true"] { background: color-mix(in oklab, var(--color-primary) 18%, transparent); outline: 1px solid var(--color-primary); }
 #layerList canvas { image-rendering: auto; background: #000; border-radius: 3px; }
 
+#blurDialog { background: transparent; }
+#blurDialog::backdrop { background: transparent; }
+
 .menu button:disabled { opacity: .4; pointer-events: none; }

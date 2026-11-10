@@ -3,6 +3,7 @@ import { App, type Tool } from './app';
 import { bindStageInput, isTyping } from './ui/input';
 import { bindPanels } from './ui/panels';
 import { bindExportDialog } from './ui/exportDialog';
+import { bindBlurDialog } from './ui/blurDialog';
 import { $, ask, toast } from './ui/dom';
 import { autosave } from './storage/autosave';
 import { isImageFile, isProjectFile } from './ui/imageio';
@@ -22,6 +23,7 @@ const e2e = params.has('e2e');
 bindStageInput(app, canvas);
 bindPanels(app);
 const exportDialog = bindExportDialog(app);
+const blurDialog = bindBlurDialog(app);
 
 /* ---------- ファイルを開く ---------- */
 
@@ -51,7 +53,7 @@ const commands: Record<string, { run: () => unknown; enabled?: () => boolean }> 
   sample: { run: async () => { if (await app.confirmDiscard()) await app.loadSample(); } },
   undo: { run: () => app.history.undo(), enabled: () => app.history.canUndo && !app.stroking },
   redo: { run: () => app.history.redo(), enabled: () => app.history.canRedo && !app.stroking },
-  smoothAll: { run: () => app.smoothAll(), enabled: () => !!app.activeLayer },
+  smoothAll: { run: () => blurDialog.open(), enabled: () => !!app.activeLayer },
   normalize: { run: () => app.weightOp('正規化', wm => wm.normalize()), enabled: () => !!app.activeLayer },
   invert: { run: () => app.weightOp('反転', wm => wm.invert()), enabled: () => !!app.activeLayer },
   fromAlpha: { run: () => app.fromAlpha(), enabled: () => !!app.activeLayer },
