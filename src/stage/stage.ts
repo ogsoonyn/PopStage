@@ -261,6 +261,12 @@ export class Stage {
     this.camera.aspect = m.w / Math.max(1, m.h);
   }
 
+  /** ポインタが主ビューの中にあるか(3面図を出しているときは、横の図の上を除く) */
+  inMainView(clientX: number, clientY: number): boolean {
+    const r = this.canvas.getBoundingClientRect(), m = this.main(), x = clientX - r.left - m.x, y = clientY - r.top - m.y;
+    return x >= 0 && y >= 0 && x <= m.w && y <= m.h;
+  }
+
   private main(): ViewRect {
     return this.mainRect ?? { x: 0, y: 0, w: this.canvas.clientWidth, h: this.canvas.clientHeight };
   }

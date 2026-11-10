@@ -54,7 +54,7 @@ export async function runExport(
 
   if (s.motion === 'replay') {
     const rec = ctx.recorder.lastSeconds(s.duration);
-    if (!rec || rec.samples.length < 2) throw new Error('再生できる操作の記録がありません。「つかむ」で揺らしてから書き出してください。');
+    if (!rec || rec.samples.length < 2) throw new Error('再生できる操作の記録がありません。「つかむ」か「揺らす」で揺らしてから書き出してください。');
     world.restore(rec.start);
     world.autoSwing = { ...project.autoSwing };
     for (const smp of rec.warmup) { applySample(world, smp); world.step(doc.layers); }

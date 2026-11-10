@@ -305,6 +305,28 @@ describe('操作の記録', () => {
     expect(w.viewTarget).toEqual({ x: 5, y: 0, z: 0 });
   });
 
+  it('カメラは止めたまま、振った量だけ動く記録を再生すると、ライブと同じ揺れになる', () => {
+    const l = layerWith(), live = new PhysicsWorld(), rec = new MotionRecorder();
+    live.unitPx = 50;
+    const camera = defaultCamera(), shake = { x: 0, y: 0, z: 0 }, xs: number[] = [];
+    const n = 400;
+    for (let i = 0; i < n; i++) {
+      if (i % 2 === 0 && i < 200) { shake.x = Math.sin(i / 25) * 60; shake.y = (i % 100) * 0.4; }
+      live.viewTarget = { x: camera.target.x + shake.x, y: camera.target.y + shake.y, z: camera.target.z + shake.z };
+      rec.record({ grab: null, grabGains: [], camera: structuredClone(camera), viewTarget: { ...live.viewTarget }, viewCut: live.viewCut }, () => live.snapshot());
+      live.step([l]);
+      xs.push(live.displacement(l.id).x);
+    }
+    const r = rec.lastSeconds(n * PHYSICS_DT - 0.7)!;
+    const w = new PhysicsWorld(); w.unitPx = 50;
+    w.restore(r.start);
+    for (const smp of r.warmup) { applySample(w, smp); w.step([l]); }
+    const start = n - r.samples.length;
+    r.samples.forEach((smp, k) => { applySample(w, smp); w.step([l]); expect(w.displacement(l.id).x).toBe(xs[start + k]); });
+    expect(Math.max(...xs.map(Math.abs))).toBeGreaterThan(0.01);
+    expect(r.samples.every(s => s.camera.target.x === 0)).toBe(true); // カメラは動いていない
+  });
+
   it('60秒を超える古い記録は捨てる', () => {
     const rec = new MotionRecorder(), w = new PhysicsWorld();
     for (let i = 0; i < 120 * 70; i++) rec.record({ grab: null, grabGains: [], camera: defaultCamera() }, () => w.snapshot());

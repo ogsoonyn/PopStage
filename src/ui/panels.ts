@@ -81,7 +81,7 @@ export function bindPanels(app: App): { refresh: () => void } {
       PatchLayer.from(store, l.id, { physics: applyPreset(l.physics, name) }, label),
       PatchProject.from(store, { autoSwing: { ...app.project.autoSwing, period: pr.period } }, label),
     ]));
-    if (!app.project.autoSwing.enabled) toast('「自動で揺らす」がオフなので、自動では動きません。「つかむ」で揺らすか、自動揺らしをオンにしてください。', 'info', 5000);
+    if (!app.project.autoSwing.enabled) toast('「自動で揺らす」がオフなので、自動では動きません。「つかむ」「揺らす」で揺らすか、自動揺らしをオンにしてください。', 'info', 5000);
     else if (!l.physics.enabled) toast('このレイヤーは「揺れ」がオフです。', 'info');
   });
   motionSel.addEventListener('change', () => {

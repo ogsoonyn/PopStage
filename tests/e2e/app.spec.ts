@@ -406,6 +406,15 @@ test('「揺らす」ツール: 左ドラッグで画像は動かずに揺れ、
   expect(after.shakeX).toBeLessThan(0);
   await page.waitForTimeout(500);
   expect(await page.evaluate(() => (window as any).popstage.dirty)).toBe(false);
+  // 「揺らす」でも Space+左ドラッグは平行移動
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await page.keyboard.down('Space');
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.5, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.up('Space');
+  expect(await page.evaluate(() => (window as any).popstage.project.camera.target.x)).toBeGreaterThan(0);
+  await page.keyboard.press('Home');
   // 中ドラッグは従来どおり画像を動かす
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
   await page.mouse.down({ button: 'middle' });

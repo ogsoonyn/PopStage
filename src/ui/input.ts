@@ -3,6 +3,7 @@
  *   右ドラッグ: 回転 / 中ドラッグ・Space+左ドラッグ: 平行移動 / ホイール: ズーム
  *   (平行移動で画像が画面上を動くと、塗った部分がその勢いで揺れる。physics/world.ts)
  *   左ドラッグ: 選択中のツール(ブラシ中に Alt で一時的に消しゴム)
+ *   「揺らす」の左ドラッグ: カメラを画像に付けたまま振る。画面上は動かず、平行移動と同じ揺れだけが出る
  */
 import type { App } from '../app';
 import type { PaintMode } from '../paint/stroke';
@@ -39,7 +40,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     alt = e.altKey;
     if (e.button === 2 || (e.button === 0 && app.tool === 'view' && !space)) drag.mode = 'orbit';
     else if (e.button === 1 || (e.button === 0 && space)) { drag.mode = 'pan'; e.preventDefault(); }
-    else if (e.button === 0 && app.tool === 'shake') drag.mode = 'shake';
+    // 振る向きは主ビューの画面の向きで決まるので、主ビューの中から始めたときだけ振る
+    else if (e.button === 0 && app.tool === 'shake') { if (app.stage.inMainView(e.clientX, e.clientY)) drag.mode = 'shake'; }
     else if (e.button === 0 && app.tool === 'grab') startGrab(e);
     else if (e.button === 0 && isPaintTool()) {
       const p = app.stage.pick(e.clientX, e.clientY);
