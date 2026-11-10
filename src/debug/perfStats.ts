@@ -17,6 +17,8 @@ export const FREEZE_MS = 250;
 const FREEZE_CAP = 10;
 /** 止まったときに控える、その前の時間 */
 const FREEZE_BEFORE_MS = 5000;
+/** 止まった間が終わってからこの時間がたったら、見立てを確かなものとしてやり直さない */
+const SETTLE_MS = 3000;
 
 export interface PerfEvent {
   /** performance.now() の時刻(始まり) */
@@ -36,8 +38,8 @@ export interface FreezeRecord {
   gap: number;
   /** その間にこのページの処理(長いタスク)が占めていた時間 */
   pageBusy: number;
-  /** pageBusy から見た見立て */
-  verdict: 'page' | 'outside' | 'mixed';
+  /** pageBusy から見た見立て。unknown は長いタスクを知らせないブラウザ(Firefox・Safari) */
+  verdict: 'page' | 'outside' | 'mixed' | 'unknown';
   events: PerfEvent[];
   frames: FrameRow[];
 }
@@ -63,6 +65,9 @@ export class PerfStats {
   readonly heap: { t: number; mb: number }[] = [];
   /** 止まったのを見つけたときに呼ぶ(表示の更新用) */
   onFreeze: ((f: FreezeRecord) => void) | null = null;
+  /** 長いタスクの知らせが届くか(届かないブラウザでは見立てられない) */
+  constructor(private readonly longTasks = true) {}
+  private settled = new WeakSet<FreezeRecord>();
 
   /** 処理ごとの時間を今のフレームに足す。t0 からの経過を足し、今の時刻を返す */
   lap(section: Section, t0: number, now: number): number {
@@ -125,6 +130,8 @@ export class PerfStats {
   }
 
   private captureFreeze(t: number, gap: number): void {
+    // タブが隠れていた間に描画が止まるのは正常なので、止まった記録にしない
+    if (this.events.some(e => e.kind === 'visibility' && e.t >= t && e.t <= t + gap)) return;
     const rec: FreezeRecord = { t, gap, pageBusy: 0, verdict: 'outside', events: [], frames: this.frames().filter(r => r.t >= t - FREEZE_BEFORE_MS) };
     this.judge(rec);
     this.freezes.push(rec);
@@ -138,20 +145,29 @@ export class PerfStats {
    */
   private judge(f: FreezeRecord): void {
     const end = f.t + f.gap;
+    // 先に控えた出来事は残し、あとから届いた分だけ足す(出来事の輪から古いものが消えても失わない)
+    const seen = new Set(f.events);
+    for (const e of this.events) if (!seen.has(e) && e.t + e.d >= f.t - FREEZE_BEFORE_MS && e.t <= end) { f.events.push(e); seen.add(e); }
+    f.events.sort((a, b) => a.t - b.t);
     let busy = 0;
-    for (const e of this.events) {
+    for (const e of f.events) {
       if (e.kind !== 'longtask') continue;
       const a = Math.max(f.t, e.t), b = Math.min(end, e.t + e.d);
       if (b > a) busy += b - a;
     }
     const ratio = busy / f.gap;
     f.pageBusy = Math.round(busy);
-    f.verdict = ratio > 0.6 ? 'page' : ratio < 0.2 ? 'outside' : 'mixed';
-    f.events = this.events.filter(e => e.t + e.d >= f.t - FREEZE_BEFORE_MS && e.t <= end);
+    f.verdict = !this.longTasks ? 'unknown' : ratio > 0.6 ? 'page' : ratio < 0.2 ? 'outside' : 'mixed';
   }
 
-  /** 長いタスクの知らせはフレームより後に届くことがあるので、止まった記録の見立てをやり直す */
-  refreshVerdicts(): void { for (const f of this.freezes) this.judge(f); }
+  /** 長いタスクの知らせはフレームより後に届くことがあるので、まだ確かでない記録の見立てをやり直す */
+  refreshVerdicts(now = this.last): void {
+    for (const f of this.freezes) {
+      if (this.settled.has(f)) continue;
+      this.judge(f);
+      if (now - (f.t + f.gap) > SETTLE_MS) this.settled.add(f);
+    }
+  }
 
   /** 書き出し用 */
   toJSON(): object {

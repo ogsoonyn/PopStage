@@ -532,6 +532,32 @@ test('自動保存の復元に失敗したらサンプルで始め、自動保�
   expect(await autosaveOp(page, 'get')).toBeNull();
 });
 
+test('自動保存から復元すると、塗った内容と設定が戻る', async ({ page }) => {
+  await boot(page);
+  await dragOnStage(page, [0.45, 0.45], [0.6, 0.55]);
+  const before = await page.evaluate(() => {
+    const a = (window as any).popstage;
+    a.store.patchProject({ background: '#224466' });
+    a.store.emit('change', undefined);
+    return a.doc.layers.map((l: any) => l.weights.data.reduce((s: number, v: number) => s + v, 0));
+  });
+  expect(before[0]).toBeGreaterThan(0);
+  // 自動保存が書き込まれるまで待つ
+  await expect.poll(() => autosaveOp(page, 'get'), { timeout: 10000 }).not.toBeNull();
+  await page.waitForTimeout(1500);
+  await page.goto('/?e2e&restore');
+  await expect(page.locator('#askTitle')).toHaveText('前回の作業を復元しますか?');
+  await page.locator('#askYes').click();
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  const after = await page.evaluate(() => {
+    const a = (window as any).popstage;
+    return { sums: a.doc.layers.map((l: any) => l.weights.data.reduce((s: number, v: number) => s + v, 0)), bg: a.project.background, dirty: a.dirty };
+  });
+  expect(after.sums).toEqual(before);
+  expect(after.bg).toBe('#224466');
+  expect(after.dirty).toBe(true);
+});
+
 test('別のファイルを開くと、前の作業の自動保存は消える', async ({ page }) => {
   await boot(page);
   const bytes = await page.evaluate(() => Array.from((window as any).popstage.serialize() as Uint8Array));
@@ -963,8 +989,10 @@ test('パフォーマンスのデバッグ表示は ?debug かショートカッ
   await page.locator('#perfOverlay [data-act=save]').click();
   const data = JSON.parse(await page.evaluate(() => (window as any).__saved));
   expect(data.freezes.length).toBeGreaterThan(0);
-  expect(data.freezes[0].gap).toBeGreaterThan(350);
-  expect(data.freezes[0].verdict).toBe('page');
+  // 起動直後の読み込みでも止まることがあるので、いちばん長い記録を見る
+  const worst = data.freezes.reduce((m: any, f: any) => (f.gap > m.gap ? f : m));
+  expect(worst.gap).toBeGreaterThan(350);
+  expect(worst.verdict).toBe('page');
   expect(data.frames.length).toBeGreaterThan(10);
   expect(data.document.layers).toBe(1);
 });

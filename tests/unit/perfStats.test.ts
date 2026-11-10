@@ -71,4 +71,34 @@ describe('PerfStats', () => {
     expect(j.freezes.length).toBe(1);
     expect(j.frames.length).toBe(4);
   });
+  it('止まった記録は、出来事の輪から古いものが消えても見立てを失わない', () => {
+    const s = new PerfStats();
+    let t = run(s, 10);
+    s.event({ t, d: 380, kind: 'longtask' });
+    s.frame(t + 400); // 400ms 止まる
+    expect(s.freezes[0].verdict).toBe('page');
+    // その後、出来事が上限を超えて流れても、控えた記録は残る
+    t = t + 400;
+    for (let k = 0; k < EVENT_CAP + 50; k++) s.event({ t: t + k, d: 60, kind: 'loaf' });
+    t = run(s, 300, t + 16);
+    s.refreshVerdicts(t);
+    expect(s.freezes[0].verdict).toBe('page');
+    expect(s.freezes[0].pageBusy).toBe(380);
+    expect(s.freezes[0].events.some(e => e.kind === 'longtask')).toBe(true);
+  });
+
+  it('タブが隠れていた間の停止は記録しない', () => {
+    const s = new PerfStats();
+    const t = run(s, 10);
+    s.event({ t: t + 5, d: 0, kind: 'visibility', detail: 'hidden' });
+    s.frame(t + 30000);
+    expect(s.freezes).toHaveLength(0);
+  });
+
+  it('長いタスクを知らせないブラウザでは「判定できない」にする', () => {
+    const s = new PerfStats(false);
+    const t = run(s, 10);
+    s.frame(t + 400);
+    expect(s.freezes[0].verdict).toBe('unknown');
+  });
 });

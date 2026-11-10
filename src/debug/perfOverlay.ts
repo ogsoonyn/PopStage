@@ -19,12 +19,13 @@ const VERDICT: Record<FreezeRecord['verdict'], string> = {
   page: 'このページの処理',
   outside: 'ページの外(CPU・GPU の取り合いなど)',
   mixed: 'ページの処理とページの外の両方',
+  unknown: '判定できない(このブラウザは長いタスクを知らせない)',
 };
 
 const COLORS = { physics: '#4ade80', upload: '#facc15', render: '#60a5fa', other: '#9ca3af', freeze: '#f87171' };
 
 function startPerfOverlay(app: App): Running {
-  const stats = new PerfStats();
+  const stats = new PerfStats(PerformanceObserver.supportedEntryTypes?.includes('longtask') ?? false);
   const origin = performance.timeOrigin;
   const clock = (t: number) => new Date(origin + t).toLocaleTimeString('ja-JP', { hour12: false }) + '.' + String(Math.floor((origin + t) % 1000)).padStart(3, '0');
 
