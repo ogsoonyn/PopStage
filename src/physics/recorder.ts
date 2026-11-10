@@ -12,6 +12,7 @@ export interface RecordSample {
   grabGains: [string, number][];
   camera: CameraState;
   /** この刻みで視点を測り直したか(視点のリセットなどで飛んだ所) */
+  viewTarget?: Vec3;
   viewCut?: boolean;
   snap?: WorldSnapshot;
 }
@@ -20,7 +21,8 @@ export interface RecordSample {
 export function applySample(world: PhysicsWorld, smp: RecordSample): void {
   world.grab = smp.grab;
   world.grabGains = new Map(smp.grabGains);
-  world.viewTarget = smp.camera.target;
+  // 物理に伝える注視点(「揺らす」で振った量を含む)。古い記録には無いので視点の注視点で代える
+  world.viewTarget = smp.viewTarget ?? smp.camera.target;
   if (smp.viewCut) world.cutView();
 }
 

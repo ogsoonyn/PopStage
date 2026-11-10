@@ -381,6 +381,39 @@ test('中ドラッグで平行移動すると揺れ、視点のリセットで�
   expect(Math.max(Math.abs(lo2 - before), Math.abs(hi2 - before))).toBeLessThan(0.005);
 });
 
+test('「揺らす」ツール: 左ドラッグで画像は動かずに揺れ、視点も「未保存」も変わらない', async ({ page }) => {
+  await boot(page);
+  await page.keyboard.press('p'); // 一時停止を解除
+  await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: false } }); });
+  await page.waitForTimeout(1500);
+  await page.keyboard.press('y');
+  expect(await page.evaluate(() => (window as any).popstage.tool)).toBe('shake');
+  // 自動揺らしを切った分の「未保存」を消してから試す
+  const cam0 = await page.evaluate(() => { const a = (window as any).popstage; a.dirty = false; return JSON.stringify(a.project.camera); });
+  const box = (await page.locator('#view').boundingBox())!;
+  const watching = watchSwingX(page, 1200);
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5, { steps: 6 });
+  await page.mouse.up();
+  const [lo, hi, first] = await watching;
+  // 中ドラッグで右へ動かしたときと同じく、塗った部分は左へ遅れてから振れ返す
+  expect(first).toBe(-1);
+  expect(lo).toBeLessThan(-0.01);
+  expect(hi).toBeGreaterThan(0.01);
+  const after = await page.evaluate(() => { const a = (window as any).popstage; return { cam: JSON.stringify(a.project.camera), shakeX: a.shake.x, dirty: a.dirty }; });
+  expect(after.cam).toBe(cam0); // カメラは画像に付いたまま(画面上の位置は変わらない)
+  expect(after.shakeX).toBeLessThan(0);
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => (window as any).popstage.dirty)).toBe(false);
+  // 中ドラッグは従来どおり画像を動かす
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await page.mouse.down({ button: 'middle' });
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5, { steps: 4 });
+  await page.mouse.up({ button: 'middle' });
+  expect(await page.evaluate(() => (window as any).popstage.project.camera.target.x)).toBeLessThan(0);
+});
+
 test('レイヤーの追加・複製・削除・名前の変更', async ({ page }) => {
   await boot(page);
   await page.locator('aside button[data-cmd=addLayer]').click();

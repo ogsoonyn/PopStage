@@ -7,7 +7,7 @@
 import type { App } from '../app';
 import type { PaintMode } from '../paint/stroke';
 
-type DragMode = 'orbit' | 'pan' | 'grab' | 'paint' | null;
+type DragMode = 'orbit' | 'pan' | 'shake' | 'grab' | 'paint' | null;
 
 export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDown: () => boolean } {
   const drag = { mode: null as DragMode, id: -1, lx: 0, ly: 0, sx: 0, sy: 0 };
@@ -24,7 +24,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     app.stage.setBrush(showBrush ? hover : null, app.brush.size / 2);
     canvas.style.cursor = space || drag.mode === 'pan' ? 'move'
       : drag.mode === 'orbit' ? 'grabbing'
-      : app.tool === 'grab' ? (drag.mode === 'grab' ? 'grabbing' : 'grab')
+      : app.tool === 'grab' || app.tool === 'shake' ? (drag.mode === 'grab' || drag.mode === 'shake' ? 'grabbing' : 'grab')
       : app.tool === 'view' ? 'move' : showBrush && hover ? 'none' : 'crosshair';
   };
   app.on('tool', updateCursor);
@@ -39,6 +39,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     alt = e.altKey;
     if (e.button === 2 || (e.button === 0 && app.tool === 'view' && !space)) drag.mode = 'orbit';
     else if (e.button === 1 || (e.button === 0 && space)) { drag.mode = 'pan'; e.preventDefault(); }
+    else if (e.button === 0 && app.tool === 'shake') drag.mode = 'shake';
     else if (e.button === 0 && app.tool === 'grab') startGrab(e);
     else if (e.button === 0 && isPaintTool()) {
       const p = app.stage.pick(e.clientX, e.clientY);
@@ -57,11 +58,13 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
       if (drag.mode === 'orbit') {
         cam.yaw -= dx * 0.008;
         cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.008));
-      } else if (drag.mode === 'pan') {
+      } else if (drag.mode === 'pan' || drag.mode === 'shake') {
+        // 「揺らす」はカメラを画像に付けたまま振る。画面上の位置は変えず、物理にだけ平行移動と同じ動きを伝える
         const k = app.stage.pixelToWorld(cam), { right, up } = app.stage.screenAxes();
-        cam.target.x += -dx * k * right.x + dy * k * up.x;
-        cam.target.y += -dx * k * right.y + dy * k * up.y;
-        cam.target.z += -dx * k * right.z + dy * k * up.z;
+        const t = drag.mode === 'pan' ? cam.target : app.shake;
+        t.x += -dx * k * right.x + dy * k * up.x;
+        t.y += -dx * k * right.y + dy * k * up.y;
+        t.z += -dx * k * right.z + dy * k * up.z;
       } else if (drag.mode === 'grab') {
         moveGrab(e);
       } else if (drag.mode === 'paint') {

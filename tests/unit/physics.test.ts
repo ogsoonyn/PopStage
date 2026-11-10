@@ -296,6 +296,15 @@ describe('操作の記録', () => {
     expect(Math.max(...xs.map(Math.abs))).toBeGreaterThan(0.01);
   });
 
+  it('記録の注視点(「揺らす」で振った量を含む)があればそれを物理へ入れ、無ければ視点の注視点で代える', () => {
+    const w = new PhysicsWorld(), camera = defaultCamera();
+    camera.target = { x: 5, y: 0, z: 0 };
+    applySample(w, { grab: null, grabGains: [], camera, viewTarget: { x: 12, y: 3, z: 0 } });
+    expect(w.viewTarget).toEqual({ x: 12, y: 3, z: 0 });
+    applySample(w, { grab: null, grabGains: [], camera });
+    expect(w.viewTarget).toEqual({ x: 5, y: 0, z: 0 });
+  });
+
   it('60秒を超える古い記録は捨てる', () => {
     const rec = new MotionRecorder(), w = new PhysicsWorld();
     for (let i = 0; i < 120 * 70; i++) rec.record({ grab: null, grabGains: [], camera: defaultCamera() }, () => w.snapshot());

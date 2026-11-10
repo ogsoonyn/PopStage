@@ -2,7 +2,7 @@
  * アプリ本体。モデル・コマンド・描画・物理・保存・書き出しをつなぐ。
  * 画面の部品(ui/)はここを経由して状態を読み書きする。
  */
-import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultMultiCamera, LIMITS, type CameraState, type Project, type Document, type Layer } from './model/project';
+import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultMultiCamera, LIMITS, type CameraState, type Vec3, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
 import type { Rect } from './model/weightmap';
 import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from './commands/commands';
@@ -19,7 +19,7 @@ import { decodeForDisplay, canvasAlpha, browserDecodeGray, fileToAsset, rgbaToPn
 import { createSampleDocument } from './ui/sample';
 import { ask, saveFile, setBusy, toast } from './ui/dom';
 
-export type Tool = 'brush' | 'erase' | 'smooth' | 'grab' | 'view';
+export type Tool = 'brush' | 'erase' | 'smooth' | 'grab' | 'shake' | 'view';
 export type PressureMode = 'strength' | 'size' | 'none';
 
 export interface BrushOptions { size: number; strength: number; hardness: number; pressure: PressureMode }
@@ -61,6 +61,11 @@ export class App extends Emitter<AppEvents> {
   /** 3面図の「自由角度」の視点(画面だけの設定で保存しない) */
   multiCam: CameraState = defaultMultiCamera();
   paused = false;
+  /**
+   * 「揺らす」ツールで画像を振った量(ワールド座標)。カメラは画像に付いて動くので画面上の位置は
+   * 変わらないが、物理には平行移動と同じ動きとして伝える。画面だけの値で保存しない
+   */
+  shake: Vec3 = { x: 0, y: 0, z: 0 };
   brush: BrushOptions = { size: 64, strength: 0.3, hardness: 0, pressure: 'strength' };
   imageCanvas: HTMLCanvasElement | null = null;
   /** 表示用の画像の一辺の上限 */
@@ -576,9 +581,12 @@ export class App extends Emitter<AppEvents> {
 
   private recordStep = (): void => {
     const w = this.world, c = this.project.camera;
-    w.viewTarget = c.target; // 平行移動でも揺らす
+    // 平行移動でも、「揺らす」で振っても揺らす
+    const s = this.shake;
+    w.viewTarget = { x: c.target.x + s.x, y: c.target.y + s.y, z: c.target.z + s.z };
     this.recorder.record({
       viewCut: w.viewCut,
+      viewTarget: { ...w.viewTarget },
       grab: w.grab ? { ...w.grab } : null,
       grabGains: [...w.grabGains],
       camera: { fov: c.fov, yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, target: { ...c.target } },

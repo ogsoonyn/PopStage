@@ -123,6 +123,7 @@ const TOOL_HINTS: Record<Tool, string> = {
   erase: 'ドラッグでウェイトを消す',
   smooth: 'ドラッグで段差をならす',
   grab: 'ドラッグで引っ張って離すと揺れる',
+  shake: 'ドラッグで画像を振る(カメラが付いてくるので画像は動かず、揺れだけが見える)/ 中ドラッグで画像を動かす / 右ドラッグで回転',
   view: 'ドラッグで視点を回す / Space+ドラッグで平行移動',
 };
 function refreshTool(): void {
@@ -155,7 +156,7 @@ window.addEventListener('keydown', e => {
   if (e.shiftKey && k === 'g') return hit('toggleGrid');
   if (e.shiftKey && k === 'w') return hit('toggleFade');
   if (e.key === 'Home') return hit('resetView');
-  const tools: Record<string, Tool> = { b: 'brush', e: 'erase', s: 'smooth', g: 'grab', v: 'view' };
+  const tools: Record<string, Tool> = { b: 'brush', e: 'erase', s: 'smooth', g: 'grab', y: 'shake', v: 'view' };
   if (!e.shiftKey && tools[k]) { e.preventDefault(); app.setTool(tools[k]); return; }
   if (k === 'w') return hit('toggleOverlay');
   if (k === 'f') return hit('toggleFlat');
