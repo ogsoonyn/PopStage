@@ -6,6 +6,8 @@
  * - どのパターンも周期 T で元に戻る(T の整数倍の長さで書き出せばループする)。
  * - 振れ幅は strength(0〜1)に比例する。「ためて膨らむ」だけはポップ量にも比例する(pop は正規化座標)。
  * - 揺らし方ごとの固有設定は params(キーは「揺らし方.項目」)。未設定は MOTION_PARAMS の既定値。
+ * - ピストンだけは土台を動かさず(motionAnchor は 0)、画像全体の位置を pistonOffset で返す。
+ *   塗った部分はその加速度を慣性力として受けて、遅れて付いてくる(world.ts)。
  */
 import { motionParam, type MotionPattern, type Vec3 } from '../model/project';
 
@@ -83,6 +85,8 @@ export function motionAnchor(
       out.z = u < time ? -depth * pop * smooth(u / time) : P('bulge') * 2 * s * pop * bump(u, time + kick / 2, kick);
       break;
     }
+    case 'piston': // 土台は動かさない。画像全体を動かす(pistonOffset)
+      break;
     case 'stretch': { // ゆっくり引き伸ばして、ぱっと離す
       const time = P('time'), v = u < time ? 0.2 * s * P('amp') * smooth(u / time) : 0;
       const dir = P('dir');
@@ -90,5 +94,27 @@ export function motionAnchor(
       break;
     }
   }
+  return out;
+}
+
+/**
+ * ピストンの、画像全体の位置(画像のローカル座標)。下で止まっている所から、上がる → 上で止まる → 下がる → 下で止まる。
+ * 鋭さが 100% のときは同じ速さで動いて急に止まり、0% のときは cos でなめらかに動き出して止まる。
+ * 周期 T で元に戻り、動き出しと止まりの所で速さが変わる(その加速度で塗った部分が弾む)。
+ */
+export function pistonOffset(
+  t: number, period: number, strength: number, out: Vec3 = { x: 0, y: 0, z: 0 }, params?: Record<string, number>,
+): Vec3 {
+  out.x = out.y = out.z = 0;
+  if (strength <= 0) return out;
+  const T = Math.max(0.05, period), u = (((t % T) + T) % T) / T;
+  const P = (key: string) => motionParam(params, 'piston', key);
+  let up = P('up'), top = P('top'), down = P('down');
+  // 上がる・止まる・下がるで周期を使い切らないよう、下で止まる時間を少し残す
+  const sum = up + top + down;
+  if (sum > 0.95) { const k = 0.95 / sum; up *= k; top *= k; down *= k; }
+  const sharp = P('sharp'), ease = (v: number) => sharp * v + (1 - sharp) * 0.5 * (1 - Math.cos(Math.PI * v));
+  const y = u < up ? ease(u / up) : u < up + top ? 1 : u < up + top + down ? 1 - ease((u - up - top) / down) : 0;
+  out.y = 0.2 * strength * P('height') * y;
   return out;
 }

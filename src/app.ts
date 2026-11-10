@@ -774,6 +774,9 @@ export class App extends Emitter<AppEvents> {
       const s = world.displacement(l.id);
       this.stage.setSwing(i, { x: s.x * k, y: s.y * k, z: s.z * k }, l.visible && l.physics.enabled);
     });
+    // 画像全体の動き(揺らし方「ピストン」)。一時停止中・自動揺らしが切れているときは 0
+    const g = world.baseOffset(doc.layers);
+    this.stage.setBaseOffset({ x: g.x * k, y: g.y * k, z: g.z * k });
   };
 
   private recordStep = (): void => {

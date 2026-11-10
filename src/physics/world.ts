@@ -6,11 +6,13 @@
  * b は自動揺らしで動かす土台(アンカー)の位置。揺らし方ごとの軌道は motion.ts にある。
  * 土台が急に動いたり止まったりすると、塗った部分が遅れて付いてきて弾む。
  * 視点の平行移動で画像が画面上を動いたときも、その加速度を慣性力として加える(F_inertia)。
+ * 揺らし方「ピストン」で画像全体が動くときも、その加速度を同じく慣性力として、揺れが有効なすべてのレイヤーに加える。
+ * s は画像に対する変位なので、画面上の位置は「画像全体の位置(baseOffset)+ w·s」になる。
  * 単位は「画像の長辺 = 2」の正規化座標。描画側で (長辺 / 2) を掛けてピクセルへ直す。
  * 積分は半陰的オイラー法、刻みは 1/120 秒固定。
  */
 import type { Layer, PhysicsParams, AutoSwing, Vec3 } from '../model/project';
-import { motionAnchor } from './motion';
+import { motionAnchor, pistonOffset } from './motion';
 
 export const PHYSICS_DT = 1 / 120;
 const MAX_DISPLACEMENT = 1.2;
@@ -55,6 +57,7 @@ export class PhysicsWorld {
   /** 画像の見かけの位置と、ならした速度(正規化座標)。null は「次の刻みで今の位置から測り直す」 */
   private base: BaseState | null = null;
   private drive = v3();
+  private piston = [v3(), v3(), v3()];
 
   state(layerId: string): SpringState {
     let s = this.states.get(layerId);
@@ -78,10 +81,30 @@ export class PhysicsWorld {
     while (this.acc >= PHYSICS_DT) { beforeStep?.(); this.step(layers); this.acc -= PHYSICS_DT; }
   }
 
+  /**
+   * 画像全体の位置(正規化座標、画像のローカル座標)。揺らし方「ピストン」で動かす。
+   * 画像は1枚なので、揺れが有効で表示中のレイヤーのうち、並びで最初(一覧の一番下)のピストンのレイヤーの設定で決める。
+   * 自動揺らしが切れているとき・一時停止中は動かさない。t は物理の経過時間(省略時は今)。
+   */
+  baseOffset(layers: readonly Layer[], t = this.time, out: Vec3 = v3()): Vec3 {
+    zero(out);
+    const auto = this.autoSwing;
+    if (this.paused || !auto.enabled) return out;
+    const l = layers.find(l => l.visible && l.physics.enabled && l.physics.motion === 'piston');
+    return l ? pistonOffset(t, auto.period, auto.strength, out, l.physics.motionParams) : out;
+  }
+
   /** 固定刻みで1回進める。 */
   step(layers: readonly Layer[], dt = PHYSICS_DT): void {
     const drive = this.viewAccel(dt), grab = this.grab, auto = this.autoSwing, on = auto.enabled;
     const b = this.anchor, bp = this.anchorPrev;
+    // 画像全体の動き(ピストン)の加速度。前後の刻みの位置の2階差分で求めると、画面上の位置
+    // (画像の位置 + 変位)が、動かない座標で同じ積分をしたものとちょうど一致する
+    const [g0, g1, g2] = this.piston;
+    this.baseOffset(layers, this.time - dt, g0); this.baseOffset(layers, this.time, g1); this.baseOffset(layers, this.time + dt, g2);
+    drive.x += (g2.x - 2 * g1.x + g0.x) / (dt * dt);
+    drive.y += (g2.y - 2 * g1.y + g0.y) / (dt * dt);
+    drive.z += (g2.z - 2 * g1.z + g0.z) / (dt * dt);
     for (const layer of layers) {
       const st = this.state(layer.id);
       if (!layer.physics.enabled || !layer.visible) { zero(st.s); zero(st.v); continue; }

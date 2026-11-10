@@ -62,6 +62,12 @@ export class Stage {
   private subViews: { kind: SubViewKind; rect: ViewRect }[] = [];
   private orthoCam = new THREE.OrthographicCamera();
   private freeCam = new THREE.PerspectiveCamera(40, 1, 1, 1e6);
+  /** ドキュメントの位置(setTransform)と、そこからの画像全体のずれ(揺らし方「ピストン」、画像のローカル座標のピクセル) */
+  private restPos = new THREE.Vector3();
+  private baseOffset = new THREE.Vector3();
+  /** ずれを除いた、画像の置き場所の行列。3面図の正投影の図はこれに合わせるので、画像全体の動きも図の中に見える */
+  private restMatrix = new THREE.Matrix4();
+  private tmp = new THREE.Vector3();
   vertexCount = 0;
   /** ウェイトを部分転送・全面転送した回数(部分転送が効いているかの確認用) */
   partialUploads = 0;
@@ -120,11 +126,23 @@ export class Stage {
 
   setTransform(doc: Pick<Document, 'position' | 'rotation' | 'scale' | 'opacity'>): void {
     if (!this.mesh) return;
-    this.mesh.position.set(doc.position.x, doc.position.y, doc.position.z);
+    this.restPos.set(doc.position.x, doc.position.y, doc.position.z);
     this.mesh.rotation.set(doc.rotation.x, doc.rotation.y, doc.rotation.z);
     this.mesh.scale.setScalar(doc.scale);
-    this.mesh.updateMatrixWorld();
+    this.restMatrix.compose(this.restPos, this.mesh.quaternion, this.mesh.scale);
+    this.place(this.uniforms.uFlat.value === 0);
     this.uniforms.uOpacity.value = doc.opacity;
+  }
+
+  /** 画像全体のずれ(画像のローカル座標、元画像のピクセル)。描画の前に毎回入れる */
+  setBaseOffset(v: Vec3): void { this.baseOffset.set(v.x, v.y, v.z); }
+
+  /** メッシュをドキュメントの位置へ置く。offset が true なら画像全体のずれも足す(ずれは画像と一緒に回転・拡大する) */
+  private place(offset: boolean): void {
+    const m = this.mesh; if (!m) return;
+    m.position.copy(this.restPos);
+    if (offset) m.position.add(this.tmp.copy(this.baseOffset).applyQuaternion(m.quaternion).multiplyScalar(m.scale.x));
+    m.updateMatrixWorld();
   }
 
   /** ウェイトのテクスチャ配列を作り直して全レイヤーを転送する。 */
@@ -289,7 +307,7 @@ export class Stage {
    * 拡大率と中心のずれ(view)も3つで共有するので、正面と右・下の図で位置の対応が崩れない
    */
   private orthoCamera(kind: Exclude<SubViewKind, 'free'>, rect: ViewRect, scale: number, view: OrthoView): THREE.OrthographicCamera {
-    const c = this.orthoCam, m = this.mesh!.matrixWorld, { min, max } = this.depthRange();
+    const c = this.orthoCam, m = this.restMatrix, { min, max } = this.depthRange();
     const { dir, up } = ORTHO_DIRS[kind], p = view.pan;
     const center = new THREE.Vector3(p.x, p.y, (min + max) / 2 + p.z).applyMatrix4(m);
     const d = new THREE.Vector3().copy(dir).transformDirection(m);
@@ -390,6 +408,8 @@ export class Stage {
   /** free は 3面図の「自由角度」の視点、ortho は正面・右から・下からの図の拡大率と平行移動 */
   render(cam: CameraState, free?: CameraState, ortho: OrthoView = ORTHO_NONE): void {
     const r = this.renderer;
+    // ポップ一時OFF のときは、画像全体のずれ(ピストン)も消して元の位置に置く
+    this.place(this.uniforms.uFlat.value === 0);
     this.applyCamera(cam);
     r.setRenderTarget(null);
     if (!this.subViews.length || !this.mesh) {
@@ -438,6 +458,7 @@ export class Stage {
     const u = this.uniforms, viewOnly = [u.uOverlay, u.uGrid, u.uBrushOn, u.uFade, u.uFlat];
     const saved = viewOnly.map(x => x.value);
     for (const x of viewOnly) x.value = 0;
+    this.place(true);
     const clear = new THREE.Color(), clearAlpha = this.renderer.getClearAlpha();
     this.renderer.getClearColor(clear);
     this.setBackground(background);
@@ -452,6 +473,7 @@ export class Stage {
     this.renderer.setClearColor(clear, clearAlpha);
     this.camera.aspect = aspect;
     viewOnly.forEach((x, i) => { x.value = saved[i]; });
+    this.place(this.uniforms.uFlat.value === 0);
 
     // 下から上へ並んでいるので反転し、乗算済みの色をストレートアルファへ戻す
     const px = out && out.length === raw.length ? out : new Uint8ClampedArray(raw.length);

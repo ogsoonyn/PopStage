@@ -10,13 +10,15 @@ export interface Vec3 { x: number; y: number; z: number }
 /**
  * 揺らし方。自動揺らしのとき、塗った部分を支える土台(アンカー)をどう動かすか。
  * 塗った部分はバネで土台に繋がっていて、遅れて付いてくる(physics/motion.ts)。
+ * ピストンだけは土台ではなく画像全体を動かし、塗った部分はその動きに慣性で遅れて付いてくる。
  */
-export type MotionPattern = 'charge' | 'jiggle' | 'jump' | 'bounce' | 'shiver' | 'float' | 'sway' | 'shake' | 'circle' | 'heartbeat' | 'stretch' | 'none';
+export type MotionPattern = 'charge' | 'jiggle' | 'jump' | 'bounce' | 'piston' | 'shiver' | 'float' | 'sway' | 'shake' | 'circle' | 'heartbeat' | 'stretch' | 'none';
 
 export const MOTIONS: Record<MotionPattern, { label: string; desc: string }> = {
   jiggle: { label: '上下に小刻み', desc: '上下に軽くつついて揺らす' },
   jump: { label: 'ジャンプ', desc: '沈み込んで跳び、着地で弾む' },
   bounce: { label: '連続ジャンプ', desc: '小さく弾み続ける' },
+  piston: { label: 'ピストン', desc: '画像ごと上下に動き、塗った所が遅れて付いてきて弾む' },
   shiver: { label: '震え', desc: '細かく速く震える' },
   float: { label: '漂う', desc: 'ゆっくり8の字に漂う' },
   sway: { label: 'ゆっくり左右', desc: '左右にゆったり揺れる' },
@@ -62,6 +64,13 @@ export const MOTION_PARAMS: Record<MotionPattern, MotionParamDef[]> = {
     pct('height', '高さ', 1),
     pct('ground', '接地の長さ', 0.3, 0.6, 0.05, '周期のうち、着地している時間の割合'),
   ],
+  piston: [
+    pct('height', 'ストローク', 1, 3, 0, '画像全体が上下する幅'),
+    pct('up', '上がる時間', 0.15, 0.6, 0.05, '周期のうち、上がっている時間の割合'),
+    pct('top', '上で止まる時間', 0.3, 0.5, 0, '周期のうち、上で止まっている時間の割合。残りは下で止まっている'),
+    pct('down', '下がる時間', 0.15, 0.6, 0.05, '周期のうち、下がっている時間の割合'),
+    pct('sharp', '止まり方の鋭さ', 0.8, 1, 0, '100% で同じ速さのまま急に止まる(塗った所が大きく弾む)。0% でなめらかに止まる'),
+  ],
   jiggle: [
     pct('amp', '振れ幅', 1),
     pct('second', '2回目の強さ', 0.6, 1.5),
@@ -96,7 +105,7 @@ export function motionParam(values: Record<string, number> | undefined, motion: 
   return MOTION_PARAMS[motion].find(d => d.key === key)?.def ?? 0;
 }
 
-export type PresetName = 'puru' | 'bain' | 'poyo' | 'buru' | 'fuwa' | 'yura' | 'furi' | 'guru' | 'doki' | 'tame' | 'biyo' | 'custom';
+export type PresetName = 'puru' | 'bain' | 'poyo' | 'zun' | 'buru' | 'fuwa' | 'yura' | 'furi' | 'guru' | 'doki' | 'tame' | 'biyo' | 'custom';
 
 /** 揺れのパラメータ。数値はすべて 0〜1 の正規化値。 */
 export interface PhysicsParams {
@@ -187,6 +196,7 @@ export const PRESETS: Record<Exclude<PresetName, 'custom'>, Preset> = {
   puru: { label: 'ぷるぷる', desc: '上下につついて、細かく震える余韻が残る', hardness: 0.6, mass: 0.04, damping: 0.13, motion: 'jiggle', period: 1.2 },
   bain: { label: 'ばいんばいん', desc: 'ジャンプして着地すると、どすんと沈んで上下に弾む', hardness: 0.25, mass: 0.25, damping: 0.1, motion: 'jump', period: 1.8 },
   poyo: { label: 'ぽよんぽよん', desc: '小さく弾み続ける', hardness: 0.4, mass: 0.15, damping: 0.19, motion: 'bounce', period: 0.8 },
+  zun: { label: 'ずんずん', desc: '画像ごと上下に突き上げられ、塗った所が遅れて付いてきて弾む', hardness: 0.3, mass: 0.25, damping: 0.12, motion: 'piston', period: 1.2 },
   buru: { label: 'ぶるぶる', desc: '細かく速く震える', hardness: 0.9, mass: 0.05, damping: 0.3, motion: 'shiver', period: 2 },
   fuwa: { label: 'ふわふわ', desc: 'ゆっくり漂って、すぐに落ち着く', hardness: 0.1, mass: 0.3, damping: 0.6, motion: 'float', period: 3 },
   yura: { label: 'ゆらゆら', desc: '左右にゆったり揺れる', hardness: 0.15, mass: 0.4, damping: 0.25, motion: 'sway', period: 2.5 },

@@ -747,7 +747,7 @@ test('プリセットで材質・揺らし方・周期が変わり、1手で元�
   });
   const before = await state();
   expect(before).toMatchObject({ preset: 'puru', motion: 'jiggle' });
-  await expect(page.locator('#pPreset option')).toHaveCount(12); // 11 種類 + カスタム
+  await expect(page.locator('#pPreset option')).toHaveCount(13); // 12 種類 + カスタム
 
   await page.selectOption('#pPreset', 'bain');
   expect(await state()).toEqual({ preset: 'bain', motion: 'jump', hardness: 0.25, period: 1.8 });
@@ -795,6 +795,65 @@ test('揺らし方の固有設定: 選んだ揺らし方の項目が出て、変
   await page.keyboard.press('Control+z');
   expect(await params()).toEqual({ preset: 'tame', mp: {} });
   await expect(page.locator('#mp-depth + output')).toHaveText('70%');
+});
+
+test('揺らし方「ピストン」: 画像全体が上下に動き、塗った所が遅れて付いてくる', async ({ page }) => {
+  await boot(page);
+  await page.locator('#physDetails summary').click();
+  await page.selectOption('#pMotion', 'piston');
+  await expect(page.locator('#physSummary')).toContainText('ピストン');
+  await expect(page.locator('#motionParams label')).toHaveText(['ストローク', '上がる時間', '上で止まる時間', '下がる時間', '止まり方の鋭さ']);
+  await page.selectOption('#pPreset', 'zun');
+  await expect(page.locator('#pMotion')).toHaveValue('piston');
+  await expect(page.locator('#pPresetDesc')).toContainText('画像ごと');
+  await page.locator('#view').focus();
+  await page.keyboard.press('p'); // 一時停止を解除
+
+  type Sample = { g: number; s: number; mesh: number; pickY: number };
+  // 描画フレームごとに、画像全体の位置(正規化座標)・塗った所の画像に対する変位・メッシュの位置・画面中央の当たり判定を記録する
+  const sample = (seconds: number) => page.evaluate(sec => new Promise<Sample[]>(resolve => {
+    const a = (window as any).popstage, l = a.activeLayer, r = a.stage.canvas.getBoundingClientRect(), out: Sample[] = [];
+    const t0 = performance.now();
+    const tick = () => {
+      const q = a.stage.pick(r.left + r.width / 2, r.top + r.height / 2);
+      out.push({ g: a.world.baseOffset(a.doc.layers).y, s: a.world.displacement(l.id).y, mesh: a.stage.mesh.position.y, pickY: q ? q.y : NaN });
+      if (performance.now() - t0 < sec * 1000) requestAnimationFrame(tick); else resolve(out);
+    };
+    requestAnimationFrame(tick);
+  }), seconds);
+  const range = (v: number[]) => Math.max(...v) - Math.min(...v);
+  const k = await page.evaluate(() => (window as any).popstage.imageLong / 2);
+  const rest = await page.evaluate(() => { const p = (window as any).popstage.activeLayer.physics; return -p.weight * 6 * (0.3 + 2.7 * p.mass) / (20 + 380 * p.hardness); });
+
+  const a = await sample(2.6);
+  expect(a.length).toBeGreaterThan(10);
+  // 画像全体(メッシュ)がストロークの幅で上下に動き、画面の同じ所に映る画像の位置も変わる
+  expect(range(a.map(x => x.g))).toBeGreaterThan(0.08);
+  for (const x of a) expect(x.mesh).toBeCloseTo(x.g * k, 3);
+  expect(range(a.map(x => x.pickY))).toBeGreaterThan(0.04 * k);
+  // 画像が上がっている間、塗った所は遅れて画像に対して下にずれる(慣性で付いてくる)
+  const rising = a.filter((x, i) => i > 0 && x.g > a[i - 1].g + 1e-6);
+  expect(rising.length).toBeGreaterThan(0);
+  expect(rising.reduce((s, x) => s + x.s - rest, 0) / rising.length).toBeLessThan(-0.005);
+  expect(range(a.map(x => x.s))).toBeGreaterThan(0.02);
+
+  // ポップを一時OFF の間は、画像も元の位置に置く(物理は進む)
+  await page.keyboard.press('f');
+  const flat = await sample(1.3);
+  expect(range(flat.map(x => x.g))).toBeGreaterThan(0.08);
+  for (const x of flat) expect(x.mesh).toBe(0);
+  await page.keyboard.press('f');
+
+  // 3面図でも描ける(WebGL のエラーが出ない)
+  await page.keyboard.press('m');
+  await expect(page.locator('#multiView')).toBeVisible();
+  expect(range((await sample(1.3)).map(x => x.mesh))).toBeGreaterThan(0.08 * k);
+  await page.keyboard.press('m');
+
+  // 揺れを一時停止すると、画像も元の位置で止まる
+  await page.keyboard.press('p');
+  const paused = await sample(0.5);
+  for (const x of paused) { expect(x.g).toBe(0); expect(x.mesh).toBe(0); expect(x.s).toBe(0); }
 });
 
 test('保存して開き直すと同じ状態に戻る', async ({ page }) => {
