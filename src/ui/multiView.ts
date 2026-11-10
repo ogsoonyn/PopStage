@@ -43,6 +43,9 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
       const mode = modeOf(e);
       if (!mode) return;
       e.preventDefault(); // 中ボタンでの自動スクロールや文字の選択を始めない
+      // preventDefault でフォーカスが移らないので、入力欄に残ったフォーカスを外す(ショートカットが効くように)
+      const active = document.activeElement as HTMLElement | null;
+      if (active && active !== document.body) active.blur();
       el.setPointerCapture(e.pointerId);
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY, mode };
       el.style.cursor = cursor(mode);
@@ -59,6 +62,7 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end); // ドラッグ中にセルが隠れたときも終える
   }
 
   // 自由角度: 左・右ドラッグで回転、中ドラッグ・Shift+左ドラッグで平行移動、ホイールでズーム、ダブルクリックで戻す

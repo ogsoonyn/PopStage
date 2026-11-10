@@ -328,11 +328,11 @@ export class Stage {
     return this.orthoScale() / (this.mesh?.scale.x ?? 1) / view.zoom;
   }
 
-  /** 中心のずれは、画像と膨らみが図の外へ遠く離れない範囲に収める */
+  /** 中心のずれは、画像と膨らみが図の外へ遠く離れない範囲に収める(軸ごとに、その向きの大きさ + 余白) */
   private clampOrthoPan(view: OrthoView): void {
-    const { min, max } = this.depthRange(), lim = Math.max(this.imageSize.w, this.imageSize.h) + (max - min);
-    const p = view.pan, c = (v: number) => Math.max(-lim, Math.min(lim, v));
-    p.x = c(p.x); p.y = c(p.y); p.z = c(p.z);
+    const { min, max } = this.depthRange(), { w, h } = this.imageSize, margin = Math.max(w, h) * 0.25;
+    const p = view.pan, c = (v: number, lim: number) => Math.max(-lim, Math.min(lim, v));
+    p.x = c(p.x, w / 2 + margin); p.y = c(p.y, h / 2 + margin); p.z = c(p.z, Math.max(Math.abs(min), Math.abs(max)) + margin);
   }
 
   /** 3面図の正投影の図を、画面上で (dx, dy) px ドラッグしたぶん平行移動する(画像がポインタに付いてくる向き) */

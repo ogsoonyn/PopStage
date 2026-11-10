@@ -249,6 +249,9 @@ export class App extends Emitter<AppEvents> {
       this.history.clear();
       this.world.reset();
       this.recorder.clear();
+      // 3面図の視点は前の画像の大きさで動かしてあるので、新しい画像では初めの表示に戻す
+      this.multiCam = defaultMultiCamera();
+      this.multiOrtho = defaultOrthoView();
       this.activeLayerId = null;
       this.setActiveLayer(project.documents[0]?.layers[0]?.id ?? null);
       this.fileName = opts.fileName ?? null;

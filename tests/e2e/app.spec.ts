@@ -248,6 +248,26 @@ test('3面図: 正面・右・下はホイールでズーム・ドラッグで�
   expect(pan1.y).toBeGreaterThan(pan0.y);
   expect(pan1.z).toBeCloseTo(pan0.z);
 
+  // 右から(画面の右 = 画像の -z): 右へドラッグすると中心は +z へずれる。上下は y
+  const drag = async (b: { x: number; y: number; width: number; height: number }, dx: number, dy: number) => {
+    await page.mouse.move(b.x + b.width * 0.5, b.y + b.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width * (0.5 + dx), b.y + b.height * (0.5 + dy), { steps: 5 });
+    await page.mouse.up();
+  };
+  await drag(rb, 0.2, 0);
+  const pan2 = (await state()).ortho.pan;
+  expect(pan2.z).toBeGreaterThan(pan1.z);
+  expect(pan2.x).toBeCloseTo(pan1.x);
+  expect(pan2.y).toBeCloseTo(pan1.y);
+  // 下から(画面の上 = 画像の +z): 下へドラッグすると中心は +z へずれる。左右は x
+  const bottom = page.locator('#multiView [data-kind=bottom]'), bb = (await bottom.boundingBox())!;
+  await drag(bb, 0, 0.2);
+  const pan3 = (await state()).ortho.pan;
+  expect(pan3.z).toBeGreaterThan(pan2.z);
+  expect(pan3.x).toBeCloseTo(pan2.x);
+  expect(pan3.y).toBeCloseTo(pan2.y);
+
   // ダブルクリックで拡大率と平行移動が戻る
   await front.dblclick();
   expect((await state()).ortho).toEqual({ zoom: 1, pan: { x: 0, y: 0, z: 0 } });
@@ -294,6 +314,23 @@ test('3面図: 正面・右・下はホイールでズーム・ドラッグで�
   // ダブルクリックで回転・ズーム・平行移動がすべて初期の視点に戻る
   await free.dblclick();
   expect((await state()).free).toEqual(s0.free);
+
+  // 別の画像を開くと、3面図の視点は初めの表示に戻る(前の画像の大きさで動かしたずれを残さない)
+  await page.mouse.move(fb.x + fb.width * 0.8, fb.y + fb.height * 0.3);
+  await page.mouse.wheel(0, -400);
+  await drag(vb, 0, 0);
+  await page.evaluate(() => { const a = (window as any).popstage; a.multiCam.target = { x: 300, y: 0, z: 0 }; });
+  await expect.poll(async () => (await state()).ortho.zoom).toBeGreaterThan(1);
+  await page.evaluate(async () => {
+    const c = document.createElement('canvas'); c.width = 80; c.height = 60; c.getContext('2d')!.fillRect(0, 0, 40, 30);
+    const b: Blob = await new Promise(r => c.toBlob(x => r(x!), 'image/png'));
+    const a = (window as any).popstage;
+    a.dirty = false; // 自動揺らしを切った分の「未保存」で確認が出ないように
+    await a.openFile(new File([b], 'small.png', { type: 'image/png' }));
+  });
+  const s5 = await state();
+  expect(s5.ortho).toEqual({ zoom: 1, pan: { x: 0, y: 0, z: 0 } });
+  expect(s5.free).toEqual(s0.free);
 });
 
 for (const target of ['[data-tool=brush]', '#pPreset']) test(`${target} にフォーカスが残っていても、Space+ドラッグは平行移動になり塗らない`, async ({ page }) => {
