@@ -233,6 +233,13 @@ export class App extends Emitter<AppEvents> {
     this.syncView();
   }
 
+  /** 見栄えの確認用に、編集のための表示(重ね表示・画像を薄く・ポップ一時OFF・揺れ一時停止・グリッド)をまとめて切る */
+  clearEditView(): void {
+    Object.assign(this.view, { overlay: false, fade: false, flat: false, grid: false });
+    this.syncView();
+    if (this.paused) this.setPaused(false);
+  }
+
   setPaused(on: boolean): void {
     this.paused = on;
     this.world.paused = on;

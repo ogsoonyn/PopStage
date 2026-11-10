@@ -106,6 +106,7 @@ const commands: Record<string, { run: () => unknown; enabled?: () => boolean }> 
   toggleFade: { run: () => app.setViewOption('fade', !app.view.fade) },
   toggleFlat: { run: () => app.setViewOption('flat', !app.view.flat) },
   togglePause: { run: () => app.setPaused(!app.paused) },
+  cleanView: { run: () => app.clearEditView() },
   toggleMulti: { run: () => app.setViewOption('multi', !app.view.multi) },
   resetView: { run: () => app.resetView() },
   addLayer: { run: () => app.addLayer(), enabled: () => !!app.doc },
@@ -118,7 +119,7 @@ const commands: Record<string, { run: () => unknown; enabled?: () => boolean }> 
 };
 
 /** 膨らませるのプレビュー中は、表示の切り替え以外はできない(プレビュー中のウェイトを元に戻すなどしないように) */
-const SAFE_WHILE_INFLATING = new Set(['toggleOverlay', 'toggleGrid', 'toggleFade', 'toggleFlat', 'togglePause', 'toggleMulti', 'resetView', 'help', 'about']);
+const SAFE_WHILE_INFLATING = new Set(['toggleOverlay', 'toggleGrid', 'toggleFade', 'toggleFlat', 'togglePause', 'toggleMulti', 'cleanView', 'resetView', 'help', 'about']);
 const commandEnabled = (name: string): boolean => {
   const c = commands[name];
   if (!c) return false;
@@ -208,6 +209,7 @@ window.addEventListener('keydown', e => {
   if (k === 'f') return hit('toggleFlat');
   if (k === 'p') return hit('togglePause');
   if (k === 'm') return hit('toggleMulti');
+  if (k === 'c') return hit('cleanView');
   if (e.key === '[' || e.key === ']') {
     const el = $<HTMLInputElement>('brushSize'), step = Math.max(2, Math.round(app.brush.size * 0.15));
     el.value = String(app.brush.size + (e.key === ']' ? step : -step));

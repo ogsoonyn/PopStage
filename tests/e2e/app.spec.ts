@@ -92,7 +92,7 @@ test('全体をぼかす: プレビュー、キャンセル、適用、元に戻
   await boot(page);
   const snapshot = () => page.evaluate(() => Array.from((window as any).popstage.activeLayer.weights.data as Uint8Array).join(','));
   const original = await snapshot();
-  await page.locator('aside button[data-cmd=smoothAll]').click();
+  await page.locator('nav button[data-cmd=smoothAll]').click();
   await expect(page.locator('#blurDialog')).toHaveJSProperty('open', true);
   await page.locator('#blurRadiusN').fill('60');
   await page.waitForTimeout(150);
@@ -101,7 +101,7 @@ test('全体をぼかす: プレビュー、キャンセル、適用、元に戻
   expect(await snapshot()).toBe(original);     // キャンセルで元どおり
   expect(await page.evaluate(() => (window as any).popstage.history.canUndo)).toBe(false);
 
-  await page.locator('aside button[data-cmd=smoothAll]').click();
+  await page.locator('nav button[data-cmd=smoothAll]').click();
   await page.locator('#blurRadius').fill('40');
   await page.locator('#blurApply').click();
   const blurred = await snapshot();
@@ -1556,4 +1556,46 @@ test('表示の切り替えはキーで変えても覚える。ファイルの�
   await page.locator('#askYes').click();
   await expect.poll(() => page.evaluate(() => (window as any).__save)).toBe(2);
   expect(await page.evaluate(() => (window as any).__downloads)).toBe(0);
+});
+
+test('左のメニュー: 表示クリアで編集用の表示をまとめて切る。レイヤー向けの操作と、上のツールバーの揺れの切り替え', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  const state = () => app(a => ({ overlay: a.view.overlay, fade: a.view.fade, flat: a.view.flat, grid: a.view.grid, multi: a.view.multi, paused: a.paused }));
+  await app(a => { Object.assign(a.view, { overlay: true, fade: true, flat: true, grid: true, multi: true }); a.syncView(); a.setPaused(true); });
+  await page.locator('nav button[data-cmd=cleanView]').click();
+  expect(await state()).toEqual({ overlay: false, fade: false, flat: false, grid: false, multi: true, paused: false });
+  // C キーでも同じ。押すだけで、元には戻さない
+  await app(a => { a.view.grid = true; a.syncView(); });
+  await page.locator('#view').focus();
+  await page.keyboard.press('c');
+  expect((await state()).grid).toBe(false);
+  await page.keyboard.press('c');
+  expect((await state()).grid).toBe(false);
+  await expect(page.locator('nav button[data-cmd=cleanView] .tool-key')).toHaveText('C');
+
+  // レイヤー向けの操作は左のメニューにまとまっている(右のパネルからは外した)
+  for (const c of ['smoothAll', 'normalize', 'invert']) {
+    await expect(page.locator(`nav [role=group] button[data-cmd=${c}]`)).toBeVisible();
+    await expect(page.locator(`#props button[data-cmd=${c}]`)).toHaveCount(0);
+  }
+  const sum = () => app(a => a.activeLayer.weights.data.reduce((s: number, v: number) => s + v, 0) as number);
+  const s0 = await sum();
+  await page.locator('nav button[data-cmd=invert]').click();
+  expect(await sum()).not.toBe(s0);
+  await page.keyboard.press('Control+z');
+
+  // 上のツールバーの「揺れ」「自動で揺らす」は右のパネルと連動する
+  const swing = () => app(a => [a.activeLayer.physics.enabled, a.project.autoSwing.enabled]);
+  const [sw0, au0] = await swing();
+  await page.locator('#tSwing').click();
+  await page.locator('#tAuto').click();
+  expect(await swing()).toEqual([!sw0, !au0]);
+  await expect(page.locator('#pSwing')).toBeChecked({ checked: !sw0 });
+  await expect(page.locator('#pAuto')).toBeChecked({ checked: !au0 });
+  await page.locator('#pSwing').click();
+  await expect(page.locator('#tSwing')).toBeChecked({ checked: sw0 });
+  // 1手ずつ元に戻せる
+  await page.keyboard.press('Control+z');
+  expect(await swing()).toEqual([!sw0, !au0]);
 });

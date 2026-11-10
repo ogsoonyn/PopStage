@@ -93,6 +93,10 @@
       <option value="strength">強さ</option><option value="size">サイズ</option><option value="none">無効</option>
     </select></label>
   <span id="toolHint" class="opacity-70 hidden md:inline"></span>
+  <div class="ml-auto flex items-center gap-4" role="group" aria-label="揺れ">
+    <label class="flex items-center gap-2" title="選択中のレイヤーを揺らすか(右のパネルの「揺れ」と同じ)">揺れ <input id="tSwing" type="checkbox" class="toggle toggle-sm"></label>
+    <label class="flex items-center gap-2" title="周期的に自動で揺らすか(右のパネルの「自動で揺らす」と同じ)">自動で揺らす <input id="tAuto" type="checkbox" class="toggle toggle-sm"></label>
+  </div>
 </div>
 
 <main class="flex-1 min-h-0 flex">
@@ -106,6 +110,15 @@
     <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="shake" aria-keyshortcuts="Y" title="揺らす (Y):カメラを画像に付けたまま振る。画像は動かず、揺れだけが見える"><span class="text-base leading-none">〰</span><span class="text-xs">揺らす</span><kbd class="tool-key" aria-hidden="true">Y</kbd></button>
     <div class="divider my-0"></div>
     <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="view" aria-keyshortcuts="V" title="視点 (V)"><span class="text-base leading-none">⟲</span><span class="text-xs">視点</span><kbd class="tool-key" aria-hidden="true">V</kbd></button>
+    <div class="divider my-0"></div>
+    <button class="relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-cmd="cleanView" aria-keyshortcuts="C" title="見栄えの確認 (C): 編集用の表示をまとめて切る(ウェイトの重ね表示・画像を薄く・ポップを一時OFF・揺れを一時停止・グリッド)。押すたびに切るだけで、元には戻さない"><span class="text-base leading-none">✨</span><span class="text-xs">表示クリア</span><kbd class="tool-key" aria-hidden="true">C</kbd></button>
+    <div class="divider my-0"></div>
+    <div class="nav-group" role="group" aria-labelledby="navLayerLabel">
+      <span id="navLayerLabel" class="nav-group-label" title="選択中のレイヤーに効く操作">レイヤー</span>
+      <button class="btn btn-xs w-[4.5rem] whitespace-nowrap" data-cmd="smoothAll" title="選択中のレイヤー全体にガウスぼかしをかける">全体ぼかし…</button>
+      <button class="btn btn-xs w-[4.5rem] whitespace-nowrap" data-cmd="normalize" title="選択中のレイヤーの最大値が100%になるよう全体を拡大">正規化</button>
+      <button class="btn btn-xs w-[4.5rem] whitespace-nowrap" data-cmd="invert" title="選択中のレイヤーのウェイトを反転">反転</button>
+    </div>
   </nav>
 
   <!-- 3Dビュー -->
@@ -141,11 +154,6 @@
     <div class="overflow-y-auto flex-1 p-3 flex flex-col gap-4" id="props">
       <section class="flex flex-col gap-2">
         <h2 class="font-bold">レイヤー: <span id="activeLayerName"></span></h2>
-        <div class="flex flex-wrap gap-1">
-          <button class="btn btn-xs" data-cmd="smoothAll" title="レイヤー全体にガウスぼかしをかける">全体をぼかす…</button>
-          <button class="btn btn-xs" data-cmd="normalize" title="最大値が100%になるよう全体を拡大">正規化</button>
-          <button class="btn btn-xs" data-cmd="invert">反転</button>
-        </div>
         <div class="prop"><label for="pPop">ポップ量</label><input id="pPop" type="range" min="0" max="1000" class="range range-xs" title="前半は 0〜500px を細かく、後半は 500〜1500px を粗く動かします"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-16 text-right"></div>
         <label class="flex items-center justify-between">揺れ <input id="pSwing" type="checkbox" class="toggle toggle-sm"></label>
         <div class="prop"><label for="pPreset">プリセット</label>
@@ -364,6 +372,7 @@
       <span>最近開いたファイル</span><span>ファイル → 最近開いたファイル…</span>
       <span>書き出し</span><span>Ctrl+E</span>
       <span>ウェイト表示 / グリッド</span><span>W / Shift+G</span>
+      <span>表示クリア(編集用の表示をまとめて切る)</span><span>C</span>
       <span>画像を薄く / ポップを一時OFF</span><span>Shift+W / F</span>
       <span>揺れを一時停止 / 3面図</span><span>P / M</span>
       <span>3面図の正面・右から・下から</span><span>ドラッグで平行移動 / ホイールでズーム(3つ共通)</span>

@@ -38,3 +38,6 @@
 /* 左のツールボタンの右上に出すショートカット */
 .tool-key { position: absolute; top: 1px; right: 3px; font: 600 9px/1 ui-monospace, monospace; opacity: .55; }
 .tool[aria-pressed=true] .tool-key { opacity: .85; }
+/* 左のメニューの、選択中のレイヤー向けの操作のまとまり */
+.nav-group { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 2px; border-radius: 6px; background: color-mix(in oklab, var(--color-base-content) 6%, transparent); }
+.nav-group-label { font-size: 10px; text-align: center; opacity: .6; line-height: 1; }

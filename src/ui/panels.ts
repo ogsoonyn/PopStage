@@ -67,7 +67,8 @@ export function bindPanels(app: App): { refresh: () => void } {
     const v = Math.max(LIMITS.pop.min, Math.min(LIMITS.pop.max, Math.round(+(e.target as HTMLInputElement).value || 0)));
     exec('layer', 'ポップ量', { pop: v });
   });
-  $<HTMLInputElement>('pSwing').addEventListener('change', e => exec('layer', '揺れの切替', { physics: { ...physics()!, enabled: (e.target as HTMLInputElement).checked } }));
+  // 「揺れ」は右のパネルと上のツールバーの両方に置く
+  for (const id of ['pSwing', 'tSwing']) $<HTMLInputElement>(id).addEventListener('change', e => exec('layer', '揺れの切替', { physics: { ...physics()!, enabled: (e.target as HTMLInputElement).checked } }));
   // プリセットと揺らし方の選択肢はモデルの定義から作る
   const presetSel = $<HTMLSelectElement>('pPreset'), motionSel = $<HTMLSelectElement>('pMotion');
   presetSel.replaceChildren(...PRESET_ORDER.map(k => new Option(PRESETS[k].label, k)), new Option('カスタム', 'custom'));
@@ -182,7 +183,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   }
   bindRange('pPeriod', { target: 'project', keys: ['autoSwing'], label: '自動揺らしの周期', toPatch: v => ({ autoSwing: { ...app.project.autoSwing, period: v / 10 } }), fmt: v => `${(v / 10).toFixed(1)}秒` });
   bindRange('pAutoStr', { target: 'project', keys: ['autoSwing'], label: '自動揺らしの強さ', toPatch: v => ({ autoSwing: { ...app.project.autoSwing, strength: v / 100 } }), fmt: pct });
-  $<HTMLInputElement>('pAuto').addEventListener('change', e => exec('project', '自動揺らしの切替', { autoSwing: { ...app.project.autoSwing, enabled: (e.target as HTMLInputElement).checked } }));
+  for (const id of ['pAuto', 'tAuto']) $<HTMLInputElement>(id).addEventListener('change', e => exec('project', '自動揺らしの切替', { autoSwing: { ...app.project.autoSwing, enabled: (e.target as HTMLInputElement).checked } }));
   $<HTMLInputElement>('pBgTransparent').addEventListener('change', e => {
     exec('project', '背景', { background: (e.target as HTMLInputElement).checked ? null : $<HTMLInputElement>('pBgColor').value });
   });
@@ -333,6 +334,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     const l = app.activeLayer, d = app.doc, p = app.project;
     const disabled = !l;
     document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('#props input, #props select').forEach(el => { if (!el.id.startsWith('v')) el.disabled = disabled; });
+    $<HTMLInputElement>('tSwing').disabled = $<HTMLInputElement>('tAuto').disabled = disabled;
     // 膨らませるのプレビュー中は、新しいレイヤーに作るかどうかがこのレイヤーのポップ量で決まるので、ポップ量は触らせない。
     // レイヤー一覧も、仮に入れたレイヤーの名前や表示を変えて記録しないよう、操作できなくする
     if (app.previewingInflate) { $<HTMLInputElement>('pPop').disabled = true; $<HTMLInputElement>('pPopN').disabled = true; }
@@ -342,7 +344,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     if (l) {
       setRange('pPop', popToSlider(l.pop));
       if (document.activeElement !== $('pPopN')) $<HTMLInputElement>('pPopN').value = String(l.pop);
-      $<HTMLInputElement>('pSwing').checked = l.physics.enabled;
+      $<HTMLInputElement>('pSwing').checked = $<HTMLInputElement>('tSwing').checked = l.physics.enabled;
       presetSel.value = l.physics.preset;
       motionSel.value = l.physics.motion;
       $('pPresetDesc').textContent = l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
@@ -360,7 +362,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     setRange('pFov', p.camera.fov, `${p.camera.fov}°`);
     $<HTMLInputElement>('pBgTransparent').checked = p.background === null;
     if (p.background) $<HTMLInputElement>('pBgColor').value = p.background;
-    $<HTMLInputElement>('pAuto').checked = p.autoSwing.enabled;
+    $<HTMLInputElement>('pAuto').checked = $<HTMLInputElement>('tAuto').checked = p.autoSwing.enabled;
     setRange('pPeriod', Math.round(p.autoSwing.period * 10), `${p.autoSwing.period.toFixed(1)}秒`);
     setRange('pAutoStr', Math.round(p.autoSwing.strength * 100), pct(p.autoSwing.strength * 100));
     $<HTMLInputElement>('vOverlay').checked = app.view.overlay;
