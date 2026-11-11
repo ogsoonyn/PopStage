@@ -6,8 +6,13 @@ export const FINE = 0.2;
 
 type Mods = { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean };
 
+/** スマホの「微調整」ボタン。押している間は、修飾キーなしでも細かく動かす */
+let fineLock = false;
+export function setFineLock(on: boolean): void { fineLock = on; }
+export function isFineLocked(): boolean { return fineLock; }
+
 export function fineFactor(e: Mods, shiftIsFine = true): number {
-  return e.ctrlKey || e.metaKey || (shiftIsFine && e.shiftKey) ? FINE : 1;
+  return fineLock || e.ctrlKey || e.metaKey || (shiftIsFine && e.shiftKey) ? FINE : 1;
 }
 
 /**
@@ -23,7 +28,7 @@ if (typeof window !== 'undefined') {
 
 /** ホイール用の倍率。ctrlKey はピンチでも立つので使わず、覚えておいた Ctrl の状態を見る */
 export function wheelFineFactor(e: WheelEvent): number {
-  return ctrlDown || e.metaKey || e.shiftKey ? FINE : 1;
+  return fineLock || ctrlDown || e.metaKey || e.shiftKey ? FINE : 1;
 }
 
 /** ホイールの縦の量。Shift を押すとブラウザが横に回したことにするので、そのときは横の量を使う */
