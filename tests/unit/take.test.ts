@@ -65,6 +65,21 @@ describe('操作の記録の保存', () => {
     expect(takeToJson(take).gainSets.length).toBe(1);
   });
 
+  it('細工した記録でも、つかみの組は上限まで・サンプル間で共有して読み、長さは刻みの倍数に切り捨てる', () => {
+    const huge = Array.from({ length: 5000 }, (_, i) => [`L${i}`, 0.5]);
+    const row = [0, 0, 1, 0, 0, 0, 0, 0, 0, 0.1, 0, 0, 0, 0];
+    const t = takeFromJson({ version: 1, gainSets: [huge, ...Array(100000).fill([])], samples: Array.from({ length: 61 + 60 }, () => row) }, 30)!;
+    expect(t.samples.length).toBe(120);
+    expect(t.samples[0].grabGains.length).toBe(8);
+    expect(t.samples[0].grabGains).toBe(t.samples[1].grabGains);
+  });
+
+  it('最長を超えて積まれた記録は最長で切る', () => {
+    const t = finalizeTake(Array.from({ length: seconds(60) + 11 }, (_, i) => smp(i * 0.001)))!;
+    expect(t.samples.length).toBeLessThanOrEqual(seconds(60));
+    expect(takeFromJson(JSON.parse(JSON.stringify(takeToJson(t))), 30)).not.toBeNull();
+  });
+
   it('壊れた記録は読まない', () => {
     expect(takeFromJson(null, 30)).toBeNull();
     expect(takeFromJson({ version: 2, samples: [] }, 30)).toBeNull();

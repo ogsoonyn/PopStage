@@ -7,7 +7,7 @@
  *   長さを書き出しのコマにそろえ、終わりを初めの位置へなめらかに寄せて、ループの継ぎ目で視点が飛ばないようにする。
  * - DOM に依存しない。
  */
-import type { CameraState, Vec3 } from '../model/project';
+import { LIMITS, type CameraState, type Vec3 } from '../model/project';
 import { PHYSICS_DT } from './world';
 import type { RecordSample } from './recorder';
 
@@ -48,7 +48,7 @@ export function finalizeTake(raw: readonly RecordSample[]): Take | null {
   let last = end - 1;
   while (last > start && idle(raw[last - 1], raw[last])) last--;
   end = Math.min(end, last + 1 + Math.round(TAIL_IDLE_SECONDS / PHYSICS_DT));
-  let n = end - start;
+  let n = Math.min(end - start, Math.round(TAKE_MAX_SECONDS / PHYSICS_DT));
   n -= n % TAKE_STEP_MULTIPLE;
   if (n * PHYSICS_DT < TAKE_MIN_SECONDS - 1e-9) return null;
   const samples: RecordSample[] = raw.slice(start, start + n).map(s => ({
@@ -124,10 +124,17 @@ export function takeFromJson(v: unknown, fov: number): Take | null {
   if (typeof j.dt === 'number' && Math.abs(j.dt - PHYSICS_DT) > 1e-9) return null;
   const max = Math.round(TAKE_MAX_SECONDS / PHYSICS_DT);
   if (j.samples.length > max) return null;
+  // つかみの効き具合の組。組の数はサンプル数まで、1組はレイヤーの上限の枚数まで。同じ組はサンプル間で共有する(書き換えない)
   const sets: [string, number][][] = Array.isArray(j.gainSets)
-    ? j.gainSets.map(set => (Array.isArray(set) ? set : [])
-      .filter((e): e is [string, number] => Array.isArray(e) && typeof e[0] === 'string')
-      .map(([id, g]) => [id, fin(g, 0, 1, 1)] as [string, number]))
+    ? j.gainSets.slice(0, j.samples.length).map(set => {
+      const seen = new Set<string>(), out: [string, number][] = [];
+      for (const e of Array.isArray(set) ? set : []) {
+        if (out.length >= LIMITS.maxLayers) break;
+        if (!Array.isArray(e) || typeof e[0] !== 'string' || e[0].length > 64 || seen.has(e[0])) continue;
+        seen.add(e[0]); out.push([e[0], fin(e[1], 0, 1, 1)]);
+      }
+      return out;
+    })
     : [];
   const samples: RecordSample[] = [];
   for (const a of j.samples) {
@@ -140,9 +147,11 @@ export function takeFromJson(v: unknown, fov: number): Take | null {
       camera: { fov, yaw: n(0, -1e3, 1e3), pitch: n(1, -1.5, 1.5), zoom: n(2, 0.05, 20) || 1, target },
       viewTarget: { x: n(6), y: n(7), z: n(8) },
       grab,
-      grabGains: typeof gi === 'number' && Number.isInteger(gi) && sets[gi] ? sets[gi].map(([id, g]) => [id, g] as [string, number]) : [],
+      grabGains: typeof gi === 'number' && Number.isInteger(gi) && sets[gi] ? sets[gi] : [],
       ...(a[13] === 1 ? { viewCut: true } : {}),
     });
   }
+  // 長さは書き出しのコマにそろえる(手で直したファイルなどで端数があれば切り捨てる)
+  samples.length -= samples.length % TAKE_STEP_MULTIPLE;
   return samples.length * PHYSICS_DT >= TAKE_MIN_SECONDS - 1e-9 ? { samples } : null;
 }

@@ -273,6 +273,8 @@ export class App extends Emitter<AppEvents> {
   }
 
   setPaused(on: boolean): void {
+    // 一時停止中は物理が進まず、記録も再生も止まってしまうので、先に終える
+    if (on) { this.stopTake(); this.stopRecording(); }
     this.paused = on;
     this.world.paused = on;
     if (on) this.world.reset();
@@ -867,7 +869,8 @@ export class App extends Emitter<AppEvents> {
       camera: { fov: c.fov, yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, target: { ...c.target } },
     }, () => w.snapshot());
     if (this.takeState === 'recording') {
-      this.takeRaw.push({
+      // 1フレームで何刻みも進むことがあるので、最長に達したあとの刻みは積まない
+      if (this.takeRaw.length < Math.round(TAKE_MAX_SECONDS / PHYSICS_DT)) this.takeRaw.push({
         grab: w.grab ? { ...w.grab } : null, grabGains: [...w.grabGains], viewTarget: { ...w.viewTarget }, viewCut: w.viewCut || undefined,
         camera: { fov: c.fov, yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, target: { ...c.target } },
       });
