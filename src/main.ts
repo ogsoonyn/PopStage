@@ -38,6 +38,19 @@ const multiView = bindMultiView(app, canvas);
 bindPanels(app);
 bindTakeControls(app);
 
+/* ---------- 右のパネルのタブ(編集・アニメーション・表示設定)。選んだタブはブラウザに覚える ---------- */
+{
+  const tabs = [...document.querySelectorAll<HTMLButtonElement>('#pTabs [data-ptab]')];
+  const select = (t: string) => {
+    if (!tabs.some(b => b.dataset.ptab === t)) t = 'edit';
+    for (const b of tabs) { const on = b.dataset.ptab === t; b.setAttribute('aria-selected', String(on)); b.classList.toggle('tab-active', on); }
+    for (const p of document.querySelectorAll<HTMLElement>('#props [data-ppane]')) p.hidden = p.dataset.ppane !== t;
+    prefs.set('panelTab', t);
+  };
+  for (const b of tabs) b.addEventListener('click', () => select(b.dataset.ptab!));
+  select(prefs.get<string>('panelTab') ?? 'edit');
+}
+
 /* ---------- 設定をブラウザに覚える(ファイルには書かない) ---------- */
 const byId = <T extends HTMLElement>(...ids: string[]) => ids.map(id => $<T>(id));
 persistControls('brush', byId<HTMLInputElement | HTMLSelectElement>('brushSize', 'brushStrength', 'brushHardness', 'brushPressure'));

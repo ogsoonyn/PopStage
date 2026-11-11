@@ -13,19 +13,20 @@ import type { RecordSample } from './recorder';
 
 export interface Take {
   readonly samples: readonly RecordSample[];
-  /** スタートとエンドの視点から作った記録なら、その設定(作り直すときの初期値) */
-  readonly path?: TakePath;
+  /** キーフレームから作った記録なら、そのキーフレーム(作り直すときの初期値) */
+  readonly keys?: readonly KeyFrame[];
 }
 
 /** 視点(回転・ズーム・注視点)。注視点を動かすと画像が画面上を動き、その勢いで揺れる */
 export interface ViewKey { yaw: number; pitch: number; zoom: number; target: Vec3 }
-/** 往復: スタート→エンド→スタート / 片道: スタート→エンドのあと、スタートへ飛んでくり返す */
-export type PathRepeat = 'pingpong' | 'loop';
-/** なめらか: 動き出しと止まりをゆっくり / 一定: 同じ速さで動いて端で急に止まる(その勢いで弾む) */
-export type PathEase = 'smooth' | 'linear';
-export interface TakePath { start: ViewKey; end: ViewKey; seconds: number; ease: PathEase; repeat: PathRepeat }
-/** スタートからエンドまでの時間(秒)の範囲 */
-export const PATH_SECONDS = { min: 0.5, max: 20, def: 3 };
+/** なめらか: そのフレームで止まらず、曲線で通り抜ける / 弾む: 同じ速さのまま来て、そのフレームで急に止まる(その勢いで揺れる) */
+export type KeyMode = 'smooth' | 'bounce';
+/** キーフレーム。seconds は次のフレームまでの時間(最後のフレームは最初のフレームへ戻るまで) */
+export interface KeyFrame { view: ViewKey; seconds: number; mode: KeyMode }
+/** 次のフレームまでの時間(秒)の範囲 */
+export const KEY_SECONDS = { min: 0.1, max: 5, def: 1 };
+/** キーフレームの数の上限(すべて最長の時間でも、1周が記録の最長 60 秒に収まる数) */
+export const MAX_KEYS = 12;
 
 /** 記録できる最長の長さ(秒) */
 export const TAKE_MAX_SECONDS = 60;
@@ -97,30 +98,48 @@ function blendTail(s: RecordSample[]): void {
   }
 }
 
-/* ---------- スタートとエンドから作る ---------- */
+/* ---------- キーフレームから作る ---------- */
 
-const ease = (e: PathEase, t: number) => (e === 'smooth' ? 0.5 - 0.5 * Math.cos(Math.PI * t) : t);
-const lerpKey = (a: ViewKey, b: ViewKey, t: number, fov: number): CameraState => ({
-  fov, yaw: lerp(a.yaw, b.yaw, t), pitch: lerp(a.pitch, b.pitch, t), zoom: a.zoom * Math.pow(b.zoom / a.zoom, t), target: lerpVec(a.target, b.target, t),
-});
+/** 補間する値の並び: [yaw, pitch, log(zoom), tx, ty, tz]。ズームは比で補間する(拡大・縮小の速さが見た目でそろう) */
+const channels = (v: ViewKey): number[] => [v.yaw, v.pitch, Math.log(v.zoom), v.target.x, v.target.y, v.target.z];
 
 /**
- * スタートとエンドの視点の間を動く記録を作る。1周は往復なら片道の2倍、片道なら片道の時間。
- * ズームは比で補間する(拡大・縮小の速さが見た目でそろう)。片道は初めの1件で視点を測り直し、スタートへ飛ぶ所では揺らさない。
+ * キーフレームを順に通り、最後のフレームから最初のフレームへ戻ってくり返す記録を作る(2フレーム以上)。
+ * 区間は3次エルミート曲線。各フレームの速さ(接線)は
+ * - なめらか: 前後のフレームを結ぶ向き(時間で重み付けした Catmull-Rom)。止まらずに通り抜ける
+ * - 弾む: 出ていく速さは 0。入ってくる区間は、出発の速さから加速し続ける2次の動きにして、着いた所で急に止める
+ * 1周の刻み数は TAKE_STEP_MULTIPLE の倍数にそろえ、区間の時間はその比で少し伸び縮みさせる。
  */
-export function takeFromPath(path: TakePath, fov: number): Take {
-  const p = normalizePath(path);
-  // 1周の刻み数を TAKE_STEP_MULTIPLE の倍数にそろえる(往復は片道を半分の倍数に)
-  const m = p.repeat === 'pingpong' ? TAKE_STEP_MULTIPLE / 2 : TAKE_STEP_MULTIPLE;
-  const one = Math.max(m, Math.round(p.seconds / PHYSICS_DT / m) * m);
-  const n = p.repeat === 'pingpong' ? one * 2 : one;
+export function takeFromKeys(input: readonly KeyFrame[], fov: number): Take | null {
+  const keys = normalizeKeys(input);
+  const n = keys.length;
+  if (n < 2) return null;
+  const P = keys.map(k => channels(k.view)), D = keys.map(k => k.seconds);
+  const total = D.reduce((a, b) => a + b, 0);
+  const at = (i: number) => (i + n) % n;
+  // 各フレームの出ていく速さ(1秒あたり)。なめらかは前後を結ぶ向き、弾むは 0
+  const out = P.map((p, i) => keys[i].mode === 'bounce' ? p.map(() => 0)
+    : p.map((_, c) => (P[at(i + 1)][c] - P[at(i - 1)][c]) / (D[at(i - 1)] + D[i])));
+  const steps = Math.max(TAKE_STEP_MULTIPLE, Math.round(total / PHYSICS_DT / TAKE_STEP_MULTIPLE) * TAKE_STEP_MULTIPLE);
+  const starts: number[] = []; let acc = 0;
+  for (const d of D) { starts.push(acc); acc += d; }
   const samples: RecordSample[] = [];
-  for (let i = 0; i < n; i++) {
-    const u = p.repeat === 'pingpong' ? (i <= one ? i / one : 2 - i / one) : Math.min(1, i / (n - 1));
-    const camera = lerpKey(p.start, p.end, ease(p.ease, u), fov);
-    samples.push({ grab: null, grabGains: [], camera, viewTarget: { ...camera.target }, ...(i === 0 && p.repeat === 'loop' ? { viewCut: true } : {}) });
+  let seg = 0;
+  for (let s = 0; s < steps; s++) {
+    const t = (s / steps) * total;
+    while (seg < n - 1 && t >= starts[seg + 1]) seg++;
+    const d = D[seg], u = (t - starts[seg]) / d, a = P[seg], b = P[at(seg + 1)], next = keys[at(seg + 1)];
+    const v = a.map((p0, c) => {
+      const m0 = out[seg][c] * d, delta = b[c] - p0;
+      // 着く側の速さ。弾むは出発の速さから加速して着く(2次の動き)、なめらかは次のフレームの速さ
+      const m1 = next.mode === 'bounce' ? 2 * delta - m0 : out[at(seg + 1)][c] * d;
+      const u2 = u * u, u3 = u2 * u;
+      return (2 * u3 - 3 * u2 + 1) * p0 + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * b[c] + (u3 - u2) * m1;
+    });
+    const camera: CameraState = { fov, yaw: v[0], pitch: Math.max(-1.45, Math.min(1.45, v[1])), zoom: Math.exp(v[2]), target: { x: v[3], y: v[4], z: v[5] } };
+    samples.push({ grab: null, grabGains: [], camera, viewTarget: { ...camera.target } });
   }
-  return { samples, path: p };
+  return { samples, keys };
 }
 
 const keyOf = (v: unknown, def: ViewKey): ViewKey => {
@@ -130,15 +149,13 @@ const keyOf = (v: unknown, def: ViewKey): ViewKey => {
     target: { x: fin(t.x, -BIG, BIG), y: fin(t.y, -BIG, BIG), z: fin(t.z, -BIG, BIG) },
   };
 };
-/** 範囲外・知らない値を丸める(読み込み・作る前に通す) */
-export function normalizePath(v: unknown): TakePath {
-  const o = (v && typeof v === 'object' ? v : {}) as Partial<TakePath>;
+/** 範囲外・知らない値を丸め、上限の数まで残す(読み込み・作る前に通す) */
+export function normalizeKeys(v: unknown): KeyFrame[] {
   const def: ViewKey = { yaw: 0, pitch: 0, zoom: 1.5, target: { x: 0, y: 0, z: 0 } };
-  return {
-    start: keyOf(o.start, def), end: keyOf(o.end, def),
-    seconds: fin(o.seconds, PATH_SECONDS.min, PATH_SECONDS.max, PATH_SECONDS.def),
-    ease: o.ease === 'linear' ? 'linear' : 'smooth', repeat: o.repeat === 'loop' ? 'loop' : 'pingpong',
-  };
+  return (Array.isArray(v) ? v : []).slice(0, MAX_KEYS).map(k => {
+    const o = (k && typeof k === 'object' ? k : {}) as Partial<KeyFrame>;
+    return { view: keyOf(o.view, def), seconds: fin(o.seconds, KEY_SECONDS.min, KEY_SECONDS.max, KEY_SECONDS.def), mode: o.mode === 'bounce' ? 'bounce' : 'smooth' };
+  });
 }
 
 /* ---------- 保存の形(.pukupop の motion/take.json) ---------- */
@@ -148,7 +165,7 @@ export function normalizePath(v: unknown): TakePath {
  * つかんでいないときは gx・gy・gz が null。gains はつかみの効き具合の組(gainSets)の番号(無ければ -1)。cut は 1 で視点を測り直す。
  * 画角は記録しない(再生ではその時のプロジェクトの画角を使う)。
  */
-export interface TakeJson { version: 1; dt: number; gainSets: [string, number][][]; samples: (number | null)[][]; path?: TakePath }
+export interface TakeJson { version: 1; dt: number; gainSets: [string, number][][]; samples: (number | null)[][]; keys?: KeyFrame[] }
 
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
@@ -167,7 +184,7 @@ export function takeToJson(take: Take): TakeJson {
       g ? r6(g.x) : null, g ? r6(g.y) : null, g ? r6(g.z) : null, gi, s.viewCut ? 1 : 0,
     ];
   });
-  return { version: 1, dt: PHYSICS_DT, gainSets: sets, samples, ...(take.path ? { path: take.path } : {}) };
+  return { version: 1, dt: PHYSICS_DT, gainSets: sets, samples, ...(take.keys ? { keys: [...take.keys] } : {}) };
 }
 
 const BIG = 1e6;
@@ -212,5 +229,6 @@ export function takeFromJson(v: unknown, fov: number): Take | null {
   // 長さは書き出しのコマにそろえる(手で直したファイルなどで端数があれば切り捨てる)
   samples.length -= samples.length % TAKE_STEP_MULTIPLE;
   if (samples.length * PHYSICS_DT < TAKE_MIN_SECONDS - 1e-9) return null;
-  return j.path && typeof j.path === 'object' ? { samples, path: normalizePath(j.path) } : { samples };
+  const keys = normalizeKeys(j.keys);
+  return keys.length >= 2 ? { samples, keys } : { samples };
 }

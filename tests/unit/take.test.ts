@@ -105,43 +105,48 @@ describe('操作の記録の保存', () => {
   });
 });
 
-describe('スタートとエンドから動きを作る', () => {
-  const start = { yaw: 0, pitch: 0, zoom: 1, target: { x: 0, y: 0, z: 0 } };
-  const end = { yaw: 1, pitch: 0.4, zoom: 4, target: { x: 100, y: -50, z: 0 } };
+describe('キーフレームから動きを作る', () => {
+  const view = (yaw: number, zoom = 1, tx = 0) => ({ yaw, pitch: 0, zoom, target: { x: tx, y: 0, z: 0 } });
 
-  it('往復: 1周は片道の2倍で、真ん中でエンド、終わりはスタートへ戻る。端で速さが 0(なめらか)', async () => {
-    const { takeFromPath, TAKE_STEP_MULTIPLE } = await import('../../src/physics/take');
-    const t = takeFromPath({ start, end, seconds: 1, ease: 'smooth', repeat: 'pingpong' }, 30), s = t.samples, n = s.length;
+  it('なめらか2つは往復になり、端でゆっくり止まる。ズームは比で補間する', async () => {
+    const { takeFromKeys, TAKE_STEP_MULTIPLE } = await import('../../src/physics/take');
+    const t = takeFromKeys([{ view: view(0, 1), seconds: 1, mode: 'smooth' }, { view: view(1, 4, 100), seconds: 1, mode: 'smooth' }], 30)!;
+    const s = t.samples, n = s.length;
     expect(n).toBe(seconds(2)); expect(n % TAKE_STEP_MULTIPLE).toBe(0);
-    expect(s[0].camera.yaw).toBe(0);
-    expect(s[n / 2].camera.yaw).toBeCloseTo(1); expect(s[n / 2].camera.zoom).toBeCloseTo(4); expect(s[n / 2].viewTarget!.x).toBeCloseTo(100);
-    // ズームは比で補間する(4分の1の所で √2 ではなく、半分の所で 2)
-    const half = s.findIndex(x => x.camera.yaw >= 0.5);
-    expect(s[half].camera.zoom).toBeCloseTo(2, 1);
+    expect(s[0].camera.yaw).toBeCloseTo(0); expect(s[n / 2].camera.yaw).toBeCloseTo(1);
+    expect(s[n / 2].camera.zoom).toBeCloseTo(4); expect(s[n / 2].viewTarget!.x).toBeCloseTo(100);
+    expect(s[n / 4].camera.zoom).toBeCloseTo(2, 1);
     expect(Math.abs(s[1].camera.yaw - s[0].camera.yaw)).toBeLessThan(1e-3);
-    expect(Math.abs(s[n - 1].camera.yaw)).toBeLessThan(1e-3);
-    expect(s.some(x => x.viewCut)).toBe(false);
-    expect(t.path?.repeat).toBe('pingpong');
     expect(s[0].camera.fov).toBe(30);
+    expect(t.keys?.length).toBe(2);
   });
 
-  it('片道: 終わりでエンドに着き、初めの1件で視点を測り直す(スタートへ飛ぶ所で揺らさない)。一定は同じ速さ', async () => {
-    const { takeFromPath, TAKE_STEP_MULTIPLE } = await import('../../src/physics/take');
-    const t = takeFromPath({ start, end, seconds: 1.5, ease: 'linear', repeat: 'loop' }, 30), s = t.samples, n = s.length;
-    expect(n % TAKE_STEP_MULTIPLE).toBe(0);
-    expect(s[0].viewCut).toBe(true);
-    expect(s[n - 1].camera.yaw).toBeCloseTo(1);
-    const d1 = s[1].camera.yaw - s[0].camera.yaw, d2 = s[n - 1].camera.yaw - s[n - 2].camera.yaw;
-    expect(d1).toBeCloseTo(d2, 6);
+  it('なめらかは止まらずに通り抜け、弾むは同じ向きのまま着いて急に止まる', async () => {
+    const { takeFromKeys } = await import('../../src/physics/take');
+    const k = (mode: 'smooth' | 'bounce') => takeFromKeys([
+      { view: view(0), seconds: 1, mode: 'smooth' }, { view: view(1), seconds: 1, mode }, { view: view(2), seconds: 1, mode: 'smooth' },
+    ], 30)!.samples;
+    const at = (s: readonly any[], i: number) => s[i].camera.yaw;
+    const i1 = seconds(1);
+    // なめらか: フレーム1の前後で速さが続く(どちらも正で、ほぼ同じ)
+    const sm = k('smooth'), vin = at(sm, i1) - at(sm, i1 - 1), vout = at(sm, i1 + 1) - at(sm, i1);
+    expect(vin).toBeGreaterThan(0); expect(vout / vin).toBeGreaterThan(0.8);
+    // 弾む: 速いまま着き、出ていく速さは 0 近く
+    const bo = k('bounce'), bin = at(bo, i1) - at(bo, i1 - 1), bout = at(bo, i1 + 1) - at(bo, i1);
+    expect(bin).toBeGreaterThan(vin); expect(Math.abs(bout)).toBeLessThan(bin * 0.1);
+    // どの区間でもフレームを越えて行き過ぎない(弾むの手前)
+    expect(Math.max(...bo.slice(0, i1).map((x: any) => x.camera.yaw))).toBeLessThanOrEqual(1 + 1e-9);
   });
 
-  it('設定は記録と一緒に保存され、範囲外は丸める', async () => {
-    const { takeFromPath } = await import('../../src/physics/take');
-    const t = takeFromPath({ start, end, seconds: 99, ease: 'linear', repeat: 'loop' }, 30);
-    expect(t.path!.seconds).toBe(20);
+  it('2つ未満は作らない。範囲外は丸め、上限の数で切り、記録と一緒に保存する', async () => {
+    const { takeFromKeys, MAX_KEYS } = await import('../../src/physics/take');
+    expect(takeFromKeys([{ view: view(0), seconds: 1, mode: 'smooth' }], 30)).toBeNull();
+    const many = Array.from({ length: 20 }, (_, i) => ({ view: view(i * 0.1), seconds: 99, mode: 'bounce' as const }));
+    const t = takeFromKeys(many, 30)!;
+    expect(t.keys!.length).toBe(MAX_KEYS); expect(t.keys![0].seconds).toBe(5);
     const back = takeFromJson(JSON.parse(JSON.stringify(takeToJson(t))), 30)!;
-    expect(back.path).toEqual(t.path);
-    const bad = takeFromJson({ ...takeToJson(t), path: { start: 'x', ease: 'zzz', seconds: -1 } }, 30)!;
-    expect(bad.path).toMatchObject({ ease: 'smooth', repeat: 'pingpong', seconds: 0.5 });
+    expect(back.keys).toEqual(t.keys);
+    const bad = takeFromJson({ ...takeToJson(t), keys: [{ view: 'x', mode: 'zzz', seconds: -1 }, {}] }, 30)!;
+    expect(bad.keys![0]).toMatchObject({ mode: 'smooth', seconds: 0.1 });
   });
 });

@@ -9,7 +9,7 @@ import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, SetTake, weightOperati
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld, PHYSICS_DT } from './physics/world';
 import { MotionRecorder, applySample, type RecordSample } from './physics/recorder';
-import { finalizeTake, takeFromPath, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, PATH_SECONDS, type ViewKey, type PathEase, type PathRepeat } from './physics/take';
+import { finalizeTake, takeFromKeys, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, KEY_SECONDS, MAX_KEYS, type ViewKey, type KeyFrame } from './physics/take';
 import { Stroke, type PaintMode } from './paint/stroke';
 import { inflateShape, type InflateProfile, type InflateBlend } from './paint/inflate';
 import { serializeProject, serializeProjectBlob, deserializeProject, FILE_EXTENSION, type PngCacheEntry } from './storage/popstage';
@@ -144,11 +144,10 @@ export class App extends Emitter<AppEvents> {
   /** ループ再生で次に入れる記録の位置 */
   private playIndex = 0;
   /**
-   * スタートとエンドの視点から動きを作るときの設定(画面だけの下書き)。作った記録はその設定も持つので、
-   * 記録が差し替わったら(開く・アンドゥなど)その記録の設定に合わせる
+   * キーフレームの下書き(画面だけ)。作った記録はそのキーフレームも持つので、
+   * 記録が差し替わったら(開く・アンドゥなど)その記録のキーフレームに合わせる
    */
-  pathDraft: { start: ViewKey | null; end: ViewKey | null; seconds: number; ease: PathEase; repeat: PathRepeat } =
-    { start: null, end: null, seconds: PATH_SECONDS.def, ease: 'smooth', repeat: 'pingpong' };
+  keyDraft: KeyFrame[] = [];
 
   private loading = false;
   private autosaveTimer = 0;
@@ -186,7 +185,7 @@ export class App extends Emitter<AppEvents> {
       const f = s.findLayer(layerId); if (!f) return;
       if (keys.includes('pop') || keys.includes('visible') || keys.includes('blend')) this.stage.setLayerParams(f.index, f.layer);
     });
-    s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); this.syncPathDraft(true); });
+    s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); this.syncKeyDraft(true); });
     s.on('layers', () => {
       const doc = this.doc; if (!doc) return;
       // 並べ替え・追加・削除ではウェイトは変わらないので、PNG は作り直さない(無くなったレイヤーの分だけ捨てる)
@@ -214,7 +213,7 @@ export class App extends Emitter<AppEvents> {
       if (keys.includes('take') && this.takeState === 'playing') {
         if (this.project.take) this.playTake(); else this.stopTake();
       }
-      if (keys.includes('take')) this.syncPathDraft();
+      if (keys.includes('take')) this.syncKeyDraft();
       this.emit('status', undefined);
     });
     s.on('change', () => {
@@ -945,28 +944,49 @@ export class App extends Emitter<AppEvents> {
 
   togglePlay(): void { if (this.takeState === 'playing') this.stopTake(); else this.playTake(); }
 
-  /* ---------- スタートとエンドから動きを作る ---------- */
+  /* ---------- キーフレームから動きを作る ---------- */
 
-  /** 記録がスタートとエンドから作ったものなら、その設定を下書きに入れる。reset なら、そうでなくても下書きを空にする */
-  private syncPathDraft(reset = false): void {
-    const p = this.project.take?.path;
-    if (p) this.pathDraft = { start: structuredClone(p.start), end: structuredClone(p.end), seconds: p.seconds, ease: p.ease, repeat: p.repeat };
-    else if (reset) this.pathDraft = { start: null, end: null, seconds: PATH_SECONDS.def, ease: 'smooth', repeat: 'pingpong' };
+  /** 記録がキーフレームから作ったものなら、そのキーフレームを下書きに入れる。reset なら、そうでなくても下書きを空にする */
+  private syncKeyDraft(reset = false): void {
+    const k = this.project.take?.keys;
+    if (k) this.keyDraft = structuredClone([...k]);
+    else if (reset) this.keyDraft = [];
     else return;
     this.emit('take', this.takeState);
   }
 
-  /** 今の視点をスタート / エンドにする */
-  setPathKey(which: 'start' | 'end'): void {
-    this.stopTake();
+  private viewKey(): ViewKey {
     const c = this.project.camera;
-    this.pathDraft[which] = { yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, target: { ...c.target } };
+    return { yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, target: { ...c.target } };
+  }
+
+  /** 今の視点を末尾のキーフレームとして足す。時間とつなぎ方は1つ前のフレームに合わせる */
+  addKey(): void {
+    if (this.keyDraft.length >= MAX_KEYS) return;
+    this.stopTake();
+    const prev = this.keyDraft.at(-1);
+    this.keyDraft.push({ view: this.viewKey(), seconds: prev?.seconds ?? KEY_SECONDS.def, mode: prev?.mode ?? 'smooth' });
     this.emit('take', this.takeState);
   }
 
-  /** 視点をスタート / エンドへ動かす(確かめる用。その動きでは揺らさない) */
-  gotoPathKey(which: 'start' | 'end'): void {
-    const k = this.pathDraft[which];
+  /** i 番目のキーフレームを今の視点で登録し直す */
+  setKey(i: number): void {
+    const k = this.keyDraft[i];
+    if (!k) return;
+    this.stopTake();
+    k.view = this.viewKey();
+    this.emit('take', this.takeState);
+  }
+
+  removeKey(i: number): void {
+    if (!this.keyDraft[i]) return;
+    this.keyDraft.splice(i, 1);
+    this.emit('take', this.takeState);
+  }
+
+  /** 視点を i 番目のキーフレームへ動かす(確かめる用。その動きでは揺らさない) */
+  gotoKey(i: number): void {
+    const k = this.keyDraft[i]?.view;
     if (!k) return;
     this.stopTake();
     const c = this.project.camera;
@@ -976,17 +996,20 @@ export class App extends Emitter<AppEvents> {
     this.emit('status', undefined);
   }
 
-  setPathOption(patch: Partial<Pick<App['pathDraft'], 'seconds' | 'ease' | 'repeat'>>): void {
-    Object.assign(this.pathDraft, patch);
+  setKeyOption(i: number, patch: Partial<Pick<KeyFrame, 'seconds' | 'mode'>>): void {
+    const k = this.keyDraft[i];
+    if (!k) return;
+    if (patch.seconds !== undefined) k.seconds = Math.max(KEY_SECONDS.min, Math.min(KEY_SECONDS.max, patch.seconds));
+    if (patch.mode) k.mode = patch.mode;
     this.emit('take', this.takeState);
   }
 
-  /** スタートとエンドの間を動く記録を作り(今の記録と入れ替え、アンドゥできる)、ループ再生する */
-  makePathTake(): void {
-    const d = this.pathDraft;
-    if (!d.start || !d.end || !this.doc || this.takeState === 'recording') return;
-    const take = takeFromPath({ start: d.start, end: d.end, seconds: d.seconds, ease: d.ease, repeat: d.repeat }, this.project.camera.fov);
-    this.history.execute(new SetTake('スタートとエンドから動きを作る', this.project.take, take));
+  /** キーフレームを順に通ってくり返す記録を作り(今の記録と入れ替え、アンドゥできる)、ループ再生する */
+  makeKeyTake(): void {
+    if (!this.doc || this.takeState === 'recording') return;
+    const take = takeFromKeys(this.keyDraft, this.project.camera.fov);
+    if (!take) return;
+    this.history.execute(new SetTake('キーフレームから動きを作る', this.project.take, take));
     this.playTake();
   }
 

@@ -58,7 +58,7 @@ test('操作の記録: R で記録し、L でループ再生。画面を触る�
   await app(page, a => { a.project.camera.yaw = 2; });
   await page.keyboard.press('l');
   expect(await app(page, a => a.takeState)).toBe('playing');
-  await expect(page.locator('#takeBadge')).toContainText('ループ再生中');
+  await expect(page.locator('#takeBadge')).toContainText('▶');
   await expect.poll(() => app(page, a => a.project.camera.yaw)).not.toBe(2);
   // 記録の範囲の中の向きになる
   const yaws = await app(page, a => a.project.take.samples.map((s: any) => s.camera.yaw));
@@ -80,9 +80,10 @@ test('操作の記録: R で記録し、L でループ再生。画面を触る�
 
 test('操作の記録: ボタンで記録・再生・消す。再生中のボタンの印で止められる', async ({ page }) => {
   await boot(page);
+  await page.locator('#pTabs [data-ptab=anim]').click();
   await page.locator('#takeRec').click();
   expect(await app(page, a => a.takeState)).toBe('recording');
-  await expect(page.locator('#takeRec')).toContainText('記録を止める');
+  await expect(page.locator('#takeRec')).toContainText('停止');
   await app(page, a => { a.world.grab = { x: 0.2, y: 0, z: 0 }; for (let i = 0; i < 60; i++) a.frame(1 / 60); a.world.grab = null; for (let i = 0; i < 30; i++) a.frame(1 / 60); });
   await page.locator('#takeBadge').click();
   expect(await app(page, a => a.takeState)).toBe('idle');
@@ -139,42 +140,51 @@ test('書き出し: 記録した操作をループ再生すると、1周ぶん�
   await app(page, a => { a.clearTake(); });
 });
 
-test('スタートとエンド: 今の視点を登録し、往復の動きを作ってループ再生する。保存すると設定も戻る', async ({ page }) => {
+test('キーフレーム: 視点を追加・登録・見る・削除し、つなぎ方と時間を決めて作ると、順に通ってループ再生する。保存すると戻る', async ({ page }) => {
   await boot(page);
-  await page.locator('#pathDetails summary').click();
-  await expect(page.locator('#pathMake')).toBeDisabled();
-  await app(page, a => { const c = a.project.camera; c.yaw = 0; c.pitch = 0; c.zoom = 1.5; c.target = { x: 0, y: 0, z: 0 }; });
-  await page.locator('#pathSetStart').click();
-  await app(page, a => { const c = a.project.camera; c.yaw = 0.8; c.zoom = 2.5; c.target = { x: 120, y: 0, z: 0 }; });
-  await page.locator('#pathSetEnd').click();
-  // 見る: スタートの視点へ動かす
-  await page.locator('#pathGoStart').click();
+  await page.locator('#pTabs [data-ptab=anim]').click();
+  await expect(page.locator('#keyMake')).toBeDisabled();
+  await page.evaluate(() => { const c = (window as any).popstage.project.camera; c.yaw = 0; c.pitch = 0; c.zoom = 1.5; c.target = { x: 0, y: 0, z: 0 }; });
+  await page.locator('#keyAdd').click();
+  await page.evaluate(() => { const c = (window as any).popstage.project.camera; c.yaw = 0.8; c.target = { x: 120, y: 0, z: 0 }; });
+  await page.locator('#keyAdd').click();
+  await page.evaluate(() => { const c = (window as any).popstage.project.camera; c.yaw = 0.3; });
+  await page.locator('#keyAdd').click();
+  await expect(page.locator('#keyList > li')).toHaveCount(3);
+  await expect(page.locator('#keyCount')).toHaveText('3/12');
+  // 3つ目を消し、2つ目を登録し直す
+  await page.locator('#keyList > li').nth(2).locator('[data-act=del]').click();
+  await page.evaluate(() => { const c = (window as any).popstage.project.camera; c.yaw = 0.9; });
+  await page.locator('#keyList > li').nth(1).locator('[data-act=set]').click();
+  // 見る: 1つ目の視点へ
+  await page.locator('#keyList > li').nth(0).locator('[data-act=go]').click();
   expect(await app(page, a => [a.project.camera.yaw, a.project.camera.target.x])).toEqual([0, 0]);
-  await page.locator('#pathSec').fill('10'); // 1.0 秒
-  await page.locator('#pathSec').dispatchEvent('input');
-  await page.locator('#pathRepeat').selectOption('pingpong');
-  await expect(page.locator('#pathMake')).toBeEnabled();
-  await page.locator('#pathMake').click();
-  expect(await app(page, a => [a.takeState, a.takeLength, a.project.take.path.repeat])).toEqual(['playing', 2, 'pingpong']);
-  // 再生中は視点がスタートとエンドの間を動く
-  await expect.poll(() => app(page, a => a.project.camera.yaw), { timeout: 5000 }).toBeGreaterThan(0.2);
-  const tx = await app(page, a => a.project.camera.target.x);
-  expect(tx).toBeGreaterThanOrEqual(0); expect(tx).toBeLessThanOrEqual(120);
-  // 画像の位置が動くので揺れる
-  await expect.poll(() => app(page, a => Math.abs(a.world.displacement(a.doc.layers[0].id).x)), { timeout: 5000 }).toBeGreaterThan(0.001);
+  // 時間とつなぎ方(時間は 5 秒までに丸める)
+  await page.locator('#keyList > li').nth(0).locator('[data-act=sec]').fill('9');
+  await page.locator('#keyList > li').nth(0).locator('[data-act=sec]').dispatchEvent('change');
+  await page.locator('#keyList > li').nth(1).locator('[data-act=sec]').fill('0.5');
+  await page.locator('#keyList > li').nth(1).locator('[data-act=sec]').dispatchEvent('change');
+  await page.locator('#keyList > li').nth(1).locator('[data-act=mode]').selectOption('bounce');
+  expect(await app(page, a => a.keyDraft.map((k: any) => [k.view.yaw, k.seconds, k.mode]))).toEqual([[0, 5, 'smooth'], [0.9, 0.5, 'bounce']]);
+  await expect(page.locator('#keyTotal')).toHaveText('1周 5.5秒');
+  await page.locator('#keyMake').click();
+  expect(await app(page, a => [a.takeState, a.takeLength, a.project.take.keys.length])).toEqual(['playing', 5.5, 2]);
+  await expect(page.locator('#takeInfo')).toContainText('▶');
+  // 再生中は視点がフレームの間を動き、画像の位置が動くので揺れる
+  await expect.poll(() => app(page, a => a.project.camera.yaw), { timeout: 8000 }).toBeGreaterThan(0.2);
+  await expect.poll(() => app(page, a => Math.abs(a.world.displacement(a.doc.layers[0].id).x)), { timeout: 8000 }).toBeGreaterThan(0.001);
   // アンドゥで記録が消えて止まる
-  await page.locator('#view').focus();
   await app(page, a => a.history.undo());
   expect(await app(page, a => [a.takeState, a.project.take])).toEqual(['idle', null]);
   await app(page, a => a.history.redo());
-  // 保存して開き直すと、設定(片道の時間など)も下書きに戻る
+  // 保存して開き直すと、キーフレームも下書きに戻る
   const r = await app(page, async a => {
     const bytes = a.serialize(await a.thumbnail());
     await a.loadSample();
-    const cleared = a.pathDraft.start;
-    await a.openProjectBytes(bytes, 'path.pukupop', null);
-    return { cleared, seconds: a.pathDraft.seconds, end: a.pathDraft.end?.target.x, len: a.takeLength };
+    const cleared = a.keyDraft.length;
+    await a.openProjectBytes(bytes, 'keys.pukupop', null);
+    return { cleared, keys: a.keyDraft.map((k: any) => [k.seconds, k.mode]), len: a.takeLength };
   });
-  expect(r).toEqual({ cleared: null, seconds: 1, end: 120, len: 2 });
-  await expect(page.locator('#pathSecO')).toHaveText('1.0秒');
+  expect(r).toEqual({ cleared: 0, keys: [[5, 'smooth'], [0.5, 'bounce']], len: 5.5 });
+  await expect(page.locator('#keyList > li')).toHaveCount(2);
 });

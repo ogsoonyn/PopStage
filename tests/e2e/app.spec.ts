@@ -15,6 +15,9 @@ async function boot(page: Page): Promise<void> {
   expect(errors).toEqual([]);
 }
 
+/** 右のパネルのタブ(編集・アニメーション・表示設定)を開く */
+const openTab = (page: Page, tab: 'edit' | 'anim' | 'view') => page.locator(`#pTabs [data-ptab=${tab}]`).click();
+
 const glErrors: string[] = [];
 test.beforeEach(() => { glErrors.length = 0; });
 test.afterEach(() => { expect(glErrors, 'WebGL のエラー').toEqual([]); });
@@ -259,6 +262,7 @@ test('膨らませる: レイヤーが上限の8枚なら新しいレイヤー�
 
 test('画像を薄く・ポップを一時OFF: 画面だけが変わり、書き出しには影響しない', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'view');
   await dragOnStage(page, [0.5, 0.5], [0.65, 0.45], 'right'); // 斜めから見て持ち上がりを分かるようにする
   const frame = () => page.evaluate(() => {
     const a = (window as any).popstage;
@@ -292,6 +296,7 @@ test('画像を薄く・ポップを一時OFF: 画面だけが変わり、書き
 
 test('3面図: 横に4つの図が出て、自由角度はドラッグで回り、主ビューの当たり判定はずれない', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'view');
   // 注視点(原点)は主ビューの中央に映るので、そこを指すと画像の中心が返る
   const pickCenter = () => page.evaluate(() => {
     const a = (window as any).popstage, r = a.stage.canvas.getBoundingClientRect();
@@ -341,6 +346,7 @@ test('3面図: 横に4つの図が出て、自由角度はドラッグで回り�
 
 test('3面図: 正面・右・下はホイールでズーム・ドラッグで平行移動、自由角度は中ドラッグで平行移動し、主ビューと揺れには影響しない', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'anim');
   await page.keyboard.press('p'); // 一時停止を解除して、揺れの計算が動いている状態で確かめる
   await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: false } }); });
   await page.locator('#view').focus();
@@ -483,6 +489,7 @@ test('3面図: 正面・右・下はホイールでズーム・ドラッグで�
 
 for (const target of ['[data-tool=brush]', '#pPreset']) test(`${target} にフォーカスが残っていても、Space+ドラッグは平行移動になり塗らない`, async ({ page }) => {
   await boot(page);
+  if (target === '#pPreset') await openTab(page, 'anim');
   await page.locator(target).focus();
   await expect(page.locator(target)).toBeFocused();
   const before = await page.evaluate(() => ({ t: { ...(window as any).popstage.project.camera.target }, undo: (window as any).popstage.history.canUndo }));
@@ -540,6 +547,7 @@ test('視点を変えると「未保存」になる。変化の無い一括処�
 
 test('画角のアンドゥは画角だけを戻し、その後に回した視点は戻さない', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'view');
   const cam = () => page.evaluate(() => { const c = (window as any).popstage.project.camera; return { fov: c.fov, yaw: c.yaw }; });
   const c0 = await cam();
   await page.locator('#pFov').fill(String(c0.fov + 20));
@@ -753,6 +761,7 @@ test('スライダーの変更は1手として元に戻せる', async ({ page })
 
 test('プリセットで材質・揺らし方・周期が変わり、1手で元に戻せる', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'anim');
   const state = () => page.evaluate(() => {
     const a = (window as any).popstage;
     return { preset: a.activeLayer.physics.preset, motion: a.activeLayer.physics.motion, hardness: a.activeLayer.physics.hardness, period: a.project.autoSwing.period };
@@ -782,6 +791,7 @@ test('プリセットで材質・揺らし方・周期が変わり、1手で元�
 
 test('揺らし方の固有設定: 選んだ揺らし方の項目が出て、変えると1手で戻せる', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'anim');
   const params = () => page.evaluate(() => { const p = (window as any).popstage.activeLayer.physics; return { preset: p.preset, mp: p.motionParams }; });
   await page.locator('#physDetails summary').click();
   // 既定(ぷるぷる = 上下に小刻み)の項目
@@ -811,6 +821,7 @@ test('揺らし方の固有設定: 選んだ揺らし方の項目が出て、変
 
 test('揺らし方「ピストン」: 画像全体が上下に動き、塗った所が遅れて付いてくる', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'anim');
   await page.locator('#physDetails summary').click();
   await page.selectOption('#pMotion', 'piston');
   await expect(page.locator('#physSummary')).toContainText('ピストン');
@@ -872,6 +883,7 @@ test('揺らし方「ピストン」: 画像全体が上下に動き、塗った
 
 test('ピストン: 動いている間に塗っても線はまっすぐで、ブラシの円は止まったポインタの下に付いてくる', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'anim');
   await page.selectOption('#pPreset', 'zun');
   await page.evaluate(() => { const a = (window as any).popstage; a.weightOp('全消去', (wm: any) => wm.clear()); a.setViewOption('overlay', false); a.setPaused(false); });
   await page.waitForTimeout(600);
@@ -924,6 +936,7 @@ test('ピストン: 動いている間に塗っても線はまっすぐで、ブ
 
 test('ピストン: 3面図に上がった画像が収まり、回転・拡大した画像ではずれも一緒に回る', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'anim');
   await page.selectOption('#pPreset', 'zun');
   await page.evaluate(() => {
     const a = (window as any).popstage, l = a.activeLayer;
@@ -961,6 +974,7 @@ test('ピストン: 3面図に上がった画像が収まり、回転・拡大�
 
 test('揺らし方「ためて膨らむ2」: 離した直後に、塗った範囲が画像の面内でも外へ広がる', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'anim');
   // 透明な背景に半径 80px の円を描いた画像。円より広く(半径 130px まで)塗り、ポップ量は 0 にして横の広がりだけを見る
   await page.evaluate(async () => {
     const c = document.createElement('canvas'); c.width = 400; c.height = 400;
@@ -1667,6 +1681,7 @@ test('3面図にはウェイトの重ね表示・「画像を薄く」・グリ�
 
 test('設定はブラウザに覚え、読み込み直しても戻る(ファイルには書かない)', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'view');
   await page.locator('#view').focus();
   // ブラシ・表示・ツール・背景を変える
   await page.locator('#brushSize').fill('150');
@@ -1736,6 +1751,7 @@ test('膨らませる: ヘルプを Esc で閉じてもプレビューは残る�
 
 test('表示の切り替えはキーで変えても覚える。ファイルの選択画面を断られたらボタンで開き直す', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'view');
   await page.locator('#view').focus();
   await page.keyboard.press('m');
   await page.keyboard.press('Shift+W'); // 画像を薄く(重ね表示も入る)
@@ -1780,6 +1796,7 @@ test('表示の切り替えはキーで変えても覚える。ファイルの�
 
 test('左のメニュー: 表示クリアで編集用の表示をまとめて切る。レイヤー向けの操作と、上のツールバーの揺れの切り替え', async ({ page }) => {
   await boot(page);
+  await openTab(page, 'anim');
   const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
   const state = () => app(a => ({ overlay: a.view.overlay, fade: a.view.fade, flat: a.view.flat, grid: a.view.grid, multi: a.view.multi, paused: a.paused }));
   await app(a => { Object.assign(a.view, { overlay: true, fade: true, flat: true, grid: true, multi: true }); a.syncView(); a.setPaused(true); });
