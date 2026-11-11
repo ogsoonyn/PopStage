@@ -104,3 +104,44 @@ describe('操作の記録の保存', () => {
     expect(opened.documents[0].name).toBe('プリン');
   });
 });
+
+describe('スタートとエンドから動きを作る', () => {
+  const start = { yaw: 0, pitch: 0, zoom: 1, target: { x: 0, y: 0, z: 0 } };
+  const end = { yaw: 1, pitch: 0.4, zoom: 4, target: { x: 100, y: -50, z: 0 } };
+
+  it('往復: 1周は片道の2倍で、真ん中でエンド、終わりはスタートへ戻る。端で速さが 0(なめらか)', async () => {
+    const { takeFromPath, TAKE_STEP_MULTIPLE } = await import('../../src/physics/take');
+    const t = takeFromPath({ start, end, seconds: 1, ease: 'smooth', repeat: 'pingpong' }, 30), s = t.samples, n = s.length;
+    expect(n).toBe(seconds(2)); expect(n % TAKE_STEP_MULTIPLE).toBe(0);
+    expect(s[0].camera.yaw).toBe(0);
+    expect(s[n / 2].camera.yaw).toBeCloseTo(1); expect(s[n / 2].camera.zoom).toBeCloseTo(4); expect(s[n / 2].viewTarget!.x).toBeCloseTo(100);
+    // ズームは比で補間する(4分の1の所で √2 ではなく、半分の所で 2)
+    const half = s.findIndex(x => x.camera.yaw >= 0.5);
+    expect(s[half].camera.zoom).toBeCloseTo(2, 1);
+    expect(Math.abs(s[1].camera.yaw - s[0].camera.yaw)).toBeLessThan(1e-3);
+    expect(Math.abs(s[n - 1].camera.yaw)).toBeLessThan(1e-3);
+    expect(s.some(x => x.viewCut)).toBe(false);
+    expect(t.path?.repeat).toBe('pingpong');
+    expect(s[0].camera.fov).toBe(30);
+  });
+
+  it('片道: 終わりでエンドに着き、初めの1件で視点を測り直す(スタートへ飛ぶ所で揺らさない)。一定は同じ速さ', async () => {
+    const { takeFromPath, TAKE_STEP_MULTIPLE } = await import('../../src/physics/take');
+    const t = takeFromPath({ start, end, seconds: 1.5, ease: 'linear', repeat: 'loop' }, 30), s = t.samples, n = s.length;
+    expect(n % TAKE_STEP_MULTIPLE).toBe(0);
+    expect(s[0].viewCut).toBe(true);
+    expect(s[n - 1].camera.yaw).toBeCloseTo(1);
+    const d1 = s[1].camera.yaw - s[0].camera.yaw, d2 = s[n - 1].camera.yaw - s[n - 2].camera.yaw;
+    expect(d1).toBeCloseTo(d2, 6);
+  });
+
+  it('設定は記録と一緒に保存され、範囲外は丸める', async () => {
+    const { takeFromPath } = await import('../../src/physics/take');
+    const t = takeFromPath({ start, end, seconds: 99, ease: 'linear', repeat: 'loop' }, 30);
+    expect(t.path!.seconds).toBe(20);
+    const back = takeFromJson(JSON.parse(JSON.stringify(takeToJson(t))), 30)!;
+    expect(back.path).toEqual(t.path);
+    const bad = takeFromJson({ ...takeToJson(t), path: { start: 'x', ease: 'zzz', seconds: -1 } }, 30)!;
+    expect(bad.path).toMatchObject({ ease: 'smooth', repeat: 'pingpong', seconds: 0.5 });
+  });
+});

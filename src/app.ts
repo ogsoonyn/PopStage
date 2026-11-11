@@ -9,7 +9,7 @@ import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, SetTake, weightOperati
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld, PHYSICS_DT } from './physics/world';
 import { MotionRecorder, applySample, type RecordSample } from './physics/recorder';
-import { finalizeTake, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS } from './physics/take';
+import { finalizeTake, takeFromPath, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, PATH_SECONDS, type ViewKey, type PathEase, type PathRepeat } from './physics/take';
 import { Stroke, type PaintMode } from './paint/stroke';
 import { inflateShape, type InflateProfile, type InflateBlend } from './paint/inflate';
 import { serializeProject, serializeProjectBlob, deserializeProject, FILE_EXTENSION, type PngCacheEntry } from './storage/popstage';
@@ -143,6 +143,12 @@ export class App extends Emitter<AppEvents> {
   private takeRaw: RecordSample[] = [];
   /** ループ再生で次に入れる記録の位置 */
   private playIndex = 0;
+  /**
+   * スタートとエンドの視点から動きを作るときの設定(画面だけの下書き)。作った記録はその設定も持つので、
+   * 記録が差し替わったら(開く・アンドゥなど)その記録の設定に合わせる
+   */
+  pathDraft: { start: ViewKey | null; end: ViewKey | null; seconds: number; ease: PathEase; repeat: PathRepeat } =
+    { start: null, end: null, seconds: PATH_SECONDS.def, ease: 'smooth', repeat: 'pingpong' };
 
   private loading = false;
   private autosaveTimer = 0;
@@ -180,7 +186,7 @@ export class App extends Emitter<AppEvents> {
       const f = s.findLayer(layerId); if (!f) return;
       if (keys.includes('pop') || keys.includes('visible') || keys.includes('blend')) this.stage.setLayerParams(f.index, f.layer);
     });
-    s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); });
+    s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); this.syncPathDraft(true); });
     s.on('layers', () => {
       const doc = this.doc; if (!doc) return;
       // 並べ替え・追加・削除ではウェイトは変わらないので、PNG は作り直さない(無くなったレイヤーの分だけ捨てる)
@@ -208,6 +214,7 @@ export class App extends Emitter<AppEvents> {
       if (keys.includes('take') && this.takeState === 'playing') {
         if (this.project.take) this.playTake(); else this.stopTake();
       }
+      if (keys.includes('take')) this.syncPathDraft();
       this.emit('status', undefined);
     });
     s.on('change', () => {
@@ -937,6 +944,52 @@ export class App extends Emitter<AppEvents> {
   }
 
   togglePlay(): void { if (this.takeState === 'playing') this.stopTake(); else this.playTake(); }
+
+  /* ---------- スタートとエンドから動きを作る ---------- */
+
+  /** 記録がスタートとエンドから作ったものなら、その設定を下書きに入れる。reset なら、そうでなくても下書きを空にする */
+  private syncPathDraft(reset = false): void {
+    const p = this.project.take?.path;
+    if (p) this.pathDraft = { start: structuredClone(p.start), end: structuredClone(p.end), seconds: p.seconds, ease: p.ease, repeat: p.repeat };
+    else if (reset) this.pathDraft = { start: null, end: null, seconds: PATH_SECONDS.def, ease: 'smooth', repeat: 'pingpong' };
+    else return;
+    this.emit('take', this.takeState);
+  }
+
+  /** 今の視点をスタート / エンドにする */
+  setPathKey(which: 'start' | 'end'): void {
+    this.stopTake();
+    const c = this.project.camera;
+    this.pathDraft[which] = { yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, target: { ...c.target } };
+    this.emit('take', this.takeState);
+  }
+
+  /** 視点をスタート / エンドへ動かす(確かめる用。その動きでは揺らさない) */
+  gotoPathKey(which: 'start' | 'end'): void {
+    const k = this.pathDraft[which];
+    if (!k) return;
+    this.stopTake();
+    const c = this.project.camera;
+    c.yaw = k.yaw; c.pitch = k.pitch; c.zoom = k.zoom; c.target = { ...k.target };
+    this.world.cutView();
+    this.cameraChanged();
+    this.emit('status', undefined);
+  }
+
+  setPathOption(patch: Partial<Pick<App['pathDraft'], 'seconds' | 'ease' | 'repeat'>>): void {
+    Object.assign(this.pathDraft, patch);
+    this.emit('take', this.takeState);
+  }
+
+  /** スタートとエンドの間を動く記録を作り(今の記録と入れ替え、アンドゥできる)、ループ再生する */
+  makePathTake(): void {
+    const d = this.pathDraft;
+    if (!d.start || !d.end || !this.doc) return;
+    if (this.takeState === 'recording') this.stopRecording();
+    const take = takeFromPath({ start: d.start, end: d.end, seconds: d.seconds, ease: d.ease, repeat: d.repeat }, this.project.camera.fov);
+    this.history.execute(new SetTake('スタートとエンドから動きを作る', this.project.take, take));
+    this.playTake();
+  }
 
   /** 記録を消す(アンドゥできる) */
   clearTake(): void {

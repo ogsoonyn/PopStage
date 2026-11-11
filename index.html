@@ -243,6 +243,32 @@
           <button id="takeClear" class="btn btn-sm btn-ghost" title="記録を消す(元に戻せます)">消す</button>
         </div>
         <p id="takeInfo" class="text-xs opacity-70 leading-snug"></p>
+        <!-- スタートとエンドの視点の間を自動で動かす(作った動きは記録として再生・保存・書き出しする) -->
+        <details id="pathDetails" class="collapse collapse-arrow bg-base-200 rounded-box">
+          <summary class="collapse-title min-h-0 py-2 px-3 text-sm">スタートとエンドで動きを作る</summary>
+          <div class="collapse-content px-3 flex flex-col gap-2">
+            <p class="text-xs opacity-70 leading-snug">視点(回転・ズーム・画像の位置)をスタートとエンドに決めると、その間を自動で動きます。画像の位置が動くと、その勢いで揺れます。「一定」は端で急に止まるので弾み、「片道」はエンドからスタートへ飛んでくり返します。</p>
+            <div class="path-row"><span>スタート</span>
+              <button id="pathSetStart" class="btn btn-xs" title="今の視点をスタートにする">今の視点にする</button>
+              <button id="pathGoStart" class="btn btn-xs btn-ghost" title="視点をスタートへ動かす">見る</button></div>
+            <div class="path-row"><span>エンド</span>
+              <button id="pathSetEnd" class="btn btn-xs" title="今の視点をエンドにする">今の視点にする</button>
+              <button id="pathGoEnd" class="btn btn-xs btn-ghost" title="視点をエンドへ動かす">見る</button></div>
+            <div class="prop"><label for="pathSec">片道の時間</label><input id="pathSec" type="range" min="5" max="200" class="range range-xs"><output id="pathSecO"></output></div>
+            <div class="prop"><label for="pathEase">動き方</label>
+              <select id="pathEase" class="select select-xs col-span-2 w-full">
+                <option value="smooth">なめらか</option>
+                <option value="linear">一定(端で弾む)</option>
+              </select></div>
+            <div class="prop"><label for="pathRepeat">くり返し</label>
+              <select id="pathRepeat" class="select select-xs col-span-2 w-full">
+                <option value="pingpong">往復</option>
+                <option value="loop">片道でくり返す</option>
+              </select></div>
+            <button id="pathMake" class="btn btn-sm btn-primary" title="今の記録と入れ替えます(元に戻せます)">この動きで記録を作って再生</button>
+            <p id="pathInfo" class="text-xs opacity-70 leading-snug"></p>
+          </div>
+        </details>
       </section>
 
       <section class="flex flex-col gap-2">

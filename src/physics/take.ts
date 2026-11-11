@@ -11,7 +11,21 @@ import { LIMITS, type CameraState, type Vec3 } from '../model/project';
 import { PHYSICS_DT } from './world';
 import type { RecordSample } from './recorder';
 
-export interface Take { readonly samples: readonly RecordSample[] }
+export interface Take {
+  readonly samples: readonly RecordSample[];
+  /** スタートとエンドの視点から作った記録なら、その設定(作り直すときの初期値) */
+  readonly path?: TakePath;
+}
+
+/** 視点(回転・ズーム・注視点)。注視点を動かすと画像が画面上を動き、その勢いで揺れる */
+export interface ViewKey { yaw: number; pitch: number; zoom: number; target: Vec3 }
+/** 往復: スタート→エンド→スタート / 片道: スタート→エンドのあと、スタートへ飛んでくり返す */
+export type PathRepeat = 'pingpong' | 'loop';
+/** なめらか: 動き出しと止まりをゆっくり / 一定: 同じ速さで動いて端で急に止まる(その勢いで弾む) */
+export type PathEase = 'smooth' | 'linear';
+export interface TakePath { start: ViewKey; end: ViewKey; seconds: number; ease: PathEase; repeat: PathRepeat }
+/** スタートからエンドまでの時間(秒)の範囲 */
+export const PATH_SECONDS = { min: 0.5, max: 20, def: 3 };
 
 /** 記録できる最長の長さ(秒) */
 export const TAKE_MAX_SECONDS = 60;
@@ -83,6 +97,50 @@ function blendTail(s: RecordSample[]): void {
   }
 }
 
+/* ---------- スタートとエンドから作る ---------- */
+
+const ease = (e: PathEase, t: number) => (e === 'smooth' ? 0.5 - 0.5 * Math.cos(Math.PI * t) : t);
+const lerpKey = (a: ViewKey, b: ViewKey, t: number, fov: number): CameraState => ({
+  fov, yaw: lerp(a.yaw, b.yaw, t), pitch: lerp(a.pitch, b.pitch, t), zoom: a.zoom * Math.pow(b.zoom / a.zoom, t), target: lerpVec(a.target, b.target, t),
+});
+
+/**
+ * スタートとエンドの視点の間を動く記録を作る。1周は往復なら片道の2倍、片道なら片道の時間。
+ * ズームは比で補間する(拡大・縮小の速さが見た目でそろう)。片道は初めの1件で視点を測り直し、スタートへ飛ぶ所では揺らさない。
+ */
+export function takeFromPath(path: TakePath, fov: number): Take {
+  const p = normalizePath(path);
+  // 1周の刻み数を TAKE_STEP_MULTIPLE の倍数にそろえる(往復は片道を半分の倍数に)
+  const m = p.repeat === 'pingpong' ? TAKE_STEP_MULTIPLE / 2 : TAKE_STEP_MULTIPLE;
+  const one = Math.max(m, Math.round(p.seconds / PHYSICS_DT / m) * m);
+  const n = p.repeat === 'pingpong' ? one * 2 : one;
+  const samples: RecordSample[] = [];
+  for (let i = 0; i < n; i++) {
+    const u = p.repeat === 'pingpong' ? (i <= one ? i / one : 2 - i / one) : Math.min(1, i / (n - 1));
+    const camera = lerpKey(p.start, p.end, ease(p.ease, u), fov);
+    samples.push({ grab: null, grabGains: [], camera, viewTarget: { ...camera.target }, ...(i === 0 && p.repeat === 'loop' ? { viewCut: true } : {}) });
+  }
+  return { samples, path: p };
+}
+
+const keyOf = (v: unknown, def: ViewKey): ViewKey => {
+  const o = (v && typeof v === 'object' ? v : {}) as Partial<ViewKey>, t = (o.target ?? {}) as Partial<Vec3>;
+  return {
+    yaw: fin(o.yaw, -1e3, 1e3, def.yaw), pitch: fin(o.pitch, -1.5, 1.5, def.pitch), zoom: fin(o.zoom, 0.05, 20, def.zoom),
+    target: { x: fin(t.x, -BIG, BIG), y: fin(t.y, -BIG, BIG), z: fin(t.z, -BIG, BIG) },
+  };
+};
+/** 範囲外・知らない値を丸める(読み込み・作る前に通す) */
+export function normalizePath(v: unknown): TakePath {
+  const o = (v && typeof v === 'object' ? v : {}) as Partial<TakePath>;
+  const def: ViewKey = { yaw: 0, pitch: 0, zoom: 1.5, target: { x: 0, y: 0, z: 0 } };
+  return {
+    start: keyOf(o.start, def), end: keyOf(o.end, def),
+    seconds: fin(o.seconds, PATH_SECONDS.min, PATH_SECONDS.max, PATH_SECONDS.def),
+    ease: o.ease === 'linear' ? 'linear' : 'smooth', repeat: o.repeat === 'loop' ? 'loop' : 'pingpong',
+  };
+}
+
 /* ---------- 保存の形(.pukupop の motion/take.json) ---------- */
 
 /**
@@ -90,7 +148,7 @@ function blendTail(s: RecordSample[]): void {
  * つかんでいないときは gx・gy・gz が null。gains はつかみの効き具合の組(gainSets)の番号(無ければ -1)。cut は 1 で視点を測り直す。
  * 画角は記録しない(再生ではその時のプロジェクトの画角を使う)。
  */
-export interface TakeJson { version: 1; dt: number; gainSets: [string, number][][]; samples: (number | null)[][] }
+export interface TakeJson { version: 1; dt: number; gainSets: [string, number][][]; samples: (number | null)[][]; path?: TakePath }
 
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
@@ -109,7 +167,7 @@ export function takeToJson(take: Take): TakeJson {
       g ? r6(g.x) : null, g ? r6(g.y) : null, g ? r6(g.z) : null, gi, s.viewCut ? 1 : 0,
     ];
   });
-  return { version: 1, dt: PHYSICS_DT, gainSets: sets, samples };
+  return { version: 1, dt: PHYSICS_DT, gainSets: sets, samples, ...(take.path ? { path: take.path } : {}) };
 }
 
 const BIG = 1e6;
@@ -153,5 +211,6 @@ export function takeFromJson(v: unknown, fov: number): Take | null {
   }
   // 長さは書き出しのコマにそろえる(手で直したファイルなどで端数があれば切り捨てる)
   samples.length -= samples.length % TAKE_STEP_MULTIPLE;
-  return samples.length * PHYSICS_DT >= TAKE_MIN_SECONDS - 1e-9 ? { samples } : null;
+  if (samples.length * PHYSICS_DT < TAKE_MIN_SECONDS - 1e-9) return null;
+  return j.path && typeof j.path === 'object' ? { samples, path: normalizePath(j.path) } : { samples };
 }
