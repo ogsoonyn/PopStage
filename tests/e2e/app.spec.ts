@@ -1973,3 +1973,40 @@ test('Ctrl か Shift を押しながらだと、回転・平行移動・ズー�
   f0 = await free(); await cellDrag('free', 'Control', 'left'); const rFine = (await free()).yaw - f0.yaw;
   expect(rFine / rFull).toBeCloseTo(0.2, 1);
 });
+
+test('重ね方「最大」: 重なった膨らみは高い方だけになり、加算のように倍にならない', async ({ page }) => {
+  await boot(page);
+  // 2枚のレイヤーに、少し重なる円をそれぞれ塗る(ポップ量は同じ)。横から見た膨らみの厚みを比べる
+  const depth = () => page.evaluate(() => {
+    const a = (window as any).popstage;
+    const cam = { ...a.project.camera, yaw: Math.PI / 2, pitch: 0, zoom: 1, target: { x: 0, y: 0, z: 0 } };
+    const W = 200, H = 120, px: Uint8ClampedArray = a.stage.renderFrame(W, H, cam, null);
+    let min = W, max = -1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (px[(y * W + x) * 4 + 3] > 0) { min = Math.min(min, x); max = Math.max(max, x); }
+    return max - min;
+  });
+  await page.evaluate(() => {
+    const a = (window as any).popstage;
+    a.addLayer();
+    a.doc.layers.forEach((l: any, i: number) => {
+      const wm = l.weights, cx = wm.width * (i ? 0.58 : 0.42), cy = wm.height / 2, r = wm.width * 0.14;
+      wm.data.fill(0);
+      for (let y = 0; y < wm.height; y++) for (let x = 0; x < wm.width; x++) if (Math.hypot(x - cx, y - cy) < r) wm.data[y * wm.width + x] = 255;
+      a.store.weightsChanged(l.id, wm.fullRect);
+      a.store.patchLayer(l.id, { pop: 300 });
+    });
+  });
+  await page.waitForTimeout(100);
+  const add = await depth();
+  await page.evaluate(() => { const a = (window as any).popstage; a.store.patchLayer(a.doc.layers[1].id, { blend: 'max' }); });
+  const max = await depth();
+  // 加算は重なりで 600px ぶん、最大は 300px ぶん出る(画像の厚みぶんを除いても、はっきり差が出る)
+  expect(add).toBeGreaterThan(max * 1.4);
+  // パネルの重ね方の選択と、一覧の印も変わる
+  await page.evaluate(() => { const a = (window as any).popstage; a.setActiveLayer(a.doc.layers[1].id); });
+  await expect(page.locator('#pBlend')).toHaveValue('max');
+  await expect(page.locator('#layerList li').first()).toContainText('最大');
+  // パネルから加算へ戻すと、元の厚みに戻る
+  await page.locator('#pBlend').selectOption('add');
+  expect(await depth()).toBe(add);
+});

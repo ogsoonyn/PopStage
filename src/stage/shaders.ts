@@ -1,7 +1,10 @@
 /**
- * 頂点シェーダがウェイトマップ(テクスチャ配列)を読み、各レイヤーの w·(ポップ·z + 揺れ) を足して持ち上げる。
- *   x' = x + Σ_i w_i (p_i ẑ + s_i) + Σ_i w_i r_i (x_xy - c_i)
+ * 頂点シェーダがウェイトマップ(テクスチャ配列)を読み、各レイヤーのずれ d_i を一覧の下から順に重ねて持ち上げる。
+ *   d_i = w_i (p_i ẑ + s_i) + w_i r_i (x_xy - c_i)
  * r_i は塗った範囲の広がり(ためて膨らむ2)、c_i はそのレイヤーのウェイトの重心。広がりは画像の面内だけに効く。
+ * 重ね方(uBlend): 0 = 加算(下までのずれ D に d_i を足す)、1 = 最大(D と d_i の高さ z を比べ、高い方のずれを使う)。
+ * 最大は高さの差が小さい所で2つをなめらかに混ぜる。境目で揺れの向きが急に変わってメッシュが折れないようにするため。
+ * 塗っていない所(w_i = 0)は下のずれをそのまま残す。
  * ウェイトマップは行 0 が画像の上端なので、v を反転して読む。
  */
 export const MAX_LAYERS = 8;
@@ -11,6 +14,7 @@ export const vertexShader = /* glsl */ `
   uniform sampler2DArray uW;
   uniform int uLayerCount;
   uniform float uPop[${MAX_LAYERS}];
+  uniform int uBlend[${MAX_LAYERS}];
   uniform vec3 uSwing[${MAX_LAYERS}];
   uniform float uSpread[${MAX_LAYERS}];
   uniform vec2 uCenter[${MAX_LAYERS}];
@@ -25,8 +29,16 @@ export const vertexShader = /* glsl */ `
     for (int i = 0; i < ${MAX_LAYERS}; i++) {
       if (i >= uLayerCount) break;
       float w = textureLod(uW, vec3(wuv, float(i)), 0.0).r;
-      p += w * (vec3(0.0, 0.0, uPop[i]) + uSwing[i]);
-      p.xy += w * uSpread[i] * (position.xy - uCenter[i]);
+      vec3 d = w * (vec3(0.0, 0.0, uPop[i]) + uSwing[i]);
+      d.xy += w * uSpread[i] * (position.xy - uCenter[i]);
+      if (uBlend[i] == 1) {
+        vec3 below = p - position;
+        float soft = max(0.08 * max(abs(d.z), abs(below.z)), 0.5);
+        float t = smoothstep(-soft, soft, d.z - below.z) * smoothstep(0.0, 0.02, w);
+        p = position + mix(below, d, t);
+      } else {
+        p += d;
+      }
     }
     // ポップ一時OFF: 持ち上げと揺れ(広がりも)を消して平らな画像に戻す
     p = mix(p, position, uFlat);
