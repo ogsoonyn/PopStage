@@ -185,6 +185,9 @@
       <section class="flex flex-col gap-2">
         <h2 class="font-bold">レイヤー: <span id="activeLayerName"></span></h2>
         <div class="prop"><label for="pPop">ポップ量</label><input id="pPop" type="range" min="0" max="1000" class="range range-xs" title="前半は 0〜500px を細かく、後半は 500〜1500px を粗く動かします"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-16 text-right"></div>
+        <div class="prop"><label for="pBlend">重ね方</label>
+          <select id="pBlend" class="select select-xs col-span-2 w-full"></select></div>
+        <p id="pBlendDesc" class="text-xs opacity-70 -mt-1 pl-[6rem] leading-snug"></p>
         <label class="flex items-center justify-between">揺れ <input id="pSwing" type="checkbox" class="toggle toggle-sm"></label>
         <div class="prop"><label for="pPreset">プリセット</label>
           <select id="pPreset" class="select select-xs col-span-2 w-full"></select></div>

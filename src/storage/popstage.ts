@@ -5,8 +5,8 @@
 import { unzipSync, strToU8, strFromU8 } from 'fflate';
 import { zipParts, concatParts, type ZipEntry } from './zip';
 import {
-  LIMITS, PRESETS, MOTIONS, MOTION_PARAMS, createProject, createLayer, defaultCamera, defaultMultiCamera, newId,
-  type Project, type CameraState, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern,
+  LIMITS, PRESETS, MOTIONS, BLENDS, MOTION_PARAMS, createProject, createLayer, defaultCamera, defaultMultiCamera, newId,
+  type Project, type CameraState, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type BlendMode,
 } from '../model/project';
 import { WeightMap, weightSizeFor } from '../model/weightmap';
 import { encodeGrayPng, decodePngToGray, readPngSize, MAX_PNG_SIDE, type GrayImage } from './png';
@@ -31,7 +31,7 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 /* ---------- project.json の形 ---------- */
 
 interface LayerJson {
-  id: string; name: string; visible: boolean; pop: number; physics: PhysicsParams;
+  id: string; name: string; visible: boolean; pop: number; blend?: BlendMode; physics: PhysicsParams;
   weights: { path: string; width: number; height: number };
 }
 interface DocumentJson {
@@ -120,7 +120,7 @@ function projectParts(project: Project, opts: SerializeOptions): Uint8Array[] {
         // キャッシュした PNG は作り直すまで書き換えないので、CRC を使い回せる
         files.push({ name: path, data: png, stable: !!opts.pngCache });
         return {
-          id: layer.id, name: layer.name, visible: layer.visible, pop: layer.pop, physics: { ...layer.physics, motionParams: { ...layer.physics.motionParams } },
+          id: layer.id, name: layer.name, visible: layer.visible, pop: layer.pop, blend: layer.blend, physics: { ...layer.physics, motionParams: { ...layer.physics.motionParams } },
           weights: { path, width: layer.weights.width, height: layer.weights.height },
         };
       }),
@@ -263,6 +263,8 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
       const layer: Layer = {
         id: uniqueId(lj.id, 'L'), name: str(lj.name, `レイヤー${doc.layers.length + 1}`),
         visible: lj.visible !== false, pop: num(lj.pop, LIMITS.pop.min, LIMITS.pop.max, LIMITS.pop.def),
+        // 重ね方が無い(古いファイル)・知らない値は加算として読む
+        blend: own(BLENDS, lj.blend) ? lj.blend as BlendMode : 'add',
         physics: physicsFrom(lj.physics), weights,
       };
       doc.layers.push(layer);

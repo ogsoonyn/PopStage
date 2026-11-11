@@ -128,11 +128,25 @@ export interface PhysicsParams {
   motionParams: Record<string, number>; // 揺らし方ごとの固有設定(キーは「揺らし方.項目」、未設定は既定値)
 }
 
+/**
+ * 重ね方。一覧の下から順に、下までの結果にこのレイヤーをどう重ねるか。
+ * add: 下の高さに足す。max: 下と比べて高い所だけ、このレイヤーの形と揺れを使う(膨らみを1つずつ別レイヤーで作って重ねる)。
+ */
+export type BlendMode = 'add' | 'max';
+
+export const BLENDS: Record<BlendMode, { label: string; short: string; desc: string }> = {
+  add: { label: '加算', short: '+', desc: '下のレイヤーの高さに足します' },
+  max: { label: '最大(高い方)', short: '最大', desc: '下のレイヤーと比べて高い所だけ、このレイヤーの形と揺れを使います。膨らみを1つずつ別のレイヤーで作って重ねるときに' },
+};
+
+export const BLEND_ORDER = Object.keys(BLENDS) as BlendMode[];
+
 export interface Layer {
   id: string;
   name: string;
   visible: boolean;
   pop: number; // ポップ量(元画像のピクセル単位)
+  blend: BlendMode;
   physics: PhysicsParams;
   weights: WeightMap;
 }
@@ -242,6 +256,7 @@ export function createLayer(doc: Pick<Document, 'image' | 'layers'>, name?: stri
     name: name ?? `レイヤー${doc.layers.length + 1}`,
     visible: true,
     pop: LIMITS.pop.def,
+    blend: 'add',
     physics: defaultPhysics(),
     weights: new WeightMap(w, h),
   };

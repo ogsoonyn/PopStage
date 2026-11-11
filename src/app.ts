@@ -166,7 +166,7 @@ export class App extends Emitter<AppEvents> {
     });
     s.on('layer', ({ layerId, keys }) => {
       const f = s.findLayer(layerId); if (!f) return;
-      if (keys.includes('pop') || keys.includes('visible')) this.stage.setLayerParams(f.index, f.layer);
+      if (keys.includes('pop') || keys.includes('visible') || keys.includes('blend')) this.stage.setLayerParams(f.index, f.layer);
     });
     s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); });
     s.on('layers', () => {
