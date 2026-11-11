@@ -21,7 +21,7 @@ import { decodeForDisplay, canvasAlpha, browserDecodeGray, fileToAsset, rgbaToPn
 import { createSampleDocument } from './ui/sample';
 import { ask, saveFile, setBusy, toast } from './ui/dom';
 
-export type Tool = 'brush' | 'erase' | 'smooth' | 'inflate' | 'grab' | 'shake' | 'view';
+export type Tool = 'brush' | 'erase' | 'smooth' | 'inflate' | 'grab' | 'shake' | 'view' | 'pan';
 export type PressureMode = 'strength' | 'size' | 'none';
 
 export interface BrushOptions { size: number; strength: number; hardness: number; pressure: PressureMode }

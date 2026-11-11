@@ -48,7 +48,7 @@ persistControls('brush', byId<HTMLInputElement | HTMLSelectElement>('brushSize',
   app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, grid: v.grid, fade: v.fade, multi: v.multi }); });
 }
 {
-  const TOOLS: Tool[] = ['brush', 'erase', 'smooth', 'inflate', 'grab', 'shake', 'view'];
+  const TOOLS: Tool[] = ['brush', 'erase', 'smooth', 'inflate', 'grab', 'shake', 'view', 'pan'];
   const t = prefs.get<string>('tool');
   if (t && (TOOLS as string[]).includes(t)) app.setTool(t as Tool);
   app.on('tool', t => prefs.set('tool', t));
@@ -169,6 +169,7 @@ const TOOL_HINTS: Record<Tool, string> = {
   grab: 'ドラッグで引っ張って離すと揺れる',
   shake: 'ドラッグで画像を振る(カメラが付いてくるので画像は動かず、揺れだけが見える)/ 中ドラッグで画像を動かす / 右ドラッグで回転',
   view: 'ドラッグで視点を回す / Space+ドラッグで平行移動',
+  pan: 'ドラッグで画像を動かす(動かした勢いで揺れる)/ 右ドラッグで回転 / ホイールでズーム',
 };
 function refreshTool(): void {
   document.querySelectorAll<HTMLButtonElement>('.tool').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === app.tool)));
@@ -207,7 +208,7 @@ window.addEventListener('keydown', e => {
   if (e.shiftKey && k === 'g') return hit('toggleGrid');
   if (e.shiftKey && k === 'w') return hit('toggleFade');
   if (e.key === 'Home') return hit('resetView');
-  const tools: Record<string, Tool> = { b: 'brush', e: 'erase', s: 'smooth', i: 'inflate', g: 'grab', y: 'shake', v: 'view' };
+  const tools: Record<string, Tool> = { b: 'brush', e: 'erase', s: 'smooth', i: 'inflate', g: 'grab', y: 'shake', v: 'view', h: 'pan' };
   if (!e.shiftKey && tools[k]) { e.preventDefault(); if (!app.previewingInflate) app.setTool(tools[k]); return; }
   if (k === 'w') return hit('toggleOverlay');
   if (k === 'f') return hit('toggleFlat');
