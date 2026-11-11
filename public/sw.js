@@ -45,7 +45,8 @@ self.addEventListener('fetch', e => {
 
   e.respondWith(caches.open(CACHE).then(async cache => {
     const hit = await cache.match(req);
-    const net = fetch(req).then(res => { if (res.ok) cache.put(req, res.clone()); return res; });
+    // 206(部分応答)などキャッシュに入れられない応答でも、取れたものはそのまま返す
+    const net = fetch(req).then(res => { if (res.status === 200) cache.put(req, res.clone()).catch(() => {}); return res; });
     if (hit) {
       if (!req.url.includes('/assets/')) e.waitUntil(net.catch(() => {}));
       return hit;
