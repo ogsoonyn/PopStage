@@ -155,7 +155,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
       const p = app.stage.pick(e.clientX, e.clientY);
       if (p && app.beginStroke(paintMode(), p.x, p.y, pressureOf(e))) { drag.mode = 'paint'; app.holdImage(true); }
     }
-    if (tap && e.pointerType === 'touch') tap.orbit = drag.mode === 'orbit';
+    // 画像の外のダブルタップで視点を戻すのに使う(「移動」では画像の外も平行移動だが、ダブルタップは同じく効かせる)
+    if (tap && e.pointerType === 'touch') tap.orbit = drag.mode === 'orbit' || (app.tool === 'pan' && !app.stage.pick(e.clientX, e.clientY)?.inside);
     updateCursor();
   });
 

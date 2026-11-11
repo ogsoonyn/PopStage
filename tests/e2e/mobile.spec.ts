@@ -64,6 +64,10 @@ test('「移動」では1本指で画像を動かし、画像の上でも外で�
   expect(Math.hypot(c2.x - c1.x, c2.y - c1.y, c2.z - c1.z)).toBeGreaterThan(0);
   expect([c2.yaw, c2.pitch]).toEqual([c0.yaw, c0.pitch]);
   expect(await weightSum(page)).toBe(before);
+  // 「移動」でも、画像の外のダブルタップで視点を戻す
+  for (let i = 0; i < 2; i++) { await touch(cdp, 'touchStart', [[cx, b.y + 12]]); await touch(cdp, 'touchEnd', []); await page.waitForTimeout(60); }
+  const c3 = await cam();
+  expect(Math.hypot(c3.x - c0.x, c3.y - c0.y, c3.z - c0.z)).toBeLessThan(1e-6);
 });
 
 test('シートを開くと3Dビューはシートの上に縮み、シートの中身は下のバーに隠れない', async ({ page }) => {
