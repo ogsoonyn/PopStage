@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- 画像はこのページと data: / blob: からだけ読む(読み込んだファイル経由で外部へ通信させない) -->
 <meta http-equiv="Content-Security-Policy" content="img-src 'self' data: blob:; object-src 'none'; base-uri 'self'">
 <title>PopStage</title>
@@ -10,6 +10,26 @@
 <link rel="stylesheet" href="/src/style.css">
 </head>
 <body class="bg-base-200 text-base-content text-sm h-dvh flex flex-col overflow-hidden">
+
+<!-- スマホの画面(ui/mobile.ts が幅で切り替える)。設定の部品は PC の画面から移してくるので、ここには外枠だけを置く -->
+<header id="mTop" class="m-only" aria-label="スマホのメニュー">
+  <button class="m-icon" data-cmd="undo" aria-label="元に戻す"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
+  <button class="m-icon" data-cmd="redo" aria-label="やり直す"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></button>
+  <span id="mTitle" class="flex-1 min-w-0 truncate text-center font-bold"></span>
+  <button id="mAuto" class="m-icon" aria-label="自動で揺らす" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/></svg></button>
+  <div class="dropdown dropdown-end">
+    <div tabindex="0" role="button" class="m-icon" aria-label="メニュー"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg></div>
+    <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-50 w-60 p-2 shadow-lg">
+      <li><button data-cmd="open">プロジェクトを開く…</button></li>
+      <li><button data-cmd="openImage">画像を開く…</button></li>
+      <li><button data-cmd="save">保存</button></li>
+      <li><button data-cmd="export">書き出し…</button></li>
+      <li><button data-cmd="sample">サンプルを開く</button></li>
+      <li><button data-cmd="help">操作方法</button></li>
+      <li><button data-cmd="about">PopStage について</button></li>
+    </ul>
+  </div>
+</header>
 
 <!-- メニューバー -->
 <header class="flex items-center gap-1 px-2 h-10 bg-base-100 border-b border-base-300 shrink-0" id="menubar">
@@ -135,6 +155,7 @@
     <div id="dropHint" class="absolute inset-3 border-4 border-dashed border-primary rounded-box bg-base-100/70 hidden items-center justify-center text-lg font-bold pointer-events-none">
       ここに画像か .popstage ファイルをドロップ
     </div>
+    <button id="mFine" class="m-only btn btn-sm rounded-full" aria-pressed="false" title="押すとオン・オフが切り替わります。オンの間は、回転・平行移動・ズーム・つかむ・揺らすの動きが 1/5 になります">微調整</button>
     <div id="busy" class="absolute inset-0 bg-base-100/60 hidden items-center justify-center"><span class="loading loading-spinner loading-lg"></span></div>
   </section>
 
@@ -213,6 +234,61 @@
     </div>
   </aside>
 </main>
+
+<!-- スマホ: 下から引き上げるシート(閉じる・半分・全部の3段階) -->
+<section id="mSheet" class="m-only" aria-label="設定">
+  <div id="mGrip" role="button" tabindex="0" aria-label="設定を引き上げる・下げる"><i></i></div>
+  <div id="mPresets" class="m-chips" role="group" aria-label="揺れのプリセット"></div>
+  <div class="m-tabs" role="tablist">
+    <button role="tab" data-mtab="motion" aria-selected="true">揺れ</button>
+    <button role="tab" data-mtab="tool" aria-selected="false">ツール</button>
+    <button role="tab" data-mtab="layer" aria-selected="false">レイヤー</button>
+    <button role="tab" data-mtab="view" aria-selected="false">表示</button>
+    <button role="tab" data-mtab="file" aria-selected="false">ファイル</button>
+  </div>
+  <div id="mPanes">
+    <div class="m-pane" data-mpane="motion"></div>
+    <div class="m-pane" data-mpane="tool" hidden>
+      <p id="mToolDesc" class="text-xs opacity-70 leading-relaxed"></p>
+      <div id="mBrushOpts" class="flex flex-col gap-2"></div>
+    </div>
+    <div class="m-pane" data-mpane="layer" hidden>
+      <div class="m-btns">
+        <button id="mPaintMode" class="btn btn-sm btn-primary">塗って直す…</button>
+        <button class="btn btn-sm" data-cmd="smoothAll">全体ぼかし…</button>
+        <button class="btn btn-sm" data-cmd="normalize">正規化</button>
+        <button class="btn btn-sm" data-cmd="invert">反転</button>
+        <button class="btn btn-sm" data-cmd="clearWeights">全消去</button>
+      </div>
+    </div>
+    <div class="m-pane" data-mpane="view" hidden>
+      <div class="m-btns">
+        <button class="btn btn-sm" data-cmd="cleanView">表示クリア</button>
+        <button class="btn btn-sm" data-cmd="resetView">視点を戻す</button>
+      </div>
+    </div>
+    <div class="m-pane" data-mpane="file" hidden>
+      <button class="m-row" data-cmd="open">プロジェクトを開く<span>.popstage・画像</span></button>
+      <button class="m-row" data-cmd="openImage">画像を開く<span>写真</span></button>
+      <button class="m-row" data-cmd="save">保存<span>ダウンロード</span></button>
+      <button class="m-row" data-cmd="recent">最近開いたファイル<span>このブラウザ内</span></button>
+      <button class="m-row" data-cmd="export">書き出し<span>動画・GIF・連番PNG</span></button>
+      <button class="m-row" data-cmd="sample">サンプルを開く<span></span></button>
+    </div>
+  </div>
+</section>
+<div id="mModeBar" class="m-only" hidden><b>塗って直す</b> 1本指で塗る・消す・ぼかす。終わったら「完了」</div>
+<!-- スマホ: 下のツールバー。「塗って直す」の間だけ塗りのツールに入れ替える -->
+<nav id="mTools" class="m-only" aria-label="ツール">
+  <button class="m-tool" data-mtool="inflate" data-mset="main"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18h18"/><path d="M5 18c0-6 3-10 7-10s7 4 7 10"/></svg><span>膨らみ</span></button>
+  <button class="m-tool" data-mtool="grab" data-mset="main"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5a1.5 1.5 0 0 1 3 0v6"/><path d="M11 10V4a1.5 1.5 0 0 1 3 0v6"/><path d="M14 10V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.5A6.5 6.5 0 0 1 4 16l-1-3a1.5 1.5 0 0 1 2.6-1.4L8 14"/></svg><span>つかむ</span></button>
+  <button class="m-tool" data-mtool="shake" data-mset="main"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8c2-2 4-2 6 0s4 2 6 0 3-2 4-1"/><path d="M4 14c2-2 4-2 6 0s4 2 6 0 3-2 4-1"/></svg><span>揺らす</span></button>
+  <button class="m-tool" data-mtool="view" data-mset="main"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg><span>視点</span></button>
+  <button class="m-tool" data-mtool="brush" data-mset="paint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 3 9.5 11.5"/><path d="M7 13c-2 0-3 1.5-3 3.5S3 20 3 20s3 .5 5-1 2-4 2-4"/><path d="m9 11 4 4"/><path d="M13 15 21 7l-4-4-8 8"/></svg><span>ブラシ</span></button>
+  <button class="m-tool" data-mtool="erase" data-mset="paint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 21-4-4 10-10 7 7-7 7z"/><path d="M8 10l6 6"/><path d="M14 21h7"/></svg><span>消しゴム</span></button>
+  <button class="m-tool" data-mtool="smooth" data-mset="paint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/></svg><span>ぼかし</span></button>
+  <button id="mPaintDone" class="m-tool" data-mset="paint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>完了</span></button>
+</nav>
 
 <!-- ステータスバー -->
 <footer class="flex items-center gap-4 px-3 h-7 bg-base-100 border-t border-base-300 text-xs tabular-nums shrink-0 opacity-90">
@@ -351,14 +427,22 @@
 <dialog id="helpDialog" class="modal">
   <div class="modal-box max-w-2xl">
     <h3 class="font-bold text-lg mb-2">操作方法</h3>
-    <ol class="list-decimal pl-5 leading-relaxed mb-3">
+    <div class="m-only grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm mb-4">
+      <span class="font-bold">1本指</span><span>下で選んだツール(膨らみ・つかむ・揺らす・視点)</span>
+      <span class="font-bold">画像の外</span><span>1本指でなぞると回転、ダブルタップで視点を戻す</span>
+      <span class="font-bold">2本指</span><span>動かすと平行移動(揺れる)、つまむとズーム</span>
+      <span class="font-bold">2本指タップ</span><span>元に戻す(3本指タップでやり直す)</span>
+      <span class="font-bold">微調整</span><span>右上のボタンでオンにしている間は、動きが 1/5 になる</span>
+      <span class="font-bold">塗る・消す</span><span>シートの「レイヤー」→「塗って直す」</span>
+    </div>
+    <ol class="d-only list-decimal pl-5 leading-relaxed mb-3">
       <li>画像をウィンドウへドロップする(PNG / JPEG / WebP)。</li>
       <li>ブラシで動かしたい所を塗る。塗った所がその場で持ち上がる。</li>
       <li>右ドラッグで視点を回し、ポップ量を調整する。</li>
       <li>「つかむ」で画像をドラッグして揺らし、プリセットを選ぶ。</li>
       <li>ファイル → 書き出しで、形式と長さを決めて保存する。</li>
     </ol>
-    <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+    <div class="d-only grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
       <span>回転(オービット)</span><span>右ドラッグ</span>
       <span>平行移動(揺れる)</span><span>中ドラッグ / Space + 左ドラッグ</span>
       <span>ズーム</span><span>ホイール</span>

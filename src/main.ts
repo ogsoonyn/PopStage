@@ -7,6 +7,7 @@ import { bindBlurDialog } from './ui/blurDialog';
 import { bindInflateDialog } from './ui/inflateDialog';
 import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
+import { bindMobileLayout } from './ui/mobile';
 import { $, ask, toast, retryWithClick } from './ui/dom';
 import { autosave } from './storage/autosave';
 import { prefs, persistControls } from './storage/prefs';
@@ -61,6 +62,8 @@ const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
 const recentDialog = bindRecentDialog(app);
 bindInflateDialog(app);
+// スマホの配置。右パネルなどの部品を移すので、ほかの部品を結び付けたあとに呼ぶ
+bindMobileLayout(app);
 
 /* ---------- ファイルを開く ---------- */
 

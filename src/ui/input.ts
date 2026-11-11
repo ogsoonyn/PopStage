@@ -7,10 +7,14 @@
  *   Ctrl(⌘)か Shift を押している間は、回転・平行移動・ズーム・つかむ・揺らすの動きを 1/5 にする(ui/fine.ts)
  *   揺らし方「ピストン」で画像全体が動いている間は、塗り・膨らませる範囲のドラッグ中だけ画像を止め(app.holdImage)、
  *   止まっているポインタの下のブラシの円は毎フレーム当て直す
+ * 指(タッチ)では、1本指は選択中のツール(画像の外では回転)、2本指は平行移動とピンチでズーム。
+ *   2本目の指を置くと、1本目で始めた塗り・範囲・つかむは取り消す。2本指タップで戻す、3本指タップでやり直す、
+ *   画像の外のダブルタップで視点を戻す
  */
 import type { App } from '../app';
 import type { PaintMode } from '../paint/stroke';
-import { fineFactor, wheelFineFactor, wheelDelta } from './fine';
+import { fineFactor, wheelFineFactor, wheelDelta, FINE, isFineLocked } from './fine';
+import { toast } from './dom';
 
 type DragMode = 'orbit' | 'pan' | 'shake' | 'grab' | 'paint' | 'area' | null;
 
@@ -42,13 +46,106 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
 
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
+  /* ---------- 指(タッチ)の操作 ---------- */
+  const touches = new Map<number, { x: number; y: number }>();
+  /** 2本以上の指を置いている間の、指の中心と間隔 */
+  let gesture: { x: number; y: number; d: number } | null = null;
+  /** 触り始めてから全部の指を離すまでの記録(タップの判定に使う) */
+  let tap: { t: number; n: number; moved: number; x: number; y: number; orbit: boolean } | null = null;
+  /** 指ごとの置いた位置(タップかどうかは、それぞれの指が置いた所からどれだけ動いたかで決める) */
+  const touchStart = new Map<number, { x: number; y: number }>();
+  let lastTap: { t: number; x: number; y: number } | null = null;
+  /** このドラッグで膨らませるのプレビューを始めたか(2本目の指で取り消すときは、始めたプレビューごと捨てる) */
+  let areaBegan = false;
+  /** プレビュー中の範囲を描き直し始めたときの範囲(2本目の指で描き直しをやめたら、これに戻す) */
+  let areaBefore: { x: number; y: number; w: number; h: number } | null = null;
+  const touchCenter = () => {
+    let x = 0, y = 0;
+    for (const p of touches.values()) { x += p.x; y += p.y; }
+    return { x: x / touches.size, y: y / touches.size };
+  };
+  const touchSpread = () => {
+    const [a, b] = [...touches.values()];
+    return a && b ? Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)) : 1;
+  };
+  /** 1本指で始めた操作をやめる(塗りと範囲は無かったことにする) */
+  function cancelDrag(): void {
+    if (drag.mode === 'paint') { app.cancelStroke(); app.holdImage(false); }
+    else if (drag.mode === 'area') {
+      areaStart = null; app.holdImage(false);
+      if (areaBegan && app.previewingInflate) app.endInflate(false);
+      else if (areaBefore && app.previewingInflate) app.updateInflate({ area: areaBefore });
+    } else if (drag.mode === 'grab') { app.world.grab = null; app.world.grabGains.clear(); }
+    else if (drag.mode === 'orbit' || drag.mode === 'pan') app.cameraChanged();
+    drag.mode = null; drag.id = -1;
+  }
+  canvas.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'touch') return;
+    // 新しく触り始めた(最初の指)ときは、離した所がキャンバスの外で届かなかった指の記録を捨てる
+    if (e.isPrimary) { touches.clear(); touchStart.clear(); gesture = null; tap = null; }
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    touchStart.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const now = performance.now();
+    if (!tap) tap = { t: now, n: 0, moved: 0, x: e.clientX, y: e.clientY, orbit: false };
+    tap.n = Math.max(tap.n, touches.size);
+    if (touches.size < 2) return;
+    // 2本目からは視点の操作にする。下の(1本指の)処理には渡さない
+    e.stopImmediatePropagation();
+    canvas.setPointerCapture(e.pointerId);
+    if (drag.mode) cancelDrag();
+    gesture = { ...touchCenter(), d: touchSpread() };
+    updateCursor();
+  });
+  canvas.addEventListener('pointermove', e => {
+    const t = touches.get(e.pointerId); if (!t) return;
+    t.x = e.clientX; t.y = e.clientY;
+    const s0 = touchStart.get(e.pointerId);
+    if (tap && s0) tap.moved = Math.max(tap.moved, Math.hypot(e.clientX - s0.x, e.clientY - s0.y));
+    if (!gesture || touches.size < 2) return;
+    e.stopImmediatePropagation();
+    const c = touchCenter(), d = touchSpread(), f = isFineLocked() ? FINE : 1;
+    const dx = (c.x - gesture.x) * f, dy = (c.y - gesture.y) * f;
+    const cam = app.project.camera, k = app.stage.pixelToWorld(cam), { right, up } = app.stage.screenAxes();
+    // 平行移動は中ドラッグと同じ(画像が画面上を動くので、その勢いで揺れる)
+    cam.target.x += -dx * k * right.x + dy * k * up.x;
+    cam.target.y += -dx * k * right.y + dy * k * up.y;
+    cam.target.z += -dx * k * right.z + dy * k * up.z;
+    // 指を広げると近づく(zoom は小さいほど大きく見える)
+    cam.zoom = Math.max(0.05, Math.min(10, cam.zoom * Math.pow(gesture.d / d, f)));
+    gesture = { ...c, d };
+    app.emit('status', undefined);
+  });
+  const touchEnd = (e: PointerEvent) => {
+    touchStart.delete(e.pointerId);
+    if (!touches.delete(e.pointerId)) return;
+    if (gesture) {
+      if (touches.size >= 2) gesture = { ...touchCenter(), d: touchSpread() };
+      else { gesture = null; app.cameraChanged(); }
+    }
+    if (touches.size > 0 || !tap) return;
+    const t = tap; tap = null;
+    const quick = performance.now() - t.t < 300;
+    if (t.n >= 2) {
+      if (!quick || t.moved > 16 || app.stroking || app.previewingInflate) return;
+      if (t.n === 2 ? app.history.undo() : app.history.redo()) toast(t.n === 2 ? '元に戻しました' : 'やり直しました');
+      return;
+    }
+    // 画像の外のダブルタップで視点を戻す
+    if (!t.orbit || !quick || t.moved > 10) { lastTap = null; return; }
+    const now = performance.now();
+    if (lastTap && now - lastTap.t < 350 && Math.hypot(lastTap.x - t.x, lastTap.y - t.y) < 32) { lastTap = null; app.resetView(); }
+    else lastTap = { t: now, x: t.x, y: t.y };
+  };
+
   canvas.addEventListener('pointerdown', e => {
     if (drag.mode || !app.doc) return;
     canvas.focus({ preventScroll: true });
     canvas.setPointerCapture(e.pointerId);
     drag.id = e.pointerId; drag.lx = drag.sx = e.clientX; drag.ly = drag.sy = e.clientY;
     alt = e.altKey;
-    if (e.button === 2 || (e.button === 0 && app.tool === 'view' && !space)) drag.mode = 'orbit';
+    // 指では、画像の外をなぞると回転する(右ドラッグの代わり)
+    const outside = e.pointerType === 'touch' && !app.stage.pick(e.clientX, e.clientY)?.inside;
+    if (e.button === 2 || (e.button === 0 && (app.tool === 'view' || outside) && !space)) drag.mode = 'orbit';
     else if (e.button === 1 || (e.button === 0 && space)) { drag.mode = 'pan'; e.preventDefault(); }
     // 振る向きは主ビューの画面の向きで決まるので、主ビューの中から始めたときだけ振る
     else if (e.button === 0 && app.tool === 'shake') { if (app.stage.inMainView(e.clientX, e.clientY)) drag.mode = 'shake'; }
@@ -58,6 +155,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
       const p = app.stage.pick(e.clientX, e.clientY);
       if (p && app.beginStroke(paintMode(), p.x, p.y, pressureOf(e))) { drag.mode = 'paint'; app.holdImage(true); }
     }
+    if (tap && e.pointerType === 'touch') tap.orbit = drag.mode === 'orbit';
     updateCursor();
   });
 
@@ -120,6 +218,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   };
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
+  canvas.addEventListener('pointerup', touchEnd);
+  canvas.addEventListener('pointercancel', touchEnd);
   canvas.addEventListener('lostpointercapture', end); // pointerup が来ないまま捕捉が外れても、ドラッグ(と止めた画像)を終える
   canvas.addEventListener('pointerenter', () => { pointerInside = true; });
   canvas.addEventListener('pointerleave', () => { pointerInside = false; hover = null; last = null; updateCursor(); });
@@ -163,6 +263,9 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     const p = app.stage.pick(e.clientX, e.clientY);
     if (!p) return;
     areaStart = { x: p.x, y: p.y };
+    areaBegan = false;
+    const prev = app.inflateState?.area;
+    areaBefore = prev ? { x: prev.x, y: prev.y, w: prev.w, h: prev.h } : null;
     drag.mode = 'area';
     app.holdImage(true);
   }
@@ -179,7 +282,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (w < 2 || h < 2) return;
     const area = { x: areaStart.x + Math.sign(dx || 1) * w / 2, y: areaStart.y + Math.sign(dy || 1) * h / 2, w: Math.round(w), h: Math.round(h) };
     if (app.previewingInflate) app.updateInflate({ area });
-    else if (!app.beginInflateArea(area)) { drag.mode = null; areaStart = null; app.holdImage(false); }
+    else if (app.beginInflateArea(area)) areaBegan = true;
+    else { drag.mode = null; areaStart = null; app.holdImage(false); }
   }
 
   window.addEventListener('keydown', e => {
