@@ -58,7 +58,7 @@ function startPerfOverlay(app: App): Running {
     const m = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
     if (m) stats.sampleHeap(performance.now(), m.usedJSHeapSize);
   }, 1000);
-  stats.onFreeze = f => console.warn(`PopStage: ${Math.round(f.gap)}ms 止まりました(${clock(f.t)})。`, f);
+  stats.onFreeze = f => console.warn(`PukuPop: ${Math.round(f.gap)}ms 止まりました(${clock(f.t)})。`, f);
   app.perf = stats;
 
   /* ---------- 表示 ---------- */
@@ -131,7 +131,7 @@ function startPerfOverlay(app: App): Running {
     const gl = app.stage.renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
     const doc = app.doc;
     const data = {
-      app: 'PopStage', version: __APP_VERSION__, savedAt: new Date().toISOString(), timeOrigin: origin,
+      app: 'PukuPop', version: __APP_VERSION__, savedAt: new Date().toISOString(), timeOrigin: origin,
       env: {
         userAgent: navigator.userAgent, threads: navigator.hardwareConcurrency, renderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
         devicePixelRatio: window.devicePixelRatio, canvas: [app.stage.canvas.width, app.stage.canvas.height], loops: app.loops,
@@ -141,7 +141,7 @@ function startPerfOverlay(app: App): Running {
     };
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
-    a.download = `popstage-perf-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    a.download = `pukupop-perf-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }

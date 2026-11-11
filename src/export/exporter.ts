@@ -86,7 +86,7 @@ export async function runExport(
       if (f % 4 === 3) await new Promise(r => setTimeout(r, 0));
     }
     const blob = await encoder.finish();
-    const base = (doc.name || 'popstage').replace(/\.[^.]+$/, '');
+    const base = (doc.name || 'pukupop').replace(/\.[^.]+$/, '');
     return { blob, filename: `${base}.${info.ext}`, frames: total };
   } catch (e) {
     await encoder.cancel();

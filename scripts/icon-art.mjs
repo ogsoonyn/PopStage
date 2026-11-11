@@ -1,0 +1,24 @@
+// PukuPop のアプリアイコン(案A ぷくプリン)。scale で絵の大きさを変える(1 = 512px の枠に対して元の大きさ)
+export function iconSvg(scale = 1.12, dy = 0) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe8ef"/><stop offset="1" stop-color="#f6e2c2"/></linearGradient>
+  <linearGradient id="body" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f0ad2e"/><stop offset=".42" stop-color="#ffe08a"/><stop offset="1" stop-color="#e59d22"/></linearGradient>
+</defs>
+<rect width="512" height="512" fill="url(#bg)"/>
+<g transform="translate(256 ${256 + dy}) scale(${scale}) translate(-256 -256)">
+<ellipse cx="256" cy="402" rx="160" ry="30" fill="#ffffff"/>
+<ellipse cx="256" cy="406" rx="120" ry="18" fill="#e6e8e5"/>
+<path d="M150 398 C154 300 172 214 200 184 L312 184 C340 214 358 300 362 398 Q256 420 150 398Z" fill="url(#body)"/>
+<path d="M192 196 Q256 156 320 196 L326 222 Q306 240 286 228 Q270 246 252 232 Q230 246 210 230 Q196 238 186 224Z" fill="#7a3d10"/>
+<g fill="#fffdf6"><circle cx="226" cy="168" r="26"/><circle cx="256" cy="154" r="31"/><circle cx="288" cy="168" r="26"/><circle cx="256" cy="178" r="28"/></g>
+<path d="M258 116 Q270 82 298 76" stroke="#3c6b2a" stroke-width="6" fill="none" stroke-linecap="round"/>
+<circle cx="256" cy="128" r="21" fill="#d6263c"/><circle cx="249" cy="121" r="6" fill="#fff" opacity=".7"/>
+<ellipse cx="186" cy="300" rx="12" ry="46" fill="#fff" opacity=".45" transform="rotate(8 186 300)"/>
+<g fill="#4a2a12"><circle cx="224" cy="300" r="10"/><circle cx="290" cy="300" r="10"/></g>
+<path d="M238 324 Q257 342 276 324" stroke="#4a2a12" stroke-width="7" fill="none" stroke-linecap="round"/>
+<g fill="#ff8f6b" opacity=".55"><ellipse cx="204" cy="326" rx="14" ry="8"/><ellipse cx="310" cy="326" rx="14" ry="8"/></g>
+</g>
+</svg>
+`;
+}

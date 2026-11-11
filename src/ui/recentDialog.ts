@@ -4,7 +4,7 @@ import { recent, type RecentEntry } from '../storage/recent';
 import { $, ask, toast, formatBytes } from './dom';
 
 const KIND_LABEL = { project: 'プロジェクト', image: '画像' } as const;
-const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', popstage: 'application/zip' };
+const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', pukupop: 'application/zip', popstage: 'application/zip' };
 
 function when(t: number): string {
   const d = new Date(t), now = new Date();

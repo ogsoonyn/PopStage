@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { zlibSync, zipSync, strToU8 } from 'fflate';
+import { zlibSync, zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
 import { encodeGrayPng, decodePngToGray } from '../../src/storage/png';
 import { serializeProject, deserializeProject, migrate, FORMAT_VERSION, UNZIP_LIMITS } from '../../src/storage/popstage';
 import { createDocument, createProject, createLayer, defaultMultiCamera } from '../../src/model/project';
@@ -57,7 +57,7 @@ describe('PNG', () => {
   });
 });
 
-describe('.popstage', () => {
+describe('.pukupop', () => {
   const makeProject = () => {
     const doc = createDocument({ bytes: new Uint8Array([9, 8, 7, 6]), mime: 'image/jpeg', ext: 'jpg', width: 300, height: 200 }, 'プリン');
     const l1 = doc.layers[0];
@@ -71,6 +71,16 @@ describe('.popstage', () => {
     p.autoSwing = { enabled: false, period: 3, strength: 0.25 };
     return p;
   };
+
+  it('新しい名前で書き出し、改名前(PopStage)のファイルもそのまま読める', async () => {
+    const bytes = await serializeProject(makeProject());
+    const json = JSON.parse(strFromU8(unzipSync(bytes)['project.json']));
+    expect(json.app).toBe('PukuPop');
+    json.app = 'PopStage';
+    const legacy = zipSync({ ...unzipSync(bytes), 'project.json': strToU8(JSON.stringify(json)) });
+    const back = await deserializeProject(legacy);
+    expect(back.project.documents[0].layers[0].pop).toBe(1234);
+  });
 
   it('保存して読み込むと同じ状態に戻る', async () => {
     const p = makeProject();

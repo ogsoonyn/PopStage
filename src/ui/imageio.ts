@@ -5,7 +5,7 @@ import type { GrayImage } from '../storage/png';
 export const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
 
 export function isImageFile(f: File): boolean { return f.type in IMAGE_TYPES || /\.(png|jpe?g|webp)$/i.test(f.name); }
-export function isProjectFile(f: File): boolean { return /\.popstage$/i.test(f.name); }
+export function isProjectFile(f: File): boolean { return /\.(pukupop|popstage)$/i.test(f.name); }
 
 /** 読み込める画像の画素数の上限。デコードすると幅×高さ×4バイトを確保するので、それを抑える */
 export const MAX_IMAGE_PIXELS = 120_000_000;

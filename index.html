@@ -5,8 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <!-- 画像はこのページと data: / blob: からだけ読む(読み込んだファイル経由で外部へ通信させない) -->
 <meta http-equiv="Content-Security-Policy" content="img-src 'self' data: blob:; object-src 'none'; base-uri 'self'">
-<title>PopStage</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M6 26 Q8 8 16 6 Q24 8 26 26 Z%22 fill=%22%23f2b63c%22/%3E%3Cpath d=%22M10 10 Q16 4 22 10 Q20 14 16 12 Q12 14 10 10Z%22 fill=%22%237a3d10%22/%3E%3C/svg%3E">
+<title>PukuPop</title>
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1d232a" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-title" content="PukuPop">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="stylesheet" href="/src/style.css">
 </head>
 <body class="bg-base-200 text-base-content text-sm h-dvh flex flex-col overflow-hidden">
@@ -26,14 +33,14 @@
       <li><button data-cmd="export">書き出し…</button></li>
       <li><button data-cmd="sample">サンプルを開く</button></li>
       <li><button data-cmd="help">操作方法</button></li>
-      <li><button data-cmd="about">PopStage について</button></li>
+      <li><button data-cmd="about">PukuPop について</button></li>
     </ul>
   </div>
 </header>
 
 <!-- メニューバー -->
 <header class="flex items-center gap-1 px-2 h-10 bg-base-100 border-b border-base-300 shrink-0" id="menubar">
-  <span class="font-bold px-2 select-none">PopStage</span>
+  <span class="font-bold px-2 select-none">PukuPop</span>
   <div class="dropdown">
     <div tabindex="0" role="button" class="btn btn-ghost btn-sm">ファイル</div>
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
@@ -88,7 +95,7 @@
     <div tabindex="0" role="button" class="btn btn-ghost btn-sm">ヘルプ</div>
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-56 p-2 shadow-lg">
       <li><button data-cmd="help">操作方法</button></li>
-      <li><button data-cmd="about">PopStage について</button></li>
+      <li><button data-cmd="about">PukuPop について</button></li>
     </ul>
   </div>
   <span id="docTitle" class="ml-auto opacity-70 truncate px-2"></span>
@@ -154,7 +161,7 @@
       <div class="mv-cell cursor-grab" data-kind="free" title="ドラッグで回転、中ドラッグ・Shift+ドラッグで平行移動、ホイールでズーム(Ctrl で細かく)、ダブルクリックで初期の視点に戻す"><span class="mv-label">自由角度(ドラッグで回転)</span></div>
     </div>
     <div id="dropHint" class="absolute inset-3 border-4 border-dashed border-primary rounded-box bg-base-100/70 hidden items-center justify-center text-lg font-bold pointer-events-none">
-      ここに画像か .popstage ファイルをドロップ
+      ここに画像か .pukupop ファイルをドロップ
     </div>
     <button id="mFine" class="m-only btn btn-sm rounded-full" aria-pressed="false" title="押すとオン・オフが切り替わります。オンの間は、回転・平行移動・ズーム・つかむ・揺らすの動きが 1/5 になります">微調整</button>
     <div id="busy" class="absolute inset-0 bg-base-100/60 hidden items-center justify-center"><span class="loading loading-spinner loading-lg"></span></div>
@@ -269,7 +276,7 @@
       </div>
     </div>
     <div class="m-pane" data-mpane="file" hidden>
-      <button class="m-row" data-cmd="open">プロジェクトを開く<span>.popstage・画像</span></button>
+      <button class="m-row" data-cmd="open">プロジェクトを開く<span>.pukupop・画像</span></button>
       <button class="m-row" data-cmd="openImage">画像を開く<span>写真</span></button>
       <button class="m-row" data-cmd="save">保存<span>ダウンロード</span></button>
       <button class="m-row" data-cmd="recent">最近開いたファイル<span>このブラウザ内</span></button>
@@ -303,7 +310,7 @@
 </footer>
 
 <input id="fileImage" type="file" accept="image/png,image/jpeg,image/webp" class="hidden">
-<input id="fileProject" type="file" accept=".popstage,application/zip,image/png,image/jpeg,image/webp" class="hidden">
+<input id="fileProject" type="file" accept=".pukupop,.popstage,application/zip,image/png,image/jpeg,image/webp" class="hidden">
 
 <!-- 書き出しダイアログ -->
 <dialog id="exportDialog" class="modal">
@@ -476,7 +483,7 @@
 
 <dialog id="aboutDialog" class="modal">
   <div class="modal-box">
-    <h3 class="font-bold text-lg">PopStage</h3>
+    <h3 class="font-bold text-lg">PukuPop</h3>
     <p class="py-3 leading-relaxed">画像を3D空間に置き、塗った所を平面から持ち上げ、揺らせるWebアプリです。「塗って膨らませて揺らす」タイプの懐かしいツールの手触りを、ブラウザで作り直しています。<br>画像とプロジェクトはこのブラウザ内だけで処理され、サーバーへは送られません。</p>
     <p class="text-xs opacity-70" id="aboutVersion"></p>
     <div class="modal-action"><form method="dialog"><button class="btn btn-sm">閉じる</button></form></div>
