@@ -163,6 +163,8 @@
     <div id="dropHint" class="absolute inset-3 border-4 border-dashed border-primary rounded-box bg-base-100/70 hidden items-center justify-center text-lg font-bold pointer-events-none">
       ここに画像か .pukupop ファイルをドロップ
     </div>
+    <!-- 記録中・ループ再生中の印。押すと止める -->
+    <button id="takeBadge" class="btn btn-sm rounded-full hidden" type="button"></button>
     <button id="mFine" class="m-only btn btn-sm rounded-full" aria-pressed="false" title="押すとオン・オフが切り替わります。オンの間は、回転・平行移動・ズーム・つかむ・揺らすの動きが 1/5 になります">微調整</button>
     <div id="busy" class="absolute inset-0 bg-base-100/60 hidden items-center justify-center"><span class="loading loading-spinner loading-lg"></span></div>
   </section>
@@ -181,64 +183,102 @@
       <ul id="layerList" class="flex flex-col gap-1 overflow-y-auto min-h-0" role="listbox" aria-label="レイヤー一覧"></ul>
     </section>
 
-    <div class="overflow-y-auto flex-1 p-3 flex flex-col gap-4" id="props">
+    <!-- 右のパネルのタブ。レイヤー一覧はタブの上に固定する -->
+    <div id="pTabs" role="tablist" aria-label="設定" class="tabs tabs-border tabs-sm shrink-0 px-2 border-b border-base-300">
+      <button role="tab" class="tab" data-ptab="edit" aria-selected="true">編集</button>
+      <button role="tab" class="tab" data-ptab="anim" aria-selected="false">アニメーション</button>
+      <button role="tab" class="tab" data-ptab="view" aria-selected="false">表示設定</button>
+    </div>
+    <div class="overflow-y-auto flex-1 p-3 min-h-0" id="props">
+      <div class="flex flex-col gap-4" data-ppane="edit">
       <section class="flex flex-col gap-2">
         <h2 class="font-bold">レイヤー: <span id="activeLayerName"></span></h2>
-        <div class="prop"><label for="pPop">ポップ量</label><input id="pPop" type="range" min="0" max="1000" class="range range-xs" title="前半は 0〜500px を細かく、後半は 500〜1500px を粗く動かします"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-16 text-right"></div>
-        <label class="flex items-center justify-between">揺れ <input id="pSwing" type="checkbox" class="toggle toggle-sm"></label>
-        <div class="prop"><label for="pPreset">プリセット</label>
-          <select id="pPreset" class="select select-xs col-span-2 w-full"></select></div>
-        <p id="pPresetDesc" class="text-xs opacity-70 -mt-1 pl-[6rem] leading-snug"></p>
-        <!-- プリセットの中身。変えるとプリセットは「カスタム」になる -->
-        <details id="physDetails" class="collapse collapse-arrow bg-base-200 rounded-box">
-          <summary class="collapse-title min-h-0 py-2 px-3 text-sm">詳細設定 <span id="physSummary" class="opacity-60 text-xs"></span></summary>
-          <div class="collapse-content px-3 flex flex-col gap-2">
-            <div class="prop"><label for="pMotion">揺らし方</label>
-              <select id="pMotion" class="select select-xs col-span-2 w-full"></select></div>
-            <!-- 選んだ揺らし方の固有設定(panels.ts が作る) -->
-            <div id="motionParams" class="flex flex-col gap-2 border-l-2 border-primary/40 pl-2 ml-1"></div>
-            <div class="divider my-0 text-xs opacity-60">材質</div>
-            <div class="prop"><label for="pHard">硬さ</label><input id="pHard" type="range" min="0" max="100" class="range range-xs"><output id="pHardO"></output></div>
-            <div class="prop"><label for="pMass">質量</label><input id="pMass" type="range" min="0" max="100" class="range range-xs"><output id="pMassO"></output></div>
-            <div class="prop"><label for="pDamp">おさまり</label><input id="pDamp" type="range" min="0" max="100" class="range range-xs"><output id="pDampO"></output></div>
-            <div class="prop"><label for="pWeight">重さ</label><input id="pWeight" type="range" min="0" max="100" class="range range-xs"><output id="pWeightO"></output></div>
-            <p class="text-xs opacity-60 leading-snug">揺らし方とその設定・硬さ・質量・おさまりはプリセットの中身です。変えるとプリセットは「カスタム」になります。重さ(下に垂れる量)はプリセットに含まれません。</p>
+          <div class="prop"><label for="pPop">ポップ量</label><input id="pPop" type="range" min="0" max="1000" class="range range-xs" title="前半は 0〜500px を細かく、後半は 500〜1500px を粗く動かします"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-16 text-right"></div>
+          <div class="prop"><label for="pBlend">重ね方</label>
+            <select id="pBlend" class="select select-xs col-span-2 w-full"></select></div>
+          <p id="pBlendDesc" class="sr-only"></p>
+      </section>
+        <section class="flex flex-col gap-2">
+          <h2 class="font-bold">画像</h2>
+          <div class="prop"><label for="pDensity">メッシュ密度</label><input id="pDensity" type="range" min="16" max="512" step="16" class="range range-xs"><output id="pDensityO"></output></div>
+          <div class="prop"><label for="pOpacity">不透明度</label><input id="pOpacity" type="range" min="0" max="100" class="range range-xs"><output id="pOpacityO"></output></div>
+        </section>
+      </div>
+
+      <div class="flex flex-col gap-4" data-ppane="anim" hidden>
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold">揺れ</h2>
+          <label class="flex items-center justify-between">揺れ <input id="pSwing" type="checkbox" class="toggle toggle-sm"></label>
+          <div class="prop"><label for="pPreset">プリセット</label>
+            <select id="pPreset" class="select select-xs col-span-2 w-full"></select></div>
+          <p id="pPresetDesc" class="sr-only"></p>
+          <details id="physDetails" class="collapse collapse-arrow bg-base-200 rounded-box">
+            <summary class="collapse-title min-h-0 py-2 px-3 text-sm" title="揺らし方・硬さ・質量・おさまりはプリセットの中身(変えるとカスタム)。重さはプリセットに含まない">詳細設定 <span id="physSummary" class="opacity-60 text-xs"></span></summary>
+            <div class="collapse-content px-3 flex flex-col gap-2">
+              <div class="prop"><label for="pMotion">揺らし方</label>
+                <select id="pMotion" class="select select-xs col-span-2 w-full"></select></div>
+              <!-- 選んだ揺らし方の固有設定(panels.ts が作る) -->
+              <div id="motionParams" class="flex flex-col gap-2 border-l-2 border-primary/40 pl-2 ml-1"></div>
+              <div class="divider my-0 text-xs opacity-60">材質</div>
+              <div class="prop"><label for="pHard">硬さ</label><input id="pHard" type="range" min="0" max="100" class="range range-xs"><output id="pHardO"></output></div>
+              <div class="prop"><label for="pMass">質量</label><input id="pMass" type="range" min="0" max="100" class="range range-xs"><output id="pMassO"></output></div>
+              <div class="prop"><label for="pDamp">おさまり</label><input id="pDamp" type="range" min="0" max="100" class="range range-xs"><output id="pDampO"></output></div>
+              <div class="prop"><label for="pWeight">重さ</label><input id="pWeight" type="range" min="0" max="100" class="range range-xs"><output id="pWeightO"></output></div>
+            </div>
+          </details>
+      </section>
+        <section class="flex flex-col gap-2">
+          <h2 class="font-bold">自動揺らし</h2>
+          <label class="flex items-center justify-between">自動で揺らす <input id="pAuto" type="checkbox" class="toggle toggle-sm"></label>
+          <div class="prop"><label for="pPeriod">周期</label><input id="pPeriod" type="range" min="3" max="100" class="range range-xs"><output id="pPeriodO"></output></div>
+          <div class="prop"><label for="pAutoStr">強さ</label><input id="pAutoStr" type="range" min="0" max="100" class="range range-xs"><output id="pAutoStrO"></output></div>
+        </section>
+
+        <section class="flex flex-col gap-2" aria-labelledby="takeTitle">
+          <h2 id="takeTitle" class="font-bold flex items-center gap-2">操作の記録 <span id="takeInfo" class="badge badge-sm badge-ghost font-normal tabular-nums"></span></h2>
+          <div class="flex flex-wrap gap-2">
+            <button id="takeRec" class="btn btn-sm" aria-keyshortcuts="R" title="記録 (R): つかむ・揺らす・移動・視点の操作を覚える(最長 60 秒)"><span class="text-error" aria-hidden="true">●</span> <span data-label>記録</span></button>
+            <button id="takePlay" class="btn btn-sm" aria-keyshortcuts="L" title="ループ再生 (L)。画面を触ると止まる"><span aria-hidden="true" data-icon>▶</span> <span data-label>再生</span></button>
+            <button id="takeClear" class="btn btn-sm btn-ghost" title="記録を消す(元に戻せる)">消す</button>
           </div>
-        </details>
-      </section>
+        </section>
 
-      <section class="flex flex-col gap-2">
-        <h2 class="font-bold">画像</h2>
-        <div class="prop"><label for="pDensity">メッシュ密度</label><input id="pDensity" type="range" min="16" max="512" step="16" class="range range-xs"><output id="pDensityO"></output></div>
-        <div class="prop"><label for="pOpacity">不透明度</label><input id="pOpacity" type="range" min="0" max="100" class="range range-xs"><output id="pOpacityO"></output></div>
-      </section>
+        <!-- キーフレーム: 視点を順に通ってくり返す動きを作る(作った動きは記録として再生・保存・書き出しする) -->
+        <section id="keySection" class="flex flex-col gap-2" aria-labelledby="keyTitle">
+          <div class="flex items-center gap-2">
+            <h2 id="keyTitle" class="font-bold" title="視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す。画像の位置が動くと揺れる">キーフレーム</h2>
+            <span id="keyCount" class="text-xs opacity-60 tabular-nums"></span>
+            <button id="keyAdd" class="btn btn-xs ml-auto" title="今の視点を末尾に追加">＋ 追加</button>
+          </div>
+          <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span></span><span></span><span>次まで</span><span title="なめらか: 止まらず通り抜ける / 弾む: 急に止まって揺れる">通り方</span></div>
+          <ol id="keyList" class="flex flex-col gap-1" aria-label="キーフレーム一覧"></ol>
+          <div class="flex items-center gap-2">
+            <button id="keyMake" class="btn btn-sm btn-primary" title="今の記録と入れ替える(元に戻せる)">▶ 作成して再生</button>
+            <span id="keyTotal" class="text-xs opacity-70 tabular-nums"></span>
+          </div>
+        </section>
+      </div>
 
-      <section class="flex flex-col gap-2">
-        <h2 class="font-bold">カメラと背景</h2>
-        <div class="prop"><label for="pFov">画角</label><input id="pFov" type="range" min="10" max="90" class="range range-xs"><output id="pFovO"></output></div>
-        <div class="flex items-center gap-2">
-          <span class="w-[5.5rem]">背景</span>
-          <label class="flex items-center gap-1"><input id="pBgTransparent" type="checkbox" class="checkbox checkbox-xs"> 透過</label>
-          <input id="pBgColor" type="color" class="w-10 h-6 rounded cursor-pointer ml-auto" value="#20242c">
-        </div>
-      </section>
-
-      <section class="flex flex-col gap-2">
-        <h2 class="font-bold">自動揺らし</h2>
-        <label class="flex items-center justify-between">自動で揺らす <input id="pAuto" type="checkbox" class="toggle toggle-sm"></label>
-        <div class="prop"><label for="pPeriod">周期</label><input id="pPeriod" type="range" min="3" max="100" class="range range-xs"><output id="pPeriodO"></output></div>
-        <div class="prop"><label for="pAutoStr">強さ</label><input id="pAutoStr" type="range" min="0" max="100" class="range range-xs"><output id="pAutoStrO"></output></div>
-      </section>
-
-      <section class="flex flex-col gap-2">
-        <h2 class="font-bold">表示</h2>
-        <label class="flex items-center justify-between">ウェイトを重ねて表示 <input id="vOverlay" type="checkbox" class="toggle toggle-sm"></label>
-        <label class="flex items-center justify-between" title="画像を薄くして塗りを見やすくします(書き出しには影響しません)">画像を薄く <input id="vFade" type="checkbox" class="toggle toggle-sm"></label>
-        <label class="flex items-center justify-between" title="ポップと揺れを一時的に消して平らに表示します(書き出しには影響しません)">ポップを一時OFF <input id="vFlat" type="checkbox" class="toggle toggle-sm"></label>
-        <label class="flex items-center justify-between" title="すべてのレイヤーの揺れを一時的に止めます(保存・書き出しには影響しません)">揺れを一時停止 <input id="vPause" type="checkbox" class="toggle toggle-sm"></label>
-        <label class="flex items-center justify-between" title="正面・右・下から見た図と、角度を変えられる図を横に並べます">3面図 <input id="vMulti" type="checkbox" class="toggle toggle-sm"></label>
-        <label class="flex items-center justify-between">グリッド <input id="vGrid" type="checkbox" class="toggle toggle-sm"></label>
-      </section>
+      <div class="flex flex-col gap-4" data-ppane="view" hidden>
+        <section class="flex flex-col gap-2">
+          <h2 class="font-bold">表示</h2>
+          <label class="flex items-center justify-between">ウェイトを重ねて表示 <input id="vOverlay" type="checkbox" class="toggle toggle-sm"></label>
+          <label class="flex items-center justify-between" title="画像を薄くして塗りを見やすくします(書き出しには影響しません)">画像を薄く <input id="vFade" type="checkbox" class="toggle toggle-sm"></label>
+          <label class="flex items-center justify-between" title="ポップと揺れを一時的に消して平らに表示します(書き出しには影響しません)">ポップを一時OFF <input id="vFlat" type="checkbox" class="toggle toggle-sm"></label>
+          <label class="flex items-center justify-between" title="すべてのレイヤーの揺れを一時的に止めます(保存・書き出しには影響しません)">揺れを一時停止 <input id="vPause" type="checkbox" class="toggle toggle-sm"></label>
+          <label class="flex items-center justify-between" title="正面・右・下から見た図と、角度を変えられる図を横に並べます">3面図 <input id="vMulti" type="checkbox" class="toggle toggle-sm"></label>
+          <label class="flex items-center justify-between">グリッド <input id="vGrid" type="checkbox" class="toggle toggle-sm"></label>
+        </section>
+        <section class="flex flex-col gap-2">
+          <h2 class="font-bold">カメラと背景</h2>
+          <div class="prop"><label for="pFov">画角</label><input id="pFov" type="range" min="10" max="90" class="range range-xs"><output id="pFovO"></output></div>
+          <div class="flex items-center gap-2">
+            <span class="w-[5.5rem]">背景</span>
+            <label class="flex items-center gap-1"><input id="pBgTransparent" type="checkbox" class="checkbox checkbox-xs"> 透過</label>
+            <input id="pBgColor" type="color" class="w-10 h-6 rounded cursor-pointer ml-auto" value="#20242c">
+          </div>
+        </section>
+      </div>
     </div>
   </aside>
 </main>
@@ -344,6 +384,7 @@
         <div class="flex flex-col gap-1">
           <label class="flex items-center gap-1"><input type="radio" name="exMotion" value="auto" class="radio radio-xs" checked> 自動揺らし</label>
           <label class="flex items-center gap-1"><input type="radio" name="exMotion" value="replay" class="radio radio-xs"> 直前の操作を再生 <span id="exRecLen" class="opacity-60"></span></label>
+          <label class="flex items-center gap-1"><input type="radio" name="exMotion" value="loop" class="radio radio-xs"> 記録した操作をループ再生 <span id="exTakeLen" class="opacity-60"></span></label>
         </div></div>
       <p id="exNote" class="text-xs opacity-70 leading-relaxed"></p>
       <progress id="exProgress" class="progress progress-primary w-full hidden" value="0" max="100"></progress>
@@ -443,6 +484,7 @@
       <span class="font-bold">2本指タップ</span><span>元に戻す(3本指タップでやり直す)</span>
       <span class="font-bold">微調整</span><span>右上のボタンでオンにしている間は、動きが 1/5 になる</span>
       <span class="font-bold">膨らみ・塗る・消す</span><span>シートの「レイヤー」→「塗って直す」</span>
+      <span class="font-bold">操作の記録</span><span>シートの「揺れ」→「操作の記録」で記録・ループ再生。画面を触ると再生が止まる</span>
     </div>
     <ol class="d-only list-decimal pl-5 leading-relaxed mb-3">
       <li>画像をウィンドウへドロップする(PNG / JPEG / WebP)。</li>
@@ -472,6 +514,7 @@
       <span>表示クリア(編集用の表示をまとめて切る)</span><span>C</span>
       <span>画像を薄く / ポップを一時OFF</span><span>Shift+W / F</span>
       <span>揺れを一時停止 / 3面図</span><span>P / M</span>
+      <span>操作の記録(開始・停止)/ ループ再生</span><span>R / L(再生中は画面を触ると止まる)</span>
       <span>3面図の正面・右から・下から</span><span>ドラッグで平行移動 / ホイールでズーム(3つ共通)</span>
       <span>3面図の自由角度</span><span>ドラッグで回転 / 中ドラッグ・Shift+ドラッグで平行移動 / ホイールでズーム</span>
       <span>3面図の視点を戻す</span><span>その図をダブルクリック</span>

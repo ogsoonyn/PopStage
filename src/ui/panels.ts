@@ -1,6 +1,6 @@
 /** 右パネル(レイヤー一覧とプロパティ)とツールオプション。 */
 import type { App } from '../app';
-import { PRESETS, PRESET_ORDER, MOTIONS, MOTION_PARAMS, LIMITS, applyPreset, motionParam, type MotionParamDef, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type Project, type Document } from '../model/project';
+import { PRESETS, PRESET_ORDER, BLENDS, BLEND_ORDER, MOTIONS, MOTION_PARAMS, LIMITS, applyPreset, motionParam, type MotionParamDef, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type BlendMode, type Project, type Document } from '../model/project';
 import { PatchLayer, PatchDocument, PatchProject, Batch, SetFov } from '../commands/commands';
 import { $, toast } from './dom';
 import { drawWeightThumb } from './imageio';
@@ -67,6 +67,10 @@ export function bindPanels(app: App): { refresh: () => void } {
     const v = Math.max(LIMITS.pop.min, Math.min(LIMITS.pop.max, Math.round(+(e.target as HTMLInputElement).value || 0)));
     exec('layer', 'ポップ量', { pop: v });
   });
+  // 重ね方
+  const blendSel = $<HTMLSelectElement>('pBlend');
+  for (const b of BLEND_ORDER) blendSel.add(new Option(BLENDS[b].label, b));
+  blendSel.addEventListener('change', () => exec('layer', '重ね方', { blend: blendSel.value as BlendMode }));
   // 「揺れ」は右のパネルと上のツールバーの両方に置く
   for (const id of ['pSwing', 'tSwing']) $<HTMLInputElement>(id).addEventListener('change', e => exec('layer', '揺れの切替', { physics: { ...physics()!, enabled: (e.target as HTMLInputElement).checked } }));
   // プリセットと揺らし方の選択肢はモデルの定義から作る
@@ -255,7 +259,8 @@ export function bindPanels(app: App): { refresh: () => void } {
 
       const info = document.createElement('span');
       info.className = 'text-xs opacity-60 tabular-nums';
-      info.textContent = `${layer.pop > 0 ? '+' : ''}${layer.pop}`;
+      info.textContent = layer.blend === 'max' ? `${BLENDS.max.short} ${layer.pop}` : `${layer.pop > 0 ? '+' : ''}${layer.pop}`;
+      info.title = `重ね方: ${BLENDS[layer.blend].label} / ポップ量 ${layer.pop}px`;
 
       li.append(eye, th, name, info);
       li.addEventListener('click', () => { if (layer.id !== app.activeLayerId) app.setActiveLayer(layer.id); });
@@ -344,10 +349,13 @@ export function bindPanels(app: App): { refresh: () => void } {
     if (l) {
       setRange('pPop', popToSlider(l.pop));
       if (document.activeElement !== $('pPopN')) $<HTMLInputElement>('pPopN').value = String(l.pop);
+      blendSel.value = l.blend;
+      // 説明は画面に並べず、選択欄のツールチップに出す(読み上げ用に隠した要素にも入れる)
+      $('pBlendDesc').textContent = blendSel.title = BLENDS[l.blend].desc;
       $<HTMLInputElement>('pSwing').checked = $<HTMLInputElement>('tSwing').checked = l.physics.enabled;
       presetSel.value = l.physics.preset;
       motionSel.value = l.physics.motion;
-      $('pPresetDesc').textContent = l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
+      $('pPresetDesc').textContent = presetSel.title = l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
       refreshMotionParams(l);
       $('physSummary').textContent = `— ${MOTIONS[l.physics.motion].label}`;
       setRange('pHard', Math.round(l.physics.hardness * 100), pct(l.physics.hardness * 100));
@@ -382,7 +390,7 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   store.on('replace', () => { renderList(); refresh(); });
   store.on('layers', () => { renderList(); refresh(); });
-  store.on('layer', ({ keys }) => { if (keys.some(k => k === 'name' || k === 'visible' || k === 'pop')) renderList(); refresh(); });
+  store.on('layer', ({ keys }) => { if (keys.some(k => k === 'name' || k === 'visible' || k === 'pop' || k === 'blend')) renderList(); refresh(); });
   store.on('document', refresh);
   store.on('project', refresh);
   app.on('active', () => { updateSelection(); refresh(); });

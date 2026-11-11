@@ -99,7 +99,7 @@ describe('.pukupop', () => {
     for (let i = 0; i < 2; i++) {
       const a = d0.layers[i], b = d1.layers[i];
       expect(b.id).toBe(a.id); expect(b.name).toBe(a.name); expect(b.visible).toBe(a.visible);
-      expect(b.pop).toBe(a.pop); expect(b.physics).toEqual(a.physics);
+      expect(b.pop).toBe(a.pop); expect(b.blend).toBe(a.blend); expect(b.physics).toEqual(a.physics);
       expect(b.weights.width).toBe(a.weights.width);
       expect(b.weights.data).toEqual(a.weights.data);
     }
@@ -141,6 +141,21 @@ describe('.pukupop', () => {
     expect(m.pitch).toBe(1.5);
     expect(m.zoom).toBe(defaultMultiCamera().zoom);
     expect(m.target).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
+  it('重ね方を保存して戻す。項目の無い古いファイル・知らない値は加算にする', async () => {
+    const p = makeProject();
+    p.documents[0].layers[0].blend = 'max';
+    const { project: q } = await deserializeProject(serializeProject(p));
+    expect(q.documents[0].layers[0].blend).toBe('max');
+    const layer = (blend?: unknown) => ({ name: 'L', blend, weights: { path: 'none.png' } });
+    const json = {
+      formatVersion: 1, app: 'PopStage', project: {},
+      documents: [{ name: 'x', image: { path: 'images/doc-0.png', width: 10, height: 10 }, layers: [layer(), layer('zzz'), layer('max'), layer('__proto__')] }],
+    };
+    const zip = zipSync({ 'project.json': strToU8(JSON.stringify(json)), 'images/doc-0.png': new Uint8Array([1]) });
+    const { project } = await deserializeProject(zip);
+    expect(project.documents[0].layers.map(l => l.blend)).toEqual(['add', 'add', 'max', 'add']);
   });
 
   it('揺らし方の項目が無い古いファイルは、プリセットから補う', async () => {

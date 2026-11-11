@@ -5,10 +5,11 @@
 import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultOrthoView, LIMITS, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
 import type { Rect } from './model/weightmap';
-import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from './commands/commands';
+import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, SetTake, weightOperation, diffTiles } from './commands/commands';
 import { Stage, type ViewOptions } from './stage/stage';
-import { PhysicsWorld } from './physics/world';
-import { MotionRecorder } from './physics/recorder';
+import { PhysicsWorld, PHYSICS_DT } from './physics/world';
+import { MotionRecorder, applySample, type RecordSample } from './physics/recorder';
+import { finalizeTake, takeFromKeys, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, KEY_SECONDS, MAX_KEYS, type ViewKey, type KeyFrame } from './physics/take';
 import { Stroke, type PaintMode } from './paint/stroke';
 import { inflateShape, type InflateProfile, type InflateBlend } from './paint/inflate';
 import { serializeProject, serializeProjectBlob, deserializeProject, FILE_EXTENSION, type PngCacheEntry } from './storage/popstage';
@@ -23,6 +24,8 @@ import { ask, saveFile, setBusy, toast } from './ui/dom';
 
 export type Tool = 'brush' | 'erase' | 'smooth' | 'inflate' | 'grab' | 'shake' | 'view' | 'pan';
 export type PressureMode = 'strength' | 'size' | 'none';
+/** 操作の記録の状態。記録中・ループ再生中・どちらでもない */
+export type TakeState = 'idle' | 'recording' | 'playing';
 
 export interface BrushOptions { size: number; strength: number; hardness: number; pressure: PressureMode }
 
@@ -59,6 +62,8 @@ type AppEvents = {
   inflate: 'begin' | 'change' | 'end';
   /** 描画ループで1フレーム描いた(画像全体が動いている間に、ブラシの円を当て直すのに使う) */
   frame: void;
+  /** 操作の記録の状態(記録中・ループ再生中)が変わった */
+  take: TakeState;
 };
 
 /** 画像全体のずれ(ピストン)の飛びをならす時定数(秒)。自動揺らしの切り替えや、塗り終わりで止めていた画像を戻すとき */
@@ -132,6 +137,18 @@ export class App extends Emitter<AppEvents> {
   lastSaved: Date | null = null;
   lastAutosave: Date | null = null;
 
+  /** 操作の記録の状態 */
+  takeState: TakeState = 'idle';
+  /** 記録中の操作(止めたときに finalizeTake で整える) */
+  private takeRaw: RecordSample[] = [];
+  /** ループ再生で次に入れる記録の位置 */
+  private playIndex = 0;
+  /**
+   * キーフレームの下書き(画面だけ)。作った記録はそのキーフレームも持つので、
+   * 記録が差し替わったら(開く・アンドゥなど)その記録のキーフレームに合わせる
+   */
+  keyDraft: KeyFrame[] = [];
+
   private loading = false;
   private autosaveTimer = 0;
   private stroke: { stroke: Stroke; layerId: string; label: string } | null = null;
@@ -166,9 +183,9 @@ export class App extends Emitter<AppEvents> {
     });
     s.on('layer', ({ layerId, keys }) => {
       const f = s.findLayer(layerId); if (!f) return;
-      if (keys.includes('pop') || keys.includes('visible')) this.stage.setLayerParams(f.index, f.layer);
+      if (keys.includes('pop') || keys.includes('visible') || keys.includes('blend')) this.stage.setLayerParams(f.index, f.layer);
     });
-    s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); });
+    s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); this.syncKeyDraft(true); });
     s.on('layers', () => {
       const doc = this.doc; if (!doc) return;
       // 並べ替え・追加・削除ではウェイトは変わらないので、PNG は作り直さない(無くなったレイヤーの分だけ捨てる)
@@ -192,6 +209,11 @@ export class App extends Emitter<AppEvents> {
     });
     s.on('project', ({ keys }) => {
       if (keys.includes('background')) this.applyBackground();
+      // アンドゥなどで記録が消えたら再生をやめる。差し替わったら初めから再生する
+      if (keys.includes('take') && this.takeState === 'playing') {
+        if (this.project.take) this.playTake(); else this.stopTake();
+      }
+      if (keys.includes('take')) this.syncKeyDraft();
       this.emit('status', undefined);
     });
     s.on('change', () => {
@@ -257,6 +279,8 @@ export class App extends Emitter<AppEvents> {
   }
 
   setPaused(on: boolean): void {
+    // 一時停止中は物理が進まず、記録も再生も止まってしまうので、先に終える
+    if (on) { this.stopTake(); this.stopRecording(); }
     this.paused = on;
     this.world.paused = on;
     if (on) this.world.reset();
@@ -264,6 +288,7 @@ export class App extends Emitter<AppEvents> {
   }
 
   resetView(): void {
+    this.stopTake();
     this.project.camera = frontCamera(this.project.camera.fov);
     this.world.cutView(); // 視点が飛ぶだけなので揺らさない
     this.cameraChanged();
@@ -297,6 +322,9 @@ export class App extends Emitter<AppEvents> {
     this.loading = true;
     clearTimeout(this.cameraTimer); this.cameraTimer = 0; // 前の作業の視点変更を、新しく開いた作業の変更として数えない
     try {
+      // 記録中・再生中の操作は前の作業のものなので捨てる
+      this.takeRaw = []; this.playIndex = 0;
+      if (this.takeState !== 'idle') { this.takeState = 'idle'; this.world.grab = null; this.world.grabGains.clear(); this.emit('take', 'idle'); }
       this.store.replace(project);
       this.history.clear();
       this.world.reset();
@@ -826,7 +854,16 @@ export class App extends Emitter<AppEvents> {
   }
 
   private recordStep = (): void => {
-    const w = this.world, c = this.project.camera;
+    const w = this.world, c = this.project.camera, take = this.project.take;
+    if (this.takeState === 'playing' && take?.samples.length) {
+      // ループ再生: 記録どおりにつかみ・注視点を物理へ入れ、視点を動かす(画角は今のまま)
+      const i = this.playIndex % take.samples.length, smp = take.samples[i];
+      applySample(w, smp);
+      c.yaw = smp.camera.yaw; c.pitch = smp.camera.pitch; c.zoom = smp.camera.zoom; c.target = { ...smp.camera.target };
+      this.playIndex = i + 1;
+      this.recorder.record({ ...smp, camera: { ...c, target: { ...c.target } } }, () => w.snapshot());
+      return;
+    }
     // 平行移動でも、「揺らす」で振っても揺らす
     const s = this.shake;
     w.viewTarget = { x: c.target.x + s.x, y: c.target.y + s.y, z: c.target.z + s.z };
@@ -837,7 +874,151 @@ export class App extends Emitter<AppEvents> {
       grabGains: [...w.grabGains],
       camera: { fov: c.fov, yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, target: { ...c.target } },
     }, () => w.snapshot());
+    if (this.takeState === 'recording') {
+      // 1フレームで何刻みも進むことがあるので、最長に達したあとの刻みは積まない
+      if (this.takeRaw.length < Math.round(TAKE_MAX_SECONDS / PHYSICS_DT)) this.takeRaw.push({
+        grab: w.grab ? { ...w.grab } : null, grabGains: [...w.grabGains], viewTarget: { ...w.viewTarget }, viewCut: w.viewCut || undefined,
+        camera: { fov: c.fov, yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, target: { ...c.target } },
+      });
+      // 最長まで記録したら止める(物理を進めている途中なので、止めるのは刻みのあと)
+      if (this.takeRaw.length >= Math.round(TAKE_MAX_SECONDS / PHYSICS_DT)) queueMicrotask(() => this.stopRecording(true));
+    }
   };
+
+  /* ---------- 操作の記録とループ再生 ---------- */
+
+  /** 記録中なら記録した長さ、それ以外は保存してある記録の長さ(秒) */
+  get takeLength(): number { return this.takeState === 'recording' ? this.takeRaw.length * PHYSICS_DT : takeSeconds(this.project.take); }
+  /** ループ再生中の位置(秒) */
+  get takePosition(): number {
+    const n = this.project.take?.samples.length ?? 0;
+    return this.takeState === 'playing' && n ? (this.playIndex % n) * PHYSICS_DT : 0;
+  }
+
+  private setTakeState(s: TakeState): void { this.takeState = s; this.emit('take', s); }
+
+  /** 記録を始める。つかむ・揺らす・移動・視点の操作を、止めるまで(最長 60 秒)覚える */
+  startRecording(): void {
+    if (!this.doc || this.takeState === 'recording') return;
+    if (this.takeState === 'playing') this.stopTake();
+    if (this.paused) this.setPaused(false); // 一時停止中は物理が進まず、記録もされない
+    this.takeRaw = [];
+    this.setTakeState('recording');
+  }
+
+  /** 記録を止めて、ループ再生できる形にして残す(アンドゥできる)。full は最長まで記録して止まったとき */
+  stopRecording(full = false): void {
+    if (this.takeState !== 'recording') return;
+    const take = finalizeTake(this.takeRaw);
+    this.takeRaw = [];
+    this.setTakeState('idle');
+    if (!take) { toast(`記録が短すぎます。「記録」を押したあと、${TAKE_MIN_SECONDS} 秒以上動かしてください。`, 'warning'); return; }
+    this.history.execute(new SetTake('操作の記録', this.project.take, take));
+    const sec = takeSeconds(take).toFixed(1);
+    toast(full ? `最長の ${sec} 秒まで記録したので止めました。` : `${sec} 秒の操作を記録しました。「ループ再生」でくり返し再生できます。`, 'success');
+  }
+
+  toggleRecording(): void { if (this.takeState === 'recording') this.stopRecording(); else this.startRecording(); }
+
+  /** 記録した操作を初めからループ再生する。画面を触ると止まる */
+  playTake(): void {
+    const take = this.project.take;
+    if (!take?.samples.length || !this.doc) return;
+    if (this.takeState === 'recording') this.stopRecording();
+    if (this.paused) this.setPaused(false);
+    this.playIndex = 0;
+    this.world.cutView(); // 今の視点から記録の初めへ飛ぶ分では揺らさない
+    this.world.grab = null; this.world.grabGains.clear();
+    this.shake = { x: 0, y: 0, z: 0 };
+    if (this.takeState !== 'playing') this.setTakeState('playing');
+  }
+
+  /** ループ再生をやめる(記録中なら何もしない)。視点は止めた所のまま */
+  stopTake(): void {
+    if (this.takeState !== 'playing') return;
+    this.world.grab = null; this.world.grabGains.clear();
+    this.world.cutView(); // 物理に伝える注視点が記録の値から今の視点へ戻る分では揺らさない
+    this.setTakeState('idle');
+    this.cameraChanged();
+  }
+
+  togglePlay(): void { if (this.takeState === 'playing') this.stopTake(); else this.playTake(); }
+
+  /* ---------- キーフレームから動きを作る ---------- */
+
+  /** 記録がキーフレームから作ったものなら、そのキーフレームを下書きに入れる。reset なら、そうでなくても下書きを空にする */
+  private syncKeyDraft(reset = false): void {
+    const k = this.project.take?.keys;
+    if (k) this.keyDraft = structuredClone([...k]);
+    else if (reset) this.keyDraft = [];
+    else return;
+    this.emit('take', this.takeState);
+  }
+
+  private viewKey(): ViewKey {
+    const c = this.project.camera;
+    return { yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, target: { ...c.target } };
+  }
+
+  /** 今の視点を末尾のキーフレームとして足す。時間とつなぎ方は1つ前のフレームに合わせる */
+  addKey(): void {
+    if (this.keyDraft.length >= MAX_KEYS) return;
+    this.stopTake();
+    const prev = this.keyDraft.at(-1);
+    this.keyDraft.push({ view: this.viewKey(), seconds: prev?.seconds ?? KEY_SECONDS.def, mode: prev?.mode ?? 'smooth' });
+    this.emit('take', this.takeState);
+  }
+
+  /** i 番目のキーフレームを今の視点で登録し直す */
+  setKey(i: number): void {
+    const k = this.keyDraft[i];
+    if (!k) return;
+    this.stopTake();
+    k.view = this.viewKey();
+    this.emit('take', this.takeState);
+  }
+
+  removeKey(i: number): void {
+    if (!this.keyDraft[i]) return;
+    this.keyDraft.splice(i, 1);
+    this.emit('take', this.takeState);
+  }
+
+  /** 視点を i 番目のキーフレームへ動かす(確かめる用。その動きでは揺らさない) */
+  gotoKey(i: number): void {
+    const k = this.keyDraft[i]?.view;
+    if (!k) return;
+    this.stopTake();
+    const c = this.project.camera;
+    c.yaw = k.yaw; c.pitch = k.pitch; c.zoom = k.zoom; c.target = { ...k.target };
+    this.world.cutView();
+    this.cameraChanged();
+    this.emit('status', undefined);
+  }
+
+  setKeyOption(i: number, patch: Partial<Pick<KeyFrame, 'seconds' | 'mode'>>): void {
+    const k = this.keyDraft[i];
+    if (!k) return;
+    if (patch.seconds !== undefined) k.seconds = Math.max(KEY_SECONDS.min, Math.min(KEY_SECONDS.max, Math.round(patch.seconds * 10) / 10));
+    if (patch.mode) k.mode = patch.mode;
+    this.emit('take', this.takeState);
+  }
+
+  /** キーフレームを順に通ってくり返す記録を作り(今の記録と入れ替え、アンドゥできる)、ループ再生する */
+  makeKeyTake(): void {
+    if (!this.doc || this.takeState === 'recording') return;
+    const take = takeFromKeys(this.keyDraft, this.project.camera.fov);
+    if (!take) return;
+    this.history.execute(new SetTake('キーフレームから動きを作る', this.project.take, take));
+    this.playTake();
+  }
+
+  /** 記録を消す(アンドゥできる) */
+  clearTake(): void {
+    if (!this.project.take) return;
+    this.stopTake();
+    this.history.execute(new SetTake('操作の記録を消す', this.project.take, null));
+  }
 
   private prev = 0;
   private frames = 0;

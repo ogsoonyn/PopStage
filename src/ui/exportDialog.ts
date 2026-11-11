@@ -4,6 +4,7 @@ import { availableFormats, canEncodeAt, estimateExportBytes, EXPORT_MEMORY_WARN,
 import type { ExportSettings } from '../export/exporter';
 import { $, ask, saveFile, toast, formatBytes } from './dom';
 import { persistControls } from '../storage/prefs';
+import { takeSeconds } from '../physics/take';
 
 const FORMATS: ExportFormat[] = ['mp4', 'webm', 'webm-alpha', 'png', 'gif'];
 
@@ -34,15 +35,24 @@ export function bindExportDialog(app: App): { open: () => void } {
     alphaRadio.disabled = !info.alpha;
     $('exBgAlphaLabel').classList.toggle('opacity-40', !info.alpha);
     if (!info.alpha && alphaRadio.checked) setRadio('exBg', 'color');
-    const motion = radio('exMotion');
-    loop.disabled = motion !== 'auto';
     const T = app.project.autoSwing.period;
     const rec = app.recorder.seconds;
     $('exRecLen').textContent = rec > 0.5 ? `(直近 ${rec.toFixed(1)} 秒を記録中)` : '(記録がありません)';
     document.querySelector<HTMLInputElement>('input[name=exMotion][value=replay]')!.disabled = rec < 0.5;
+    const L = takeSeconds(app.project.take);
+    $('exTakeLen').textContent = L > 0 ? `(1周 ${L.toFixed(1)} 秒)` : '(記録がありません)';
+    const loopRadio = document.querySelector<HTMLInputElement>('input[name=exMotion][value=loop]')!;
+    loopRadio.disabled = L <= 0;
+    if (loopRadio.disabled && loopRadio.checked) setRadio('exMotion', 'auto');
+    const motion = radio('exMotion');
+    loop.disabled = motion !== 'auto';
     const notes: string[] = [];
     if (motion === 'auto' && loop.checked) notes.push(`長さは周期 ${T.toFixed(1)} 秒の整数倍に丸めます(継ぎ目の無いループになります)。`);
     if (motion === 'replay') notes.push('「つかむ」やカメラの操作を記録どおりに再生します。最長 60 秒。');
+    if (motion === 'loop') {
+      notes.push(`長さは記録の1周 ${L.toFixed(1)} 秒の整数倍に丸めます。揺れが落ち着くまで何周か回してから撮るので、継ぎ目の無いループになります。`);
+      if (app.project.autoSwing.enabled) notes.push('「自動で揺らす」がオンです。周期が記録の長さと合わないと、継ぎ目で自動の揺れがずれます。');
+    }
     if (f === 'gif') notes.push('GIF は 256 色・1ビット透過です。サイズを小さく、30fps にすると軽くなります。');
     if (f === 'webm-alpha') notes.push('透過付き WebM は Chrome / Edge で再生できます。動画編集ソフトによっては透過が読めません。');
     if (f === 'png') notes.push('フレームごとの PNG を ZIP にまとめます。動画編集の素材向けです。');
@@ -84,6 +94,8 @@ export function bindExportDialog(app: App): { open: () => void } {
       const T = app.project.autoSwing.period;
       duration = Math.max(1, Math.round(duration / T)) * T;
     }
+    const L = takeSeconds(app.project.take);
+    if (motion === 'loop' && L > 0) duration = Math.max(1, Math.min(Math.floor(60 / L), Math.round(duration / L))) * L;
     return {
       format: fmt.value as ExportFormat,
       width: even(Math.max(16, Math.min(3840, +W.value || 1280))),

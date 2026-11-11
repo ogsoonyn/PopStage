@@ -14,6 +14,9 @@
 
 .prop { display: grid; grid-template-columns: 5.5rem 1fr 3.25rem; align-items: center; gap: .5rem; }
 .prop output { text-align: right; font-variant-numeric: tabular-nums; }
+.key-row { display: grid; grid-template-columns: 1.75rem 2.75rem 1.5rem 4.75rem 1fr; align-items: center; gap: .375rem; }
+.key-head { padding: 0 .125rem; }
+.key-row .key-no { font-variant-numeric: tabular-nums; padding: 0; }
 .prop2 { display: grid; grid-template-columns: 6.5rem 1fr; align-items: center; gap: .5rem; }
 
 .tool[aria-pressed="true"] { background: var(--color-primary); color: var(--color-primary-content); border-color: transparent; }
@@ -69,6 +72,12 @@ html.mobile #mTop:not([hidden]) { display: flex !important; }
 
 /* 3Dビューは、シートに隠れない所までに縮める(画像がシートの下に入らないように) */
 html.mobile #stageWrap { margin-bottom: var(--m-sheet); }
+/* 記録中・ループ再生中の印(3Dビューの左上) */
+#takeBadge { position: absolute; top: .625rem; left: max(.625rem, env(safe-area-inset-left, 0px)); z-index: 5; gap: .375rem; }
+#takeBadge.recording { background: var(--color-error); color: var(--color-error-content); border-color: transparent; }
+#takeBadge.recording::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; animation: take-blink 1s steps(2, start) infinite; }
+@keyframes take-blink { to { visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { #takeBadge.recording::before { animation: none; } }
 #mFine { position: absolute; top: .625rem; right: max(.625rem, env(safe-area-inset-right, 0px)); z-index: 5; }
 #mFine[aria-pressed="true"] { background: var(--color-primary); color: var(--color-primary-content); border-color: transparent; }
 

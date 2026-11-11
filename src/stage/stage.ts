@@ -84,6 +84,7 @@ export class Stage {
     this.uniforms = {
       uMap: { value: null }, uW: { value: null }, uLayerCount: { value: 0 },
       uPop: { value: new Array(MAX_LAYERS).fill(0) },
+      uBlend: { value: new Array(MAX_LAYERS).fill(0) },
       uSwing: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector3()) },
       uSpread: { value: new Array(MAX_LAYERS).fill(0) },
       uCenter: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector2()) },
@@ -171,8 +172,10 @@ export class Stage {
     layers.forEach((l, i) => this.setLayerParams(i, l));
   }
 
-  setLayerParams(index: number, layer: Pick<Layer, 'pop' | 'visible'>): void {
+  setLayerParams(index: number, layer: Pick<Layer, 'pop' | 'visible' | 'blend'>): void {
     (this.uniforms.uPop.value as number[])[index] = layer.visible ? layer.pop : 0;
+    // 隠したレイヤーはずれが 0 なので、最大のまま比べると下の沈み込みを平らにしてしまう。加算(何も足さない)として扱う
+    (this.uniforms.uBlend.value as number[])[index] = layer.visible && layer.blend === 'max' ? 1 : 0;
   }
 
   setSwing(index: number, s: Vec3, visible: boolean): void {

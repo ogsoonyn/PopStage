@@ -45,6 +45,16 @@ export function crc32(bytes: Uint8Array): number {
 }
 
 const stableCrc = new WeakMap<Uint8Array, number>();
+/** 変わらないデータを圧縮した結果(自動保存のたびに圧縮し直さない) */
+const stableBody = new WeakMap<Uint8Array, { level: number; body: Uint8Array }>();
+function bodyOf(e: ZipEntry, level: number): Uint8Array {
+  if (level <= 0) return e.data;
+  const hit = e.stable ? stableBody.get(e.data) : undefined;
+  if (hit && hit.level === level) return hit.body;
+  const body = deflateSync(e.data, { level: level as DeflateOptions['level'] });
+  if (e.stable) stableBody.set(e.data, { level, body });
+  return body;
+}
 /** 計算した回数(テストで、使い回しが効いているかを確かめる) */
 export const crcStats = { computed: 0 };
 
@@ -76,7 +86,7 @@ export function zipParts(entries: readonly ZipEntry[], when = new Date()): Uint8
     const name = strToU8(e.name), utf8 = name.length !== e.name.length;
     const level = e.level ?? 0;
     const crc = crcOf(e);
-    const body = level > 0 ? deflateSync(e.data, { level: level as DeflateOptions['level'] }) : e.data;
+    const body = bodyOf(e, level);
     const method = level > 0 ? 8 : 0, flags = utf8 ? 0x800 : 0;
     if (offset + 30 + name.length + body.length > 0xffffffff) throw new Error('ZIP が大きすぎます(4GB 以上)');
     const lh = new Uint8Array(30 + name.length), l = new DataView(lh.buffer);
