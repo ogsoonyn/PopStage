@@ -138,3 +138,43 @@ test('書き出し: 記録した操作をループ再生すると、1周ぶん�
   await expect(page.locator('#exTakeLen')).toContainText(len.toFixed(1));
   await app(page, a => { a.clearTake(); });
 });
+
+test('スタートとエンド: 今の視点を登録し、往復の動きを作ってループ再生する。保存すると設定も戻る', async ({ page }) => {
+  await boot(page);
+  await page.locator('#pathDetails summary').click();
+  await expect(page.locator('#pathMake')).toBeDisabled();
+  await app(page, a => { const c = a.project.camera; c.yaw = 0; c.pitch = 0; c.zoom = 1.5; c.target = { x: 0, y: 0, z: 0 }; });
+  await page.locator('#pathSetStart').click();
+  await app(page, a => { const c = a.project.camera; c.yaw = 0.8; c.zoom = 2.5; c.target = { x: 120, y: 0, z: 0 }; });
+  await page.locator('#pathSetEnd').click();
+  // 見る: スタートの視点へ動かす
+  await page.locator('#pathGoStart').click();
+  expect(await app(page, a => [a.project.camera.yaw, a.project.camera.target.x])).toEqual([0, 0]);
+  await page.locator('#pathSec').fill('10'); // 1.0 秒
+  await page.locator('#pathSec').dispatchEvent('input');
+  await page.locator('#pathRepeat').selectOption('pingpong');
+  await expect(page.locator('#pathMake')).toBeEnabled();
+  await page.locator('#pathMake').click();
+  expect(await app(page, a => [a.takeState, a.takeLength, a.project.take.path.repeat])).toEqual(['playing', 2, 'pingpong']);
+  // 再生中は視点がスタートとエンドの間を動く
+  await expect.poll(() => app(page, a => a.project.camera.yaw), { timeout: 5000 }).toBeGreaterThan(0.2);
+  const tx = await app(page, a => a.project.camera.target.x);
+  expect(tx).toBeGreaterThanOrEqual(0); expect(tx).toBeLessThanOrEqual(120);
+  // 画像の位置が動くので揺れる
+  await expect.poll(() => app(page, a => Math.abs(a.world.displacement(a.doc.layers[0].id).x)), { timeout: 5000 }).toBeGreaterThan(0.001);
+  // アンドゥで記録が消えて止まる
+  await page.locator('#view').focus();
+  await app(page, a => a.history.undo());
+  expect(await app(page, a => [a.takeState, a.project.take])).toEqual(['idle', null]);
+  await app(page, a => a.history.redo());
+  // 保存して開き直すと、設定(片道の時間など)も下書きに戻る
+  const r = await app(page, async a => {
+    const bytes = a.serialize(await a.thumbnail());
+    await a.loadSample();
+    const cleared = a.pathDraft.start;
+    await a.openProjectBytes(bytes, 'path.pukupop', null);
+    return { cleared, seconds: a.pathDraft.seconds, end: a.pathDraft.end?.target.x, len: a.takeLength };
+  });
+  expect(r).toEqual({ cleared: null, seconds: 1, end: 120, len: 2 });
+  await expect(page.locator('#pathSecO')).toHaveText('1.0秒');
+});
