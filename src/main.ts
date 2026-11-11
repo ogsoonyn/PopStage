@@ -303,3 +303,9 @@ async function boot(): Promise<void> {
   if (e2e) app.setPaused(true);
 }
 void boot();
+
+/* ---------- ホーム画面に追加したとき、電波がなくても起動できるようにする ---------- */
+// 開発中(vite dev)と E2E では入れない。キャッシュが古い画面を返して確認の邪魔になるため
+if (import.meta.env.PROD && !e2e && 'serviceWorker' in navigator) {
+  addEventListener('load', () => { navigator.serviceWorker.register('./sw.js').catch(e => console.warn('service worker を登録できませんでした', e)); });
+}

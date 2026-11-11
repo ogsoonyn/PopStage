@@ -32,6 +32,13 @@
 
 Firefox と Safari での動作は確認していません。
 
+### ホーム画面に追加する
+
+アプリとしてホーム画面に置けます。一度開いたあとは、電波がなくても起動できます。
+
+- Android(Chrome): メニューの「ホーム画面に追加」または「アプリをインストール」
+- iPhone / iPad(Safari): 共有ボタンから「ホーム画面に追加」
+
 ## 使い方
 
 1. 画像(PNG / JPEG / WebP)をウィンドウへドロップします。起動時はサンプル画像が開きます。
@@ -54,6 +61,8 @@ npm run preview    # ビルド結果を確認する
 npm test           # 単体テスト(Vitest)
 npm run e2e        # E2E テスト(Playwright)
 ```
+
+アプリアイコンは `scripts/icon-art.mjs` の SVG から作ります。絵を変えたら `node scripts/make-icons.mjs` で `public/icons/` の画像を作り直してください。service worker は `public/sw.js` で、本番ビルドのときだけ登録します(`?e2e` 付きのときも登録しません)。
 
 ビルド結果は相対パスで参照し合うので、`dist/` の中身をそのまま任意の静的ホスティングに置けば動きます。
 
