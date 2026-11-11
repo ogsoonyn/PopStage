@@ -51,6 +51,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     root.classList.add('mobile');
     move(sectionOf('pPop'), pane('motion'));
     move(sectionOf('pAuto'), pane('motion'));
+    move(sectionOf('takeRec'), pane('motion'));
     move($('inflateDialog'), pane('tool'));
     for (const el of document.querySelectorAll('[data-brush-opt]')) move(el, $('mBrushOpts'));
     move(sectionOf('layerList'), pane('layer'), true);

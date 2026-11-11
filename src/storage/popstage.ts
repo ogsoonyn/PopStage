@@ -9,6 +9,7 @@ import {
   type Project, type CameraState, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type BlendMode,
 } from '../model/project';
 import { WeightMap, weightSizeFor } from '../model/weightmap';
+import { takeToJson, takeFromJson, type Take } from '../physics/take';
 import { encodeGrayPng, decodePngToGray, readPngSize, MAX_PNG_SIDE, type GrayImage } from './png';
 
 export const FORMAT_VERSION = 1;
@@ -17,7 +18,7 @@ export const FILE_EXTENSION = '.pukupop';
 export const LEGACY_FILE_EXTENSION = '.popstage';
 
 /** 展開する1ファイルあたりの上限(バイト)。ZIP 爆弾でメモリを使い切らないよう、宣言サイズで弾く */
-export const UNZIP_LIMITS = { json: 16 << 20, image: 256 << 20, weights: 64 << 20, thumbnail: 8 << 20, total: 512 << 20 };
+export const UNZIP_LIMITS = { json: 16 << 20, take: 16 << 20, image: 256 << 20, weights: 64 << 20, thumbnail: 8 << 20, total: 512 << 20 };
 
 /** 読み込むドキュメント数の上限(アプリが使うのは先頭だけだが、形式としては複数持てる) */
 const MAX_DOCUMENTS = 8;
@@ -27,6 +28,11 @@ const own = (o: object, k: unknown): boolean => typeof k === 'string' && Object.
 
 /** 背景色は #rrggbb だけを受け付ける(CSS に入るので、url() などを通さない) */
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+/** 操作の記録(ループ再生用)を入れるファイル。無いファイル(古い版・記録なし)は記録なしとして開く */
+export const TAKE_PATH = 'motion/take.json';
+/** 記録は作ったあと書き換えないので、自動保存のたびに JSON を作り直さないよう記録ごとに1回だけ作る */
+const takeBytes = new WeakMap<Take, Uint8Array>();
 
 /* ---------- project.json の形 ---------- */
 
@@ -132,6 +138,11 @@ function projectParts(project: Project, opts: SerializeOptions): Uint8Array[] {
     documents: docs,
   };
   files.push({ name: 'project.json', data: strToU8(JSON.stringify(json, null, 2)), level: 6 });
+  if (project.take) {
+    let data = takeBytes.get(project.take);
+    if (!data) { data = strToU8(JSON.stringify(takeToJson(project.take))); takeBytes.set(project.take, data); }
+    files.push({ name: TAKE_PATH, data, level: 6, stable: true });
+  }
   if (opts.thumbnail) files.push({ name: 'thumbnail.png', data: opts.thumbnail });
   return zipParts(files);
 }
@@ -203,7 +214,7 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
     }
   }
   // サムネイルは読み込みに要らないので、大きすぎるときは黙って捨てる
-  const files = unzipEntries(bytes, wanted, new Map([['thumbnail.png', UNZIP_LIMITS.thumbnail]]));
+  const files = unzipEntries(bytes, wanted, new Map([['thumbnail.png', UNZIP_LIMITS.thumbnail], [TAKE_PATH, UNZIP_LIMITS.take]]));
 
   const project = createProject();
   const p = json.project ?? {} as ProjectJson['project'];
@@ -224,6 +235,10 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
     period: num(p.autoSwing?.period, LIMITS.period.min, LIMITS.period.max, LIMITS.period.def),
     strength: unit(p.autoSwing?.strength, 0.5),
   };
+  // 操作の記録。読めなければ記録なしとして開く(画像やウェイトは開けるので、ファイルごと諦めない)
+  if (own(files, TAKE_PATH)) {
+    try { project.take = takeFromJson(JSON.parse(strFromU8(files[TAKE_PATH])), project.camera.fov); } catch { project.take = null; }
+  }
 
   // ID はレイヤーやドキュメントを探す鍵なので、空・重複していたら振り直す
   const seenIds = new Set<string>();

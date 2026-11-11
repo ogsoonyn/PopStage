@@ -8,7 +8,8 @@ import { PhysicsWorld, PHYSICS_DT } from '../physics/world';
 import { applySample, type MotionRecorder, type RecordSample } from '../physics/recorder';
 import { createEncoder, FORMAT_INFO, even, type ExportFormat } from './encoders';
 
-export type MotionSource = 'auto' | 'replay';
+/** auto: 自動揺らし / replay: 直前の操作を再生 / loop: 記録した操作をループ再生 */
+export type MotionSource = 'auto' | 'replay' | 'loop';
 
 export interface ExportSettings {
   format: ExportFormat;
@@ -32,6 +33,8 @@ export interface ExportResult { blob: Blob; filename: string; frames: number }
 
 /** 自動揺らしを定常状態まで慣らす時間(秒) */
 const WARMUP_SECONDS = 20;
+/** 記録のループ再生を慣らす時間(秒、最低2周)。1周目の初めは揺れが無いので、継ぎ目が揃うまで回してから撮る */
+const LOOP_WARMUP_SECONDS = 6;
 
 export async function runExport(
   ctx: ExportContext, s: ExportSettings,
@@ -49,7 +52,9 @@ export async function runExport(
   // 書き出し専用の物理。画面側の状態には触れない
   const world = new PhysicsWorld();
   world.unitPx = Math.max(doc.image.width, doc.image.height) / 2;
-  let samples: RecordSample[] | null = null;
+  let samples: readonly RecordSample[] | null = null;
+  /** 記録の終わりまで来たら初めに戻るか(ループ再生)。戻らないときは最後の1件のまま */
+  let wrap = false;
   let camera: CameraState = structuredClone(project.camera);
 
   if (s.motion === 'replay') {
@@ -59,6 +64,13 @@ export async function runExport(
     world.autoSwing = { ...project.autoSwing };
     for (const smp of rec.warmup) { applySample(world, smp); world.step(doc.layers); }
     samples = rec.samples;
+  } else if (s.motion === 'loop') {
+    const take = project.take;
+    if (!take || take.samples.length < 2) throw new Error('ループ再生する操作の記録がありません。「記録」を押して操作を記録してから書き出してください。');
+    samples = take.samples; wrap = true;
+    world.autoSwing = { ...project.autoSwing };
+    const n = samples.length, loops = Math.max(2, Math.ceil(LOOP_WARMUP_SECONDS / (n * PHYSICS_DT)));
+    for (let i = 0; i < loops * n; i++) { applySample(world, samples[i % n]); world.step(doc.layers); }
   } else {
     world.autoSwing = { ...project.autoSwing, enabled: true };
     // 周期の頭から始まるように、周期の整数倍だけ慣らす
@@ -66,20 +78,22 @@ export async function runExport(
     for (let i = 0, n = Math.round(warm / PHYSICS_DT); i < n; i++) world.step(doc.layers);
   }
 
+  const at = (i: number) => (wrap ? i % samples!.length : Math.min(samples!.length - 1, i));
   const encoder = createEncoder(s.format, { width, height, fps: s.fps, transparent: info.alpha && background === null });
   const frame = new Uint8ClampedArray(width * height * 4);
   try {
     for (let f = 0; f < total; f++) {
       if (signal.aborted) throw new DOMException('書き出しを中止しました', 'AbortError');
       if (samples) {
-        const smp = samples[Math.min(samples.length - 1, f * stepsPerFrame)];
-        camera = smp.camera;
+        const smp = samples[at(f * stepsPerFrame)];
+        // ループ再生の記録は画角を持たないので、今の画角で描く
+        camera = wrap ? { ...smp.camera, fov: project.camera.fov } : smp.camera;
       }
       ctx.applySwing(world, doc);
       ctx.stage.renderFrame(width, height, camera, background, frame);
       await encoder.addFrame(frame, f);
       for (let k = 0; k < stepsPerFrame; k++) {
-        if (samples) applySample(world, samples[Math.min(samples.length - 1, f * stepsPerFrame + k)]);
+        if (samples) applySample(world, samples[at(f * stepsPerFrame + k)]);
         world.step(doc.layers);
       }
       onProgress(f + 1, total);

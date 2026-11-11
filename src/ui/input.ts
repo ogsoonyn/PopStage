@@ -138,6 +138,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   };
 
   canvas.addEventListener('pointerdown', e => {
+    // ループ再生中に画面を触ったら、再生をやめて手の操作を優先する
+    app.stopTake();
     if (drag.mode || !app.doc) return;
     canvas.focus({ preventScroll: true });
     canvas.setPointerCapture(e.pointerId);
@@ -226,6 +228,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   canvas.addEventListener('pointerleave', () => { pointerInside = false; hover = null; last = null; updateCursor(); });
 
   canvas.addEventListener('wheel', e => {
+    app.stopTake();
     e.preventDefault();
     const cam = app.project.camera;
     cam.zoom = Math.max(0.05, Math.min(10, cam.zoom * Math.exp(wheelDelta(e) * 0.0012 * wheelFineFactor(e))));

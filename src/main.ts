@@ -8,6 +8,7 @@ import { bindInflateDialog } from './ui/inflateDialog';
 import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
 import { bindMobileLayout } from './ui/mobile';
+import { bindTakeControls } from './ui/take';
 import { FILE_EXTENSION, LEGACY_FILE_EXTENSION } from './storage/popstage';
 import { $, ask, toast, retryWithClick } from './ui/dom';
 import { autosave } from './storage/autosave';
@@ -35,6 +36,7 @@ if (params.has('debug')) togglePerf();
 bindStageInput(app, canvas);
 const multiView = bindMultiView(app, canvas);
 bindPanels(app);
+bindTakeControls(app);
 
 /* ---------- 設定をブラウザに覚える(ファイルには書かない) ---------- */
 const byId = <T extends HTMLElement>(...ids: string[]) => ids.map(id => $<T>(id));
@@ -113,6 +115,8 @@ const commands: Record<string, { run: () => unknown; enabled?: () => boolean }> 
   cleanView: { run: () => app.clearEditView() },
   toggleMulti: { run: () => app.setViewOption('multi', !app.view.multi) },
   resetView: { run: () => app.resetView() },
+  toggleRecording: { run: () => app.toggleRecording(), enabled: () => !!app.doc },
+  togglePlay: { run: () => app.togglePlay(), enabled: () => !!app.project.take && app.takeState !== 'recording' },
   addLayer: { run: () => app.addLayer(), enabled: () => !!app.doc },
   duplicateLayer: { run: () => app.duplicateLayer(), enabled: () => !!app.activeLayer },
   deleteLayer: { run: () => app.deleteLayer(), enabled: () => (app.doc?.layers.length ?? 0) > 1 },
@@ -215,6 +219,8 @@ window.addEventListener('keydown', e => {
   if (k === 'p') return hit('togglePause');
   if (k === 'm') return hit('toggleMulti');
   if (k === 'c') return hit('cleanView');
+  if (k === 'r') return hit('toggleRecording');
+  if (k === 'l') return hit('togglePlay');
   if (e.key === '[' || e.key === ']') {
     const el = $<HTMLInputElement>('brushSize'), step = Math.max(2, Math.round(app.brush.size * 0.15));
     el.value = String(app.brush.size + (e.key === ']' ? step : -step));
