@@ -14,8 +14,9 @@
 
 .prop { display: grid; grid-template-columns: 5.5rem 1fr 3.25rem; align-items: center; gap: .5rem; }
 .prop output { text-align: right; font-variant-numeric: tabular-nums; }
-.path-row { display: grid; grid-template-columns: minmax(5.5rem, auto) auto auto 1fr; align-items: center; gap: .5rem; }
-.path-row[data-set="false"] > span::after { content: "(未設定)"; margin-left: .25rem; font-size: .75rem; opacity: .6; }
+.key-row { display: grid; grid-template-columns: 1.75rem 2.75rem 1.5rem 4.75rem 1fr; align-items: center; gap: .375rem; }
+.key-head { padding: 0 .125rem; }
+.key-row .key-no { font-variant-numeric: tabular-nums; padding: 0; }
 .prop2 { display: grid; grid-template-columns: 6.5rem 1fr; align-items: center; gap: .5rem; }
 
 .tool[aria-pressed="true"] { background: var(--color-primary); color: var(--color-primary-content); border-color: transparent; }

@@ -350,11 +350,12 @@ export function bindPanels(app: App): { refresh: () => void } {
       setRange('pPop', popToSlider(l.pop));
       if (document.activeElement !== $('pPopN')) $<HTMLInputElement>('pPopN').value = String(l.pop);
       blendSel.value = l.blend;
-      $('pBlendDesc').textContent = BLENDS[l.blend].desc;
+      // 説明は画面に並べず、選択欄のツールチップに出す(読み上げ用に隠した要素にも入れる)
+      $('pBlendDesc').textContent = blendSel.title = BLENDS[l.blend].desc;
       $<HTMLInputElement>('pSwing').checked = $<HTMLInputElement>('tSwing').checked = l.physics.enabled;
       presetSel.value = l.physics.preset;
       motionSel.value = l.physics.motion;
-      $('pPresetDesc').textContent = l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
+      $('pPresetDesc').textContent = presetSel.title = l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
       refreshMotionParams(l);
       $('physSummary').textContent = `— ${MOTIONS[l.physics.motion].label}`;
       setRange('pHard', Math.round(l.physics.hardness * 100), pct(l.physics.hardness * 100));
