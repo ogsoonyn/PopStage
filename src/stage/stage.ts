@@ -174,7 +174,8 @@ export class Stage {
 
   setLayerParams(index: number, layer: Pick<Layer, 'pop' | 'visible' | 'blend'>): void {
     (this.uniforms.uPop.value as number[])[index] = layer.visible ? layer.pop : 0;
-    (this.uniforms.uBlend.value as number[])[index] = layer.blend === 'max' ? 1 : 0;
+    // 隠したレイヤーはずれが 0 なので、最大のまま比べると下の沈み込みを平らにしてしまう。加算(何も足さない)として扱う
+    (this.uniforms.uBlend.value as number[])[index] = layer.visible && layer.blend === 'max' ? 1 : 0;
   }
 
   setSwing(index: number, s: Vec3, visible: boolean): void {
