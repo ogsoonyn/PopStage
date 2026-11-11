@@ -50,3 +50,79 @@
 #toolNav .nav-icon { font-size: 14px; line-height: 1; }
 .nav-group { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 2px; border-radius: 6px; background: color-mix(in oklab, var(--color-base-content) 6%, transparent); }
 .nav-group-label { font-size: 10px; text-align: center; opacity: .6; line-height: 1; }
+
+/* ---------- スマホ(ui/mobile.ts が html に .mobile を付ける) ---------- */
+.m-only { display: none !important; }
+html.mobile .m-only:not([hidden]) { display: revert !important; }
+html.mobile .d-only,
+html.mobile #menubar, html.mobile #toolOptions, html.mobile #toolNav, html.mobile body > main > aside, html.mobile body > footer { display: none !important; }
+html.mobile { --m-top: calc(3rem + env(safe-area-inset-top, 0px)); --m-tools: calc(3.75rem + env(safe-area-inset-bottom, 0px)); --m-sheet: 0px; }
+html.mobile body { overscroll-behavior: none; user-select: none; -webkit-user-select: none; }
+
+#mTop { height: var(--m-top); padding: env(safe-area-inset-top, 0px) max(.25rem, env(safe-area-inset-right, 0px)) 0 max(.25rem, env(safe-area-inset-left, 0px)); align-items: center; gap: .125rem; flex-shrink: 0; background: var(--color-base-100); border-bottom: 1px solid var(--color-base-300); }
+html.mobile #mTop:not([hidden]) { display: flex !important; }
+.m-icon { width: 2.75rem; height: 2.5rem; display: grid; place-items: center; border-radius: .625rem; flex-shrink: 0; cursor: pointer; }
+.m-icon svg { width: 1.375rem; height: 1.375rem; }
+.m-icon:active { background: var(--color-base-200); }
+.m-icon:disabled { opacity: .3; }
+#mAuto[aria-pressed="true"] { color: var(--color-primary); }
+
+/* 3Dビューは、シートに隠れない所までに縮める(画像がシートの下に入らないように) */
+html.mobile #stageWrap { margin-bottom: var(--m-sheet); }
+#mFine { position: absolute; top: .625rem; right: max(.625rem, env(safe-area-inset-right, 0px)); z-index: 5; }
+#mFine[aria-pressed="true"] { background: var(--color-primary); color: var(--color-primary-content); border-color: transparent; }
+
+#mSheet { position: fixed; left: 0; right: 0; bottom: var(--m-tools); z-index: 30; height: 7rem; background: var(--color-base-100); border-radius: 1.125rem 1.125rem 0 0; box-shadow: 0 -6px 24px rgb(0 0 0 / .14); flex-direction: column; overflow: hidden; }
+html.mobile #mSheet { display: flex !important; }
+#mSheet.anim { transition: height .26s cubic-bezier(.2, .8, .2, 1); }
+#mGrip { padding: .5rem 0 .25rem; touch-action: none; cursor: grab; flex-shrink: 0; }
+#mGrip i { display: block; width: 2.5rem; height: .3125rem; border-radius: 3px; background: var(--color-base-300); margin: 0 auto; }
+.m-chips { display: flex; gap: .5rem; overflow-x: auto; padding: .375rem .75rem .625rem; scrollbar-width: none; flex-shrink: 0; }
+.m-chips::-webkit-scrollbar { display: none; }
+.m-chips button { flex-shrink: 0; height: 2.25rem; padding: 0 .875rem; border-radius: 999px; border: 1px solid var(--color-base-300); background: var(--color-base-200); white-space: nowrap; cursor: pointer; }
+.m-chips button[aria-pressed="true"] { background: var(--color-primary); color: var(--color-primary-content); border-color: transparent; font-weight: 600; }
+.m-chips button:disabled { opacity: .4; }
+.m-tabs { display: flex; border-bottom: 1px solid var(--color-base-300); padding: 0 .5rem; flex-shrink: 0; }
+.m-tabs button { flex: 1; min-width: 0; height: 2.625rem; border-bottom: 2px solid transparent; opacity: .65; cursor: pointer; }
+.m-tabs button[aria-selected="true"] { opacity: 1; font-weight: 600; border-bottom-color: var(--color-primary); }
+/* 下の余白は、いちばん下の項目がツールバーに隠れないよう、シートの中に収める */
+#mPanes { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: .75rem max(1rem, env(safe-area-inset-right, 0px)) 1.5rem max(1rem, env(safe-area-inset-left, 0px)); }
+.m-pane { display: flex; flex-direction: column; gap: 1rem; }
+.m-pane[hidden] { display: none; }
+.m-btns { display: flex; flex-wrap: wrap; gap: .5rem; }
+.m-btns .btn { flex: 1 1 auto; }
+.m-row { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 3.25rem; border-bottom: 1px solid var(--color-base-300); text-align: left; font-size: .9375rem; cursor: pointer; }
+.m-row span { font-size: .75rem; opacity: .6; }
+.m-row:disabled { opacity: .4; }
+html.mobile #mPanes .prop { grid-template-columns: 6.5rem 1fr 3.25rem; min-height: 2.5rem; }
+html.mobile #mPanes .range { --range-thumb-size: 1.25rem; height: 1.5rem; }
+html.mobile #mPanes .toggle { --size: 1.5rem; }
+html.mobile #mPanes label:has(#vMulti) { display: none; }
+html.mobile #mPanes [data-brush-opt] { display: grid; grid-template-columns: 6.5rem 1fr 3.25rem; align-items: center; }
+html.mobile #mPanes [data-brush-opt] input[type=range] { width: 100%; }
+html.mobile #mPanes #layerList { max-height: none; }
+html.mobile #mPanes #layerList + * { margin-top: 0; }
+/* 膨らませるのパネルは「ツール」タブの中に置く */
+html.mobile #inflateDialog { position: static; transform: none; width: auto; margin: 0; padding: 0; border: 0; box-shadow: none; background: transparent; }
+html.mobile #inflateDialog .prop2 { grid-template-columns: 6.5rem 1fr; }
+
+#mModeBar { position: fixed; left: .625rem; right: .625rem; bottom: calc(var(--m-tools) + var(--m-sheet) + .5rem); z-index: 29; padding: .5rem .75rem; border-radius: .75rem; background: color-mix(in oklab, var(--color-primary) 16%, var(--color-base-100)); font-size: .8125rem; }
+#mModeBar b { color: var(--color-primary); }
+
+#mTools { position: fixed; left: 0; right: 0; bottom: 0; height: var(--m-tools); padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); z-index: 31; background: var(--color-base-100); border-top: 1px solid var(--color-base-300); grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+html.mobile #mTools { display: grid !important; }
+html.mobile #mTools .m-tool { display: none; }
+html.mobile[data-mset="main"] #mTools .m-tool[data-mset="main"], html.mobile[data-mset="paint"] #mTools .m-tool[data-mset="paint"] { display: flex; }
+.m-tool { flex-direction: column; align-items: center; justify-content: center; gap: .1875rem; font-size: .6875rem; opacity: .7; cursor: pointer; background: transparent; border: 0; }
+.m-tool svg { width: 2.75rem; height: 1.875rem; padding: .1875rem .625rem; border-radius: 999px; }
+#mTools .m-tool[aria-pressed="true"] { opacity: 1; font-weight: 600; }
+#mTools .m-tool[aria-pressed="true"] svg { background: var(--color-primary); color: var(--color-primary-content); }
+html.mobile body > main { padding-bottom: var(--m-tools); }
+html.mobile #toasts { top: calc(var(--m-top) + .5rem); bottom: auto; margin-bottom: 0; }
+html.mobile #mFine { display: inline-flex !important; }
+html.mobile #helpDialog .m-only { display: grid !important; }
+/* プリセットはシートの上のボタンで選ぶので、右パネルの選択欄は隠す */
+html.mobile #mPanes .prop:has(#pPreset) { display: none; }
+html.mobile #mPanes #pPresetDesc { padding-left: 0; margin-top: 0; }
+html.mobile #mPanes section { padding: 0; border: 0; }
+html.mobile #mPanes .btn-xs.btn-square { width: 2.25rem; height: 2.25rem; }

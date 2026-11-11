@@ -555,6 +555,15 @@ export class App extends Emitter<AppEvents> {
     }
   }
 
+  /** ストロークを取り消す(スマホで2本目の指が置かれたとき)。塗った分を元に戻し、アンドゥには積まない */
+  cancelStroke(): void {
+    const st = this.stroke; if (!st) return;
+    this.stroke = null;
+    this.centers.delete(st.layerId);
+    const tiles = st.stroke.finish();
+    if (tiles.length) new WeightEdit(st.label, st.layerId, tiles).revert(this.store);
+  }
+
   get stroking(): boolean { return !!this.stroke; }
 
   /* ---------- ウェイトの一括処理 ---------- */
