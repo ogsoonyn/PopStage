@@ -560,8 +560,16 @@ export class App extends Emitter<AppEvents> {
     const st = this.stroke; if (!st) return;
     this.stroke = null;
     this.centers.delete(st.layerId);
-    const tiles = st.stroke.finish();
-    if (tiles.length) new WeightEdit(st.label, st.layerId, tiles).revert(this.store);
+    const tiles = st.stroke.finish(), wm = this.store.findLayer(st.layerId)?.layer.weights;
+    if (!wm || !tiles.length) return;
+    // 塗る前に戻すだけなので、「未保存」にも自動保存の予約にもしない(weightsChanged の persistent = false)
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const t of tiles) {
+      const r = wm.tileRect(t.tx, t.ty);
+      wm.writeRect(r, t.before);
+      x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h);
+    }
+    this.store.weightsChanged(st.layerId, { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, false);
   }
 
   get stroking(): boolean { return !!this.stroke; }

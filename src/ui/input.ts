@@ -52,9 +52,13 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   let gesture: { x: number; y: number; d: number } | null = null;
   /** 触り始めてから全部の指を離すまでの記録(タップの判定に使う) */
   let tap: { t: number; n: number; moved: number; x: number; y: number; orbit: boolean } | null = null;
+  /** 指ごとの置いた位置(タップかどうかは、それぞれの指が置いた所からどれだけ動いたかで決める) */
+  const touchStart = new Map<number, { x: number; y: number }>();
   let lastTap: { t: number; x: number; y: number } | null = null;
   /** このドラッグで膨らませるのプレビューを始めたか(2本目の指で取り消すときは、始めたプレビューごと捨てる) */
   let areaBegan = false;
+  /** プレビュー中の範囲を描き直し始めたときの範囲(2本目の指で描き直しをやめたら、これに戻す) */
+  let areaBefore: { x: number; y: number; w: number; h: number } | null = null;
   const touchCenter = () => {
     let x = 0, y = 0;
     for (const p of touches.values()) { x += p.x; y += p.y; }
@@ -70,13 +74,17 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     else if (drag.mode === 'area') {
       areaStart = null; app.holdImage(false);
       if (areaBegan && app.previewingInflate) app.endInflate(false);
+      else if (areaBefore && app.previewingInflate) app.updateInflate({ area: areaBefore });
     } else if (drag.mode === 'grab') { app.world.grab = null; app.world.grabGains.clear(); }
     else if (drag.mode === 'orbit' || drag.mode === 'pan') app.cameraChanged();
     drag.mode = null; drag.id = -1;
   }
   canvas.addEventListener('pointerdown', e => {
     if (e.pointerType !== 'touch') return;
+    // 新しく触り始めた(最初の指)ときは、離した所がキャンバスの外で届かなかった指の記録を捨てる
+    if (e.isPrimary) { touches.clear(); touchStart.clear(); gesture = null; tap = null; }
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    touchStart.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const now = performance.now();
     if (!tap) tap = { t: now, n: 0, moved: 0, x: e.clientX, y: e.clientY, orbit: false };
     tap.n = Math.max(tap.n, touches.size);
@@ -91,7 +99,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   canvas.addEventListener('pointermove', e => {
     const t = touches.get(e.pointerId); if (!t) return;
     t.x = e.clientX; t.y = e.clientY;
-    if (tap) tap.moved = Math.max(tap.moved, Math.hypot(e.clientX - tap.x, e.clientY - tap.y));
+    const s0 = touchStart.get(e.pointerId);
+    if (tap && s0) tap.moved = Math.max(tap.moved, Math.hypot(e.clientX - s0.x, e.clientY - s0.y));
     if (!gesture || touches.size < 2) return;
     e.stopImmediatePropagation();
     const c = touchCenter(), d = touchSpread(), f = isFineLocked() ? FINE : 1;
@@ -107,6 +116,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     app.emit('status', undefined);
   });
   const touchEnd = (e: PointerEvent) => {
+    touchStart.delete(e.pointerId);
     if (!touches.delete(e.pointerId)) return;
     if (gesture) {
       if (touches.size >= 2) gesture = { ...touchCenter(), d: touchSpread() };
@@ -254,6 +264,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (!p) return;
     areaStart = { x: p.x, y: p.y };
     areaBegan = false;
+    const prev = app.inflateState?.area;
+    areaBefore = prev ? { x: prev.x, y: prev.y, w: prev.w, h: prev.h } : null;
     drag.mode = 'area';
     app.holdImage(true);
   }

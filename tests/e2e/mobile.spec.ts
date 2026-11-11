@@ -99,7 +99,12 @@ test('2本指タップで戻し、3本指タップでやり直す', async ({ pag
   const layers = () => page.evaluate(() => (window as any).popstage.doc.layers.length);
   expect(await layers()).toBe(2);
   const [cx, cy] = await viewCenter(page);
-  await touch(cdp, 'touchStart', [[cx - 30, cy], [cx + 30, cy]]); await touch(cdp, 'touchEnd', []);
+  // タップは 300ms 以内に離したものだけなので、起動直後の重い描画が落ち着いてから送る
+  await page.waitForTimeout(1000);
+  // 指が少し震えても(それぞれの指が置いた所からわずかに動いても)タップとみなす
+  await touch(cdp, 'touchStart', [[cx - 60, cy], [cx + 60, cy]]);
+  await touch(cdp, 'touchMove', [[cx - 58, cy + 2], [cx + 62, cy - 2]]);
+  await touch(cdp, 'touchEnd', []);
   expect(await layers()).toBe(1);
   await touch(cdp, 'touchStart', [[cx - 40, cy], [cx, cy], [cx + 40, cy]]); await touch(cdp, 'touchEnd', []);
   expect(await layers()).toBe(2);
@@ -129,7 +134,7 @@ test('「塗って直す」で塗れ、2本目の指を置くと塗りは取り�
   await expect(page.locator('#mTools [data-mtool="brush"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#mModeBar')).toBeVisible();
   const [cx, cy] = await viewCenter(page);
-  const before = await weightSum(page);
+  const before = await weightSum(page), dirty0 = await page.evaluate(() => (window as any).popstage.dirty);
   // 1本指で塗りかけてから2本目を置く → 塗った分は消え、アンドゥにも残らない
   await touch(cdp, 'touchStart', [[cx - 80, cy + 60]]);
   for (let i = 1; i <= 6; i++) await touch(cdp, 'touchMove', [[cx - 80 + i * 15, cy + 60]]);
@@ -138,6 +143,8 @@ test('「塗って直す」で塗れ、2本目の指を置くと塗りは取り�
   await touch(cdp, 'touchEnd', []);
   expect(await weightSum(page)).toBe(before);
   expect(await page.evaluate(() => (window as any).popstage.history.canUndo)).toBe(false);
+  // 取り消した塗りでは「未保存」にならない
+  expect(await page.evaluate(() => (window as any).popstage.dirty)).toBe(dirty0);
   // 1本指で塗ると残る
   await swipe(cdp, [[cx - 80, cy + 60]], [[cx + 20, cy + 60]]);
   expect(await weightSum(page)).not.toBe(before);

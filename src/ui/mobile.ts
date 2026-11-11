@@ -36,6 +36,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
 
   /** 移したものと元の場所。戻すときは逆順に戻す */
   let moved: { el: Element; parent: Node; next: Node | null }[] = [];
+  let desktopTool: Tool | null = null;
   const move = (el: Element | null | undefined, to: Element, prepend = false) => {
     if (!el?.parentNode) return;
     moved.push({ el, parent: el.parentNode, next: el.nextSibling });
@@ -55,6 +56,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     move(sectionOf('pFov'), pane('view'));
     // 3面図は縦長の画面では狭すぎるので使わない。塗りのツールのまま来たら、主のツールにする
     if (app.view.multi) app.setViewOption('multi', false);
+    desktopTool = app.tool;
     if (PAINT_TOOLS.includes(app.tool)) app.setTool('grab');
     setPaintMode(false);
     renderPresets(); syncAuto(); syncTitle(); syncTool();
@@ -66,6 +68,9 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     root.classList.remove('mobile');
     root.style.removeProperty('--m-sheet');
     setFineLock(false); $('mFine').setAttribute('aria-pressed', 'false');
+    // スマホの間に塗りから切り替えていたら、PC で使っていたツールに戻す
+    if (desktopTool && PAINT_TOOLS.includes(desktopTool) && !PAINT_TOOLS.includes(app.tool)) app.setTool(desktopTool);
+    desktopTool = null;
   }
 
   /* ---------- シート ---------- */
@@ -110,7 +115,13 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
       setSheet(order.reduce((a, b) => Math.abs(h[a] - cur) <= Math.abs(h[b] - cur) ? a : b));
     };
     grip.addEventListener('pointerup', up);
-    grip.addEventListener('pointercancel', up);
+    // 取り消されたときはタップとみなさず、いちばん近い高さに止める
+    grip.addEventListener('pointercancel', () => {
+      if (!drag) return;
+      drag = null;
+      const h = heights(), cur = sheet.offsetHeight, order: SheetState[] = ['closed', 'half', 'full'];
+      setSheet(order.reduce((a, b) => Math.abs(h[a] - cur) <= Math.abs(h[b] - cur) ? a : b));
+    });
     grip.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSheet(state === 'closed' ? 'half' : state === 'half' ? 'full' : 'closed'); }
     });
@@ -179,10 +190,12 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     if (!on && PAINT_TOOLS.includes(app.tool)) app.setTool(lastMain);
   }
   $('mPaintMode').addEventListener('click', () => { if (app.previewingInflate) return; setPaintMode(true); setSheet('closed'); });
-  $('mPaintDone').addEventListener('click', () => setPaintMode(false));
+  $('mPaintDone').addEventListener('click', () => { if (!app.previewingInflate) setPaintMode(false); });
   // PC の左のツールボタン(.tool)とは別に結び付ける(同じ data-tool のボタンが2つになるので、クラスは分ける)
   for (const b of document.querySelectorAll<HTMLButtonElement>('#mTools [data-mtool]')) b.addEventListener('click', () => { if (!app.previewingInflate) app.setTool(b.dataset.mtool as Tool); });
   function syncTool(): void {
+    // 画像を開いたときなどに、塗りのツールへ切り替わることがある。スマホでは塗りは「塗って直す」の中だけなので戻す
+    if (mq.matches && root.dataset.mset !== 'paint' && PAINT_TOOLS.includes(app.tool)) { app.setTool(lastMain); return; }
     for (const b of document.querySelectorAll<HTMLButtonElement>('#mTools [data-mtool]')) b.setAttribute('aria-pressed', String(b.dataset.mtool === app.tool));
     if (!PAINT_TOOLS.includes(app.tool)) lastMain = app.tool;
     $('mToolDesc').textContent = TOOL_DESC[app.tool];
