@@ -42,6 +42,28 @@ test('スマホ幅では3Dビューが全面に出て、PC のパネルは隠れ
   // 塗りのツールは「塗って直す」の奥にあるので、最初はつかむ
   await expect(page.locator('#mTools [data-mtool="grab"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#mTools [data-mtool="brush"]')).toBeHidden();
+  await expect(page.locator('#mTools [data-mtool="inflate"]')).toBeHidden();
+  await expect(page.locator('#mTools [data-mtool="pan"]')).toBeVisible();
+});
+
+test('「移動」では1本指で画像を動かし、画像の上でも外でも回転しない', async ({ page }) => {
+  await boot(page);
+  const cdp = await page.context().newCDPSession(page);
+  await page.locator('#mTools [data-mtool="pan"]').click();
+  const cam = () => page.evaluate(() => { const c = (window as any).popstage.project.camera; return { x: c.target.x, y: c.target.y, z: c.target.z, yaw: c.yaw, pitch: c.pitch }; });
+  const before = await weightSum(page), c0 = await cam();
+  const [cx, cy] = await viewCenter(page);
+  await swipe(cdp, [[cx, cy]], [[cx + 80, cy + 40]]);
+  const c1 = await cam();
+  expect(Math.hypot(c1.x - c0.x, c1.y - c0.y, c1.z - c0.z)).toBeGreaterThan(0);
+  expect([c1.yaw, c1.pitch]).toEqual([c0.yaw, c0.pitch]);
+  // 画像の外(上の端)から始めても回転せず、動かす
+  const b = (await page.locator('#view').boundingBox())!;
+  await swipe(cdp, [[cx, b.y + 12]], [[cx - 60, b.y + 40]]);
+  const c2 = await cam();
+  expect(Math.hypot(c2.x - c1.x, c2.y - c1.y, c2.z - c1.z)).toBeGreaterThan(0);
+  expect([c2.yaw, c2.pitch]).toEqual([c0.yaw, c0.pitch]);
+  expect(await weightSum(page)).toBe(before);
 });
 
 test('シートを開くと3Dビューはシートの上に縮み、シートの中身は下のバーに隠れない', async ({ page }) => {
@@ -110,9 +132,11 @@ test('2本指タップで戻し、3本指タップでやり直す', async ({ pag
   expect(await layers()).toBe(2);
 });
 
-test('膨らみで範囲を描くと「ツール」タブで決めて適用できる', async ({ page }) => {
+test('「塗って直す」の膨らみで範囲を描くと「ツール」タブで決めて適用できる', async ({ page }) => {
   await boot(page);
   const cdp = await page.context().newCDPSession(page);
+  await page.locator('[data-mtab="layer"]').click();
+  await page.locator('#mPaintMode').click();
   await page.locator('#mTools [data-mtool="inflate"]').click();
   const before = await weightSum(page);
   const [cx, cy] = await viewCenter(page);
