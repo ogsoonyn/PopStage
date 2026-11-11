@@ -8,6 +8,7 @@ import { bindInflateDialog } from './ui/inflateDialog';
 import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
 import { bindMobileLayout } from './ui/mobile';
+import { FILE_EXTENSION, LEGACY_FILE_EXTENSION } from './storage/popstage';
 import { $, ask, toast, retryWithClick } from './ui/dom';
 import { autosave } from './storage/autosave';
 import { prefs, persistControls } from './storage/prefs';
@@ -84,7 +85,7 @@ async function pickAndOpen(types: FilePickerAcceptType[], fallback: HTMLInputEle
     } catch (e) { if ((e as DOMException).name !== 'AbortError') toast(String(e), 'error'); }
   } else fallback.click();
 }
-const openProjectDialog = () => pickAndOpen([{ description: 'PopStage プロジェクト / 画像', accept: { 'application/zip': ['.popstage'], ...IMAGE_ACCEPT } }], fileProject);
+const openProjectDialog = () => pickAndOpen([{ description: 'PukuPop プロジェクト / 画像', accept: { 'application/zip': [FILE_EXTENSION, LEGACY_FILE_EXTENSION], ...IMAGE_ACCEPT } }], fileProject);
 const openImageDialog = () => pickAndOpen([{ description: '画像', accept: IMAGE_ACCEPT }], fileImage);
 
 /* ---------- コマンド(メニュー・ボタン・ショートカット共通) ---------- */
@@ -118,7 +119,7 @@ const commands: Record<string, { run: () => unknown; enabled?: () => boolean }> 
   layerUp: { run: () => app.moveLayer(1), enabled: () => app.activeIndex >= 0 && app.activeIndex < (app.doc?.layers.length ?? 0) - 1 },
   layerDown: { run: () => app.moveLayer(-1), enabled: () => app.activeIndex > 0 },
   help: { run: () => $<HTMLDialogElement>('helpDialog').showModal() },
-  about: { run: () => { $('aboutVersion').textContent = `バージョン ${__APP_VERSION__} ・ .popstage 形式 v1`; $<HTMLDialogElement>('aboutDialog').showModal(); } },
+  about: { run: () => { $('aboutVersion').textContent = `バージョン ${__APP_VERSION__} ・ .pukupop 形式 v1`; $<HTMLDialogElement>('aboutDialog').showModal(); } },
 };
 
 /** 膨らませるのプレビュー中は、表示の切り替え以外はできない(プレビュー中のウェイトを元に戻すなどしないように) */
@@ -243,7 +244,7 @@ window.addEventListener('drop', e => {
     try { const x = await handle; if (x?.kind === 'file') h = x as FileSystemFileHandle; } catch { /* 場所が取れなければコピーで覚える */ }
     await app.openFile(f, h);
   })();
-  else if (e.dataTransfer?.files.length) toast('PNG / JPEG / WebP の画像か、.popstage ファイルをドロップしてください。', 'warning');
+  else if (e.dataTransfer?.files.length) toast('PNG / JPEG / WebP の画像か、.pukupop ファイルをドロップしてください。', 'warning');
 });
 void wrap;
 
@@ -261,7 +262,7 @@ function refreshStatus(): void {
 function refreshTitle(): void {
   const name = app.fileName ?? app.doc?.name ?? '';
   $('docTitle').textContent = `${app.dirty ? '● ' : ''}${name}`;
-  document.title = `${app.dirty ? '* ' : ''}${name ? name + ' - ' : ''}PopStage`;
+  document.title = `${app.dirty ? '* ' : ''}${name ? name + ' - ' : ''}PukuPop`;
   refreshStatus();
 }
 app.on('status', refreshStatus);

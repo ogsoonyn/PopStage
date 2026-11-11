@@ -1,5 +1,5 @@
 /**
- * .popstage 形式。ZIP の中に project.json、元画像、ウェイトマップ(グレースケールPNG)、サムネイルを入れる。
+ * .pukupop 形式(改名前は .popstage)。ZIP の中に project.json、元画像、ウェイトマップ(グレースケールPNG)、サムネイルを入れる。
  * DOM に依存しない(画像のデコードが必要な場合だけ呼び出し側から関数を渡す)。
  */
 import { unzipSync, strToU8, strFromU8 } from 'fflate';
@@ -12,7 +12,9 @@ import { WeightMap, weightSizeFor } from '../model/weightmap';
 import { encodeGrayPng, decodePngToGray, readPngSize, MAX_PNG_SIDE, type GrayImage } from './png';
 
 export const FORMAT_VERSION = 1;
-export const FILE_EXTENSION = '.popstage';
+export const FILE_EXTENSION = '.pukupop';
+/** 改名前(PopStage)の拡張子。開くときだけ受け付ける */
+export const LEGACY_FILE_EXTENSION = '.popstage';
 
 /** 展開する1ファイルあたりの上限(バイト)。ZIP 爆弾でメモリを使い切らないよう、宣言サイズで弾く */
 export const UNZIP_LIMITS = { json: 16 << 20, image: 256 << 20, weights: 64 << 20, thumbnail: 8 << 20, total: 512 << 20 };
@@ -40,7 +42,8 @@ interface DocumentJson {
 }
 export interface ProjectJson {
   formatVersion: number;
-  app: 'PopStage';
+  /** 書き出したアプリ。改名前のファイルは 'PopStage' */
+  app: 'PukuPop' | 'PopStage';
   savedAt: string;
   /** multiCamera は後から足した項目なので、古いファイルには無い */
   project: Pick<Project, 'background' | 'camera' | 'fps' | 'autoSwing'> & { multiCamera?: Project['multiCamera'] };
@@ -67,7 +70,7 @@ export function migrate(json: Record<string, unknown>): ProjectJson {
 /* ---------- 保存 ---------- */
 
 /**
- * プロジェクトを .popstage のバイト列にする。
+ * プロジェクトを .pukupop のバイト列にする。
  * pngCache を渡すと、レイヤー ID ごとのウェイト PNG を使い回す(ウェイトを変えたら呼び出し側で消すこと)。
  */
 export function serializeProject(project: Project, opts: SerializeOptions = {}): Uint8Array {
@@ -124,7 +127,7 @@ function projectParts(project: Project, opts: SerializeOptions): Uint8Array[] {
     };
   });
   const json: ProjectJson = {
-    formatVersion: FORMAT_VERSION, app: 'PopStage', savedAt: new Date().toISOString(),
+    formatVersion: FORMAT_VERSION, app: 'PukuPop', savedAt: new Date().toISOString(),
     project: { background: project.background, camera: structuredClone(project.camera), multiCamera: structuredClone(project.multiCamera), fps: project.fps, autoSwing: { ...project.autoSwing } },
     documents: docs,
   };
@@ -277,7 +280,7 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
  * 先に宣言サイズだけを調べてから展開するので、上限を超えるファイルのためにメモリを確保することはない。
  */
 function unzipEntries(bytes: Uint8Array, wanted: Map<string, number>, optional = new Map<string, number>()): Record<string, Uint8Array> {
-  const broken = () => new Error('.popstage ファイルを展開できませんでした(壊れているか、形式が違います)');
+  const broken = () => new Error('プロジェクトファイルを展開できませんでした(壊れているか、形式が違います)');
   // 1回目: 展開せず、展開する予定のエントリの宣言サイズを調べる(同じ名前が重なっていてもすべて数える)
   const tooLarge: string[] = [], skip = new Set<string>();
   let total = 0;
@@ -297,8 +300,8 @@ function unzipEntries(bytes: Uint8Array, wanted: Map<string, number>, optional =
       },
     });
   } catch { throw broken(); }
-  if (total > UNZIP_LIMITS.total) throw new Error('.popstage の中身が大きすぎます(展開後の合計が上限を超えています)');
-  if (tooLarge.length) throw new Error(`.popstage の中のファイルが大きすぎます(${tooLarge.join(', ')})`);
+  if (total > UNZIP_LIMITS.total) throw new Error('プロジェクトファイルの中身が大きすぎます(展開後の合計が上限を超えています)');
+  if (tooLarge.length) throw new Error(`プロジェクトファイルの中のファイルが大きすぎます(${tooLarge.join(', ')})`);
   // 2回目: 調べた分だけを展開する
   try {
     return unzipSync(bytes, { filter: f => (wanted.has(f.name) || optional.has(f.name)) && !skip.has(f.name) });

@@ -219,7 +219,7 @@ export class Stage {
     if (!this.partialChecked) {
       this.partialChecked = true;
       if (gl.getError() !== gl.NO_ERROR) {
-        console.warn('PopStage: 部分転送が使えないため、ウェイトは全面転送に切り替えます');
+        console.warn('PukuPop: 部分転送が使えないため、ウェイトは全面転送に切り替えます');
         this.partialBroken = true;
         tex.needsUpdate = true; this.fullUploads++;
         return;
