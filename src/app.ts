@@ -999,7 +999,7 @@ export class App extends Emitter<AppEvents> {
   setKeyOption(i: number, patch: Partial<Pick<KeyFrame, 'seconds' | 'mode'>>): void {
     const k = this.keyDraft[i];
     if (!k) return;
-    if (patch.seconds !== undefined) k.seconds = Math.max(KEY_SECONDS.min, Math.min(KEY_SECONDS.max, patch.seconds));
+    if (patch.seconds !== undefined) k.seconds = Math.max(KEY_SECONDS.min, Math.min(KEY_SECONDS.max, Math.round(patch.seconds * 10) / 10));
     if (patch.mode) k.mode = patch.mode;
     this.emit('take', this.takeState);
   }

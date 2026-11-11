@@ -4,7 +4,7 @@
  */
 import type { App } from '../app';
 import { $ } from './dom';
-import { KEY_SECONDS, MAX_KEYS, takeSeconds, type KeyMode } from '../physics/take';
+import { KEY_SECONDS, MAX_KEYS, TAKE_MIN_SECONDS, takeSeconds, type KeyMode } from '../physics/take';
 
 const sec = (v: number) => `${v.toFixed(1)}秒`;
 
@@ -34,7 +34,13 @@ export function bindTakeControls(app: App): void {
   list.addEventListener('change', e => {
     const el = e.target as HTMLInputElement | HTMLSelectElement, i = rowOf(el);
     if (i < 0) return;
-    if (el.dataset.act === 'sec') app.setKeyOption(i, { seconds: +el.value || KEY_SECONDS.def });
+    if (el.dataset.act === 'sec') {
+      const v = el.value.trim() === '' ? NaN : +el.value;
+      app.setKeyOption(i, { seconds: Number.isFinite(v) ? v : KEY_SECONDS.def });
+      // 丸めた値を入力欄にも戻す(入力中は refresh で書き換えないため)
+      const k = app.keyDraft[i];
+      if (k) el.value = k.seconds.toFixed(1);
+    }
     else if (el.dataset.act === 'mode') app.setKeyOption(i, { mode: el.value as KeyMode });
   });
 
@@ -64,8 +70,9 @@ export function bindTakeControls(app: App): void {
     });
     $('keyCount').textContent = `${keys.length}/${MAX_KEYS}`;
     add.disabled = keys.length >= MAX_KEYS || !app.doc;
-    make.disabled = keys.length < 2 || !app.doc || app.exporting || app.takeState === 'recording';
-    $('keyTotal').textContent = keys.length >= 2 ? `1周 ${sec(keys.reduce((a, k) => a + k.seconds, 0))}` : '2つ以上';
+    const total = keys.reduce((a, k) => a + k.seconds, 0);
+    make.disabled = keys.length < 2 || total < TAKE_MIN_SECONDS - 1e-9 || !app.doc || app.exporting || app.takeState === 'recording';
+    $('keyTotal').textContent = keys.length < 2 ? '2つ以上' : total < TAKE_MIN_SECONDS - 1e-9 ? `1周 ${TAKE_MIN_SECONDS}秒以上` : `1周 ${sec(total)}`;
   }
 
   let shown = '';

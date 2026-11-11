@@ -113,7 +113,8 @@ const channels = (v: ViewKey): number[] => [v.yaw, v.pitch, Math.log(v.zoom), v.
 export function takeFromKeys(input: readonly KeyFrame[], fov: number): Take | null {
   const keys = normalizeKeys(input);
   const n = keys.length;
-  if (n < 2) return null;
+  // 短すぎる動きは保存すると読めないので作らない
+  if (n < 2 || keys.reduce((a, k) => a + k.seconds, 0) < TAKE_MIN_SECONDS - 1e-9) return null;
   const P = keys.map(k => channels(k.view)), D = keys.map(k => k.seconds);
   const total = D.reduce((a, b) => a + b, 0);
   const at = (i: number) => (i + n) % n;

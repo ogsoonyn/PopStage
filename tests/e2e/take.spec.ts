@@ -162,6 +162,7 @@ test('キーフレーム: 視点を追加・登録・見る・削除し、つな
   // 時間とつなぎ方(時間は 5 秒までに丸める)
   await page.locator('#keyList > li').nth(0).locator('[data-act=sec]').fill('9');
   await page.locator('#keyList > li').nth(0).locator('[data-act=sec]').dispatchEvent('change');
+  await expect(page.locator('#keyList > li').nth(0).locator('[data-act=sec]')).toHaveValue('5.0');
   await page.locator('#keyList > li').nth(1).locator('[data-act=sec]').fill('0.5');
   await page.locator('#keyList > li').nth(1).locator('[data-act=sec]').dispatchEvent('change');
   await page.locator('#keyList > li').nth(1).locator('[data-act=mode]').selectOption('bounce');

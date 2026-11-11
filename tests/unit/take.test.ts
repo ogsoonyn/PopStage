@@ -141,6 +141,10 @@ describe('キーフレームから動きを作る', () => {
   it('2つ未満は作らない。範囲外は丸め、上限の数で切り、記録と一緒に保存する', async () => {
     const { takeFromKeys, MAX_KEYS } = await import('../../src/physics/take');
     expect(takeFromKeys([{ view: view(0), seconds: 1, mode: 'smooth' }], 30)).toBeNull();
+    // 1周が記録の最短より短いと、保存して読めないので作らない
+    expect(takeFromKeys([{ view: view(0), seconds: 0.1, mode: 'smooth' }, { view: view(1), seconds: 0.1, mode: 'smooth' }], 30)).toBeNull();
+    const short = takeFromKeys([{ view: view(0), seconds: 0.2, mode: 'smooth' }, { view: view(1), seconds: 0.3, mode: 'bounce' }], 30)!;
+    expect(takeFromJson(JSON.parse(JSON.stringify(takeToJson(short))), 30)?.keys?.length).toBe(2);
     const many = Array.from({ length: 20 }, (_, i) => ({ view: view(i * 0.1), seconds: 99, mode: 'bounce' as const }));
     const t = takeFromKeys(many, 30)!;
     expect(t.keys!.length).toBe(MAX_KEYS); expect(t.keys![0].seconds).toBe(5);
