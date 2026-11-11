@@ -498,6 +498,18 @@ for (const target of ['[data-tool=brush]', '#pPreset']) test(`${target} にフ�
   expect(Math.hypot(after.t.x - before.t.x, after.t.y - before.t.y, after.t.z - before.t.z)).toBeGreaterThan(1);
 });
 
+test('「移動」ツール(H)の左ドラッグは平行移動になり、塗らず回転もしない', async ({ page }) => {
+  await boot(page);
+  await page.locator('.tool[data-tool=pan]').click();
+  const cam = () => page.evaluate(() => { const c = (window as any).popstage.project.camera; return { t: { ...c.target }, yaw: c.yaw, pitch: c.pitch }; });
+  const before = await cam(), sum0 = await weightSum(page);
+  await dragOnStage(page, [0.4, 0.5], [0.6, 0.6]);
+  const after = await cam();
+  expect(await weightSum(page)).toBe(sum0);
+  expect([after.yaw, after.pitch]).toEqual([before.yaw, before.pitch]);
+  expect(Math.hypot(after.t.x - before.t.x, after.t.y - before.t.y, after.t.z - before.t.z)).toBeGreaterThan(1);
+});
+
 test('視点を変えると「未保存」になる。変化の無い一括処理では「未保存」にならない', async ({ page }) => {
   await boot(page);
   const dirty = () => page.evaluate(() => (window as any).popstage.dirty as boolean);
@@ -1534,7 +1546,7 @@ test('ショートカット: 一覧のキーがすべて期待どおりに効く
   await page.locator('#view').focus();
 
   // ツール(ボタンにもキーを出す)
-  for (const [key, tool] of [['b', 'brush'], ['e', 'erase'], ['s', 'smooth'], ['i', 'inflate'], ['g', 'grab'], ['y', 'shake'], ['v', 'view'], ['b', 'brush']]) {
+  for (const [key, tool] of [['b', 'brush'], ['e', 'erase'], ['s', 'smooth'], ['i', 'inflate'], ['g', 'grab'], ['y', 'shake'], ['v', 'view'], ['h', 'pan'], ['b', 'brush']]) {
     await page.keyboard.press(key);
     expect(await app(a => a.tool), key).toBe(tool);
     await expect(page.locator(`.tool[data-tool=${tool}]`)).toHaveAttribute('aria-pressed', 'true');

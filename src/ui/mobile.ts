@@ -2,7 +2,7 @@
  * スマホの画面(幅が狭いとき)。3Dビューを全面に出し、ツールは下のバー、設定は下から引き上げるシートにまとめる。
  * 設定の部品(スライダー・レイヤー一覧・膨らませるのパネルなど)は作り直さず、PC の画面から DOM ごとシートへ移す。
  * イベントの結び付けはそのまま残るので、PC とスマホで同じ処理が動く。幅が戻ったら元の場所へ戻す。
- * ツールは「膨らみ・つかむ・揺らす・視点」を主にし、塗り・消しゴム・ぼかしは「塗って直す」の中に置く。
+ * ツールは「つかむ・揺らす・移動・視点」を主にし、膨らみ・塗り・消しゴム・ぼかしは「塗って直す」の中に置く。
  */
 import type { App, Tool } from '../app';
 import { $ } from './dom';
@@ -14,12 +14,15 @@ export const MOBILE_QUERY = '(max-width: 767px), (max-height: 500px) and (pointe
 type SheetState = 'closed' | 'half' | 'full';
 type Tab = 'motion' | 'tool' | 'layer' | 'view' | 'file';
 
-const PAINT_TOOLS: Tool[] = ['brush', 'erase', 'smooth'];
+/** 「塗って直す」の中で使うツール。ブラシの設定を出すのは塗りの3つだけ */
+const PAINT_TOOLS: Tool[] = ['inflate', 'brush', 'erase', 'smooth'];
+const BRUSH_TOOLS: Tool[] = ['brush', 'erase', 'smooth'];
 const TOOL_DESC: Record<Tool, string> = {
   inflate: '画像の上をドラッグして範囲を描くと、ここで高さや断面を決めて適用できます。2本目の指を置くと描くのをやめます。',
   grab: 'つかむ: 画像を引っぱって離すと揺れます。',
   shake: '揺らす: 指で振ると、画像は動かずに揺れだけが出ます。',
   view: '視点: 画像の上でも1本指で回転します。',
+  pan: '移動: 1本指で画像を動かします。動かした勢いで揺れます。',
   brush: 'ブラシ: なぞった所を持ち上げます。',
   erase: '消しゴム: なぞった所を元に戻します。',
   smooth: 'ぼかし: 塗りの段差をならします。',
@@ -199,7 +202,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     for (const b of document.querySelectorAll<HTMLButtonElement>('#mTools [data-mtool]')) b.setAttribute('aria-pressed', String(b.dataset.mtool === app.tool));
     if (!PAINT_TOOLS.includes(app.tool)) lastMain = app.tool;
     $('mToolDesc').textContent = TOOL_DESC[app.tool];
-    $('mBrushOpts').hidden = !PAINT_TOOLS.includes(app.tool);
+    $('mBrushOpts').hidden = !BRUSH_TOOLS.includes(app.tool);
   }
   app.on('tool', syncTool);
 

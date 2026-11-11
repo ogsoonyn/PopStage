@@ -1,6 +1,6 @@
 /**
  * 3Dビュー上のポインタ操作。
- *   右ドラッグ: 回転 / 中ドラッグ・Space+左ドラッグ: 平行移動 / ホイール: ズーム
+ *   右ドラッグ: 回転 / 中ドラッグ・Space+左ドラッグ・「移動」の左ドラッグ: 平行移動 / ホイール: ズーム
  *   (平行移動で画像が画面上を動くと、塗った部分がその勢いで揺れる。physics/world.ts)
  *   左ドラッグ: 選択中のツール(ブラシ中に Alt で一時的に消しゴム。膨らませるでは範囲を描き、Shift で正円・正方形)
  *   「揺らす」の左ドラッグ: カメラを画像に付けたまま振る。画面上は動かず、平行移動と同じ揺れだけが出る
@@ -40,7 +40,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
       : drag.mode === 'orbit' ? 'grabbing'
       : app.tool === 'grab' || app.tool === 'shake' ? (drag.mode === 'grab' || drag.mode === 'shake' ? 'grabbing' : 'grab')
       // ブラシの円は画像の上にしか描けないので、画像の外では十字のカーソルを出して見失わないようにする
-      : app.tool === 'view' ? 'move' : showBrush && hover?.inside ? 'none' : 'crosshair';
+      : app.tool === 'view' || app.tool === 'pan' ? 'move' : showBrush && hover?.inside ? 'none' : 'crosshair';
   };
   app.on('tool', updateCursor);
 
@@ -144,9 +144,9 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     drag.id = e.pointerId; drag.lx = drag.sx = e.clientX; drag.ly = drag.sy = e.clientY;
     alt = e.altKey;
     // 指では、画像の外をなぞると回転する(右ドラッグの代わり)
-    const outside = e.pointerType === 'touch' && !app.stage.pick(e.clientX, e.clientY)?.inside;
+    const outside = e.pointerType === 'touch' && app.tool !== 'pan' && !app.stage.pick(e.clientX, e.clientY)?.inside;
     if (e.button === 2 || (e.button === 0 && (app.tool === 'view' || outside) && !space)) drag.mode = 'orbit';
-    else if (e.button === 1 || (e.button === 0 && space)) { drag.mode = 'pan'; e.preventDefault(); }
+    else if (e.button === 1 || (e.button === 0 && (space || app.tool === 'pan'))) { drag.mode = 'pan'; e.preventDefault(); }
     // 振る向きは主ビューの画面の向きで決まるので、主ビューの中から始めたときだけ振る
     else if (e.button === 0 && app.tool === 'shake') { if (app.stage.inMainView(e.clientX, e.clientY)) drag.mode = 'shake'; }
     else if (e.button === 0 && app.tool === 'grab') startGrab(e);
@@ -155,7 +155,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
       const p = app.stage.pick(e.clientX, e.clientY);
       if (p && app.beginStroke(paintMode(), p.x, p.y, pressureOf(e))) { drag.mode = 'paint'; app.holdImage(true); }
     }
-    if (tap && e.pointerType === 'touch') tap.orbit = drag.mode === 'orbit';
+    // 画像の外のダブルタップで視点を戻すのに使う(「移動」では画像の外も平行移動だが、ダブルタップは同じく効かせる)
+    if (tap && e.pointerType === 'touch') tap.orbit = drag.mode === 'orbit' || (app.tool === 'pan' && !app.stage.pick(e.clientX, e.clientY)?.inside);
     updateCursor();
   });
 
