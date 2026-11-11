@@ -2,6 +2,7 @@
 import type { Command } from './history';
 import type { Store, Layer, Document, Project } from '../model/project';
 import { WeightMap, TILE, type Rect } from '../model/weightmap';
+import type { Take } from '../physics/take';
 
 const OBJ_BYTES = 256;
 
@@ -52,6 +53,18 @@ export class PatchProject implements Command {
   }
   apply(store: Store): void { store.patchProject(deepCopy(this.after)); }
   revert(store: Store): void { store.patchProject(deepCopy(this.before)); }
+}
+
+/**
+ * 操作の記録の差し替え(新しく記録した・消した)。記録は作ったあと書き換えないので、コピーせずに持つ。
+ */
+export class SetTake implements Command {
+  readonly bytes: number;
+  constructor(readonly label: string, private before: Take | null, private after: Take | null) {
+    this.bytes = OBJ_BYTES + ((before?.samples.length ?? 0) + (after?.samples.length ?? 0)) * 200;
+  }
+  apply(store: Store): void { store.patchProject({ take: this.after }); }
+  revert(store: Store): void { store.patchProject({ take: this.before }); }
 }
 
 /**

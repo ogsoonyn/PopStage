@@ -4,6 +4,7 @@
  */
 import { Emitter } from '../util/emitter';
 import { WeightMap, weightSizeFor, type Rect } from './weightmap';
+import type { Take } from '../physics/take';
 
 export interface Vec3 { x: number; y: number; z: number }
 
@@ -192,6 +193,8 @@ export interface Project {
   multiCamera: CameraState;
   fps: number;
   autoSwing: AutoSwing;
+  /** 操作の記録(ループ再生・書き出し用)。無ければ null */
+  take: Take | null;
   documents: Document[];
 }
 
@@ -309,6 +312,7 @@ export function createProject(doc?: Document): Project {
     multiCamera: defaultMultiCamera(),
     fps: 60,
     autoSwing: { enabled: true, period: LIMITS.period.def, strength: 0.5 },
+    take: null,
     documents: doc ? [doc] : [],
   };
 }
