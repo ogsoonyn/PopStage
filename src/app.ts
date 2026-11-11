@@ -77,7 +77,7 @@ export interface PerfProbe {
   event(e: { t: number; d: number; kind: string; detail?: string }): void;
 }
 
-const PROJECT_TYPES: FilePickerAcceptType[] = [{ description: 'PopStage プロジェクト', accept: { 'application/zip': [FILE_EXTENSION] } }];
+const PROJECT_TYPES: FilePickerAcceptType[] = [{ description: 'PukuPop プロジェクト', accept: { 'application/zip': [FILE_EXTENSION] } }];
 const AUTOSAVE_DELAY = 2000;
 
 export class App extends Emitter<AppEvents> {
@@ -362,7 +362,7 @@ export class App extends Emitter<AppEvents> {
       if (!confirmed && !(await this.confirmDiscard())) return;
       if (await this.openImage(file)) void this.remember('image', file.name, file.size, handle, async () => new Uint8Array(await file.arrayBuffer()));
     } else {
-      toast('PNG / JPEG / WebP の画像か、.popstage ファイルを選んでください。', 'warning');
+      toast('PNG / JPEG / WebP の画像か、.pukupop ファイルを選んでください。', 'warning');
     }
   }
 
