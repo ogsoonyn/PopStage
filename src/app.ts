@@ -984,8 +984,7 @@ export class App extends Emitter<AppEvents> {
   /** スタートとエンドの間を動く記録を作り(今の記録と入れ替え、アンドゥできる)、ループ再生する */
   makePathTake(): void {
     const d = this.pathDraft;
-    if (!d.start || !d.end || !this.doc) return;
-    if (this.takeState === 'recording') this.stopRecording();
+    if (!d.start || !d.end || !this.doc || this.takeState === 'recording') return;
     const take = takeFromPath({ start: d.start, end: d.end, seconds: d.seconds, ease: d.ease, repeat: d.repeat }, this.project.camera.fov);
     this.history.execute(new SetTake('スタートとエンドから動きを作る', this.project.take, take));
     this.playTake();

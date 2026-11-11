@@ -36,8 +36,10 @@ export function bindTakeControls(app: App): void {
     $<HTMLButtonElement>('pathGoEnd').disabled = !d.end;
     if (document.activeElement !== sec) sec.value = String(Math.round(d.seconds * 10));
     secO.textContent = `${d.seconds.toFixed(1)}秒`;
-    easeSel.value = d.ease; repeatSel.value = d.repeat;
-    make.disabled = !ready || !app.doc || app.exporting;
+    // 開いている選択肢を何度も書き換えないよう、違うときだけ入れる
+    if (easeSel.value !== d.ease) easeSel.value = d.ease;
+    if (repeatSel.value !== d.repeat) repeatSel.value = d.repeat;
+    make.disabled = !ready || !app.doc || app.exporting || app.takeState === 'recording';
     const loop = d.repeat === 'pingpong' ? d.seconds * 2 : d.seconds;
     pathInfo.textContent = ready ? `1周 ${loop.toFixed(1)} 秒。作ると今の記録と入れ替わります(元に戻せます)。`
       : 'スタートとエンドに視点を決めてください。視点を回す・ズームする・画像を動かしてから「今の視点にする」を押します。';
