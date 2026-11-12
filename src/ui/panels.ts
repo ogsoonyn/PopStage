@@ -265,6 +265,8 @@ export function bindPanels(app: App): { refresh: () => void } {
   let anchor: string | null = null;
   /** スマホの選択モード(長押しで入る)。入っている間は、タップで足す・外す */
   let selectMode = false;
+  /** 一覧のクリックで選び直している間(選択モードを抜けるかの判定用) */
+  let fromList = false;
 
   function renderList(): void {
     const doc = app.doc;
@@ -323,12 +325,19 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   /** 一覧の下から順の id(Shift の範囲選択用) */
   const order = () => app.doc?.layers.map(l => l.id) ?? [];
+  /** 範囲の起点。選択の中に無い(一覧の外で選び直した・消えた)ときは、最後に押したレイヤー */
+  const rangeAnchor = () => (anchor && app.selectedLayerIds.has(anchor) && order().includes(anchor) ? anchor : app.activeLayerId!);
 
   /** クリック: そのレイヤーだけ。Ctrl(⌘): 足す・外す。Shift: 起点からの範囲。選択モードではタップで足す・外す */
   function onRowClick(id: string, e: MouseEvent): void {
+    fromList = true;
+    try { rowClick(id, e); } finally { fromList = false; }
+  }
+  function rowClick(id: string, e: MouseEvent): void {
     if (pressed === id) { pressed = null; return; } // 長押しで選択モードに入った直後のクリックは無視する
     const ids = app.selectedLayerIds;
-    if (e.shiftKey && anchor && order().includes(anchor)) {
+    if (e.shiftKey) {
+      const anchor = rangeAnchor();
       const o = order(), a = o.indexOf(anchor), b = o.indexOf(id);
       app.selectLayers(o.slice(Math.min(a, b), Math.max(a, b) + 1), id);
       return;
@@ -350,6 +359,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     let start: { x: number; y: number } | null = null;
     const cancel = () => { clearTimeout(pressTimer); start = null; };
     li.addEventListener('pointerdown', e => {
+      pressed = null; // 長押しのあとにクリックが来なかったときに、次のタップを無視しない
       if (e.pointerType !== 'touch') return;
       start = { x: e.clientX, y: e.clientY };
       clearTimeout(pressTimer);
@@ -381,15 +391,16 @@ export function bindPanels(app: App): { refresh: () => void } {
     e.preventDefault(); e.stopPropagation();
     const next = items[Math.max(0, Math.min(items.length - 1, j))], id = next.dataset.id;
     if (id && e.shiftKey) {
-      anchor ??= app.activeLayerId;
-      const o = order(), a = o.indexOf(anchor!), b = o.indexOf(id);
+      const anchor = rangeAnchor();
+      const o = order(), a = o.indexOf(anchor), b = o.indexOf(id);
       app.selectLayers(o.slice(Math.min(a, b), Math.max(a, b) + 1), id);
     } else if (id) { anchor = id; if (id !== app.activeLayerId || app.multiSelected) app.setActiveLayer(id); }
     next.focus();
   });
 
-  ui.layerSelAll.addEventListener('click', () => app.selectAllLayers());
-  ui.layerSelOne.addEventListener('click', () => { selectMode = false; if (app.activeLayerId) app.setActiveLayer(app.activeLayerId); });
+  // プレビュー中(膨らみ・全体ぼかし)は、仮のレイヤーやぼかし中のレイヤーの選択を変えない
+  ui.layerSelAll.addEventListener('click', () => { if (!app.previewing) app.selectAllLayers(); });
+  ui.layerSelOne.addEventListener('click', () => { if (app.previewing) return; selectMode = false; if (app.activeLayerId) app.setActiveLayer(app.activeLayerId); });
   ui.layerSelDone.addEventListener('click', () => { selectMode = false; updateSelection(); });
 
   function updateSelection(): void {
@@ -464,7 +475,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     // レイヤー一覧も、仮に入れたレイヤーの名前や表示を変えて記録しないよう、操作できなくする
     if (app.previewingInflate) ui.pPop.disabled = ui.pPopN.disabled = true;
     // 全体ぼかしのプレビュー中も、ぼかしているレイヤーを切り替えたり消したりしないよう、一覧は操作できなくする
-    list.inert = app.previewing;
+    list.inert = ui.layerSelBar.inert = app.previewing;
     list.classList.toggle('opacity-60', app.previewing);
     const ls = app.selectedLayers;
     // 複数のときは「最後に押したレイヤー ほか N 枚」。ほかの名前は title で見せる
@@ -520,10 +531,18 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   store.on('replace', () => { renderList(); refresh(); });
   store.on('layers', () => { renderList(); refresh(); });
-  store.on('layer', ({ keys }) => { if (keys.some(k => k === 'name' || k === 'visible' || k === 'pop' || k === 'blend')) renderList(); refresh(); });
+  // 複数のレイヤーを一度に変えると1枚ごとに届くので、一覧の作り直しは次の描画の前に1回にまとめる
+  let listQueued = false;
+  const queueList = () => {
+    if (listQueued) return;
+    listQueued = true;
+    requestAnimationFrame(() => { listQueued = false; renderList(); });
+  };
+  store.on('layer', ({ keys }) => { if (keys.some(k => k === 'name' || k === 'visible' || k === 'pop' || k === 'blend')) queueList(); refresh(); });
   store.on('document', refresh);
   store.on('project', refresh);
-  app.on('active', () => { if (!app.multiSelected) selectMode = false; updateSelection(); refresh(); });
+  // 一覧の外(新規・削除・ファイルの読み込みなど)で1枚を選び直したときは、選択モードを抜ける。一覧のタップで減ったときは抜けない
+  app.on('active', () => { if (!fromList && !app.multiSelected) selectMode = false; updateSelection(); refresh(); });
   app.on('view', refresh);
   app.on('inflate', refresh); // プレビュー中はポップ量を触らせない
   app.on('blur', refresh);

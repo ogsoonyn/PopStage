@@ -994,7 +994,7 @@ export class App extends Emitter<AppEvents> {
     if (others && this.project.autoSwing.period !== pr.period) {
       toast(`ほかにも揺れているレイヤーがあるので、自動揺らしの周期は変えていません(このプリセットのおすすめは ${pr.period.toFixed(1)} 秒。「アニメーション」タブで変えられます)。`, 'info', 6000);
     } else if (!this.project.autoSwing.enabled) toast('「自動で揺らす」がオフなので、自動では動きません。「つかむ」「揺らす」で揺らすか、自動揺らしをオンにしてください。', 'info', 5000);
-    else if (ls.every(l => !l.physics.enabled)) toast(`${self}は「揺れ」がオフです。`, 'info');
+    else if (this.selectedLayers.every(l => !l.physics.enabled)) toast(`${self}は「揺れ」がオフです。`, 'info');
   }
 
   /* ---------- お気に入り(揺れと動きの組み合わせ。右パネル・メニュー・左のツールバー・キーのどこからも、ここを通す) ---------- */

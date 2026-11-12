@@ -151,12 +151,13 @@ export const layerColor = (index: number): string => LAYER_COLORS[((index % LAYE
 
 /**
  * 複数のレイヤーのポップ量を、比率を保ったまま伸び縮みさせる。基準は一番高いレイヤーで、それが target になる。
- * 0 のレイヤーは 0 のまま。全部 0 のときだけ、全部を target に揃える。target は呼び出し側で上限に収めておく
+ * 0 のレイヤーは 0 のまま、0 より大きいレイヤーは 1 より小さくしない。全部 0 のときだけ、全部を target に揃える。target は呼び出し側で上限に収めておく
  */
 export function scalePops(start: readonly number[], target: number): number[] {
   const top = Math.max(0, ...start);
   if (top === 0) return start.map(() => target);
-  return start.map(p => Math.round(p * target / top));
+  // 0 より大きいレイヤーは、丸めで 0 にしない(0 は「伸び縮みしない」なので、一度 0 になると戻らなくなる)
+  return start.map(p => p > 0 && target > 0 ? Math.max(1, Math.round(p * target / top)) : Math.round(p * target / top));
 }
 
 export interface Layer {

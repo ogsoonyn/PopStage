@@ -181,6 +181,11 @@ test('スマホ: 長押しで選択モードに入り、タップで足す・外
   expect(await selected(page)).toEqual(['A', 'B', 'C']);
   await row(page, 'A').click();
   expect(await selected(page)).toEqual(['B', 'C']);
+  // 1枚に減っても選択モードのまま(次のタップで置き換えない)
+  await row(page, 'C').click();
+  await expect(page.locator('#layerSelText')).toHaveText('選択モード: 1枚');
+  await row(page, 'C').click();
+  expect(await selected(page)).toEqual(['B', 'C']);
   await page.locator('#layerSelDone').click();
   await expect(page.locator('#layerSelDone')).toBeHidden();
   await row(page, 'B').click();

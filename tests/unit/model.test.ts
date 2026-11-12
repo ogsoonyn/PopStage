@@ -205,6 +205,10 @@ describe('複数のレイヤーのポップ量', () => {
     expect(scalePops([0, 120], 240)).toEqual([0, 240]);
     expect(scalePops([0, 0], 80)).toEqual([80, 80]);
   });
+  it('小さいレイヤーは丸めで 0 にしない', () => {
+    expect(scalePops([1500, 5], 100)).toEqual([100, 1]);
+    expect(scalePops([1500, 5], 0)).toEqual([0, 0]);
+  });
   it('1枚だけなら、その値になる', () => {
     expect(scalePops([300], 1500)).toEqual([1500]);
   });

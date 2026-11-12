@@ -300,7 +300,12 @@ export function bindActions(app: App, deps: ActionDeps): void {
     // 重ね表示は3つの状態なので、メニューには今の状態を書き、左のツールバーには全レイヤーのときだけ印を付ける
     const mode = app.overlayMode;
     for (const el of checks) setText(el, el.dataset.check === 'overlay' ? (mode === 'off' ? '' : mode === 'all' ? '全レイヤー' : '選択中') : on[el.dataset.check as ViewCheck] ? '✓' : '');
-    for (const el of overlayBadges) el.hidden = mode !== 'all';
+    for (const el of overlayBadges) {
+      el.hidden = mode !== 'all';
+      // 読み上げでも3つの状態を区別できるようにする
+      const b = el.parentElement!, name = mode === 'all' ? 'ウェイトの重ね表示(全レイヤー)' : 'ウェイトの重ね表示';
+      if (b.getAttribute('aria-label') !== name) b.setAttribute('aria-label', name);
+    }
     for (const el of pressables) {
       const v = String(on[el.dataset.pressed as ViewCheck]);
       if (el.getAttribute('aria-pressed') !== v) el.setAttribute('aria-pressed', v);
