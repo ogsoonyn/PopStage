@@ -18,8 +18,8 @@ beforeEach(() => {
 afterEach(() => { delete (globalThis as any).requestAnimationFrame; });
 
 const target = (z = 1, min = 0.05, max = 10) => {
-  const s = { z, writes: [] as number[] };
-  const zoom = smoothZoom({ get: () => s.z, set: v => { s.z = v; s.writes.push(v); }, min, max });
+  const s = { z, writes: [] as number[], owner: {} as object };
+  const zoom = smoothZoom({ get: () => s.z, set: v => { s.z = v; s.writes.push(v); }, owner: () => s.owner, min, max });
   return { s, zoom };
 };
 
@@ -46,11 +46,24 @@ describe('ホイールのズームをなめらかにする(ui/smoothZoom.ts)', (
     expect(s.z).toBeCloseTo(Math.exp(0.4), 10);
   });
 
+  it('途中で逆向きに回すと、目標から戻す', () => {
+    const { s, zoom } = target();
+    zoom.add(0.3);
+    run(3);
+    zoom.add(-0.5);
+    run(60);
+    expect(s.z).toBeCloseTo(Math.exp(-0.2), 10);
+  });
+
   it('上限・下限で止まる', () => {
     const { s, zoom } = target(9);
     zoom.add(1);
     run(60);
     expect(s.z).toBe(10);
+    const low = target(0.06);
+    low.zoom.add(-1);
+    run(60);
+    expect(low.s.z).toBe(0.05);
   });
 
   it('寄せている途中でほかの操作が拡大率を変えたら、寄せるのをやめる', () => {
@@ -66,9 +79,17 @@ describe('ホイールのズームをなめらかにする(ui/smoothZoom.ts)', (
     expect(s.z).toBeCloseTo(Math.exp(0.1), 10);
   });
 
+  it('最初のフレームより前に、ほかの操作がオブジェクトごと差し替えて同じ値を書いても、寄せるのをやめる', () => {
+    const { s, zoom } = target();
+    zoom.add(0.5);
+    s.owner = {}; s.z = 1; // ホイールの直後に視点のリセットや読み込みで、拡大率 1 の視点に差し替わった
+    run(30);
+    expect(s.z).toBe(1);
+  });
+
   it('倍率で書く図で丸めの誤差が出ても、途中で止まらない', () => {
-    const s = { z: 1 };
-    const zoom = smoothZoom({ get: () => s.z, set: (_v, f) => { s.z = s.z * f * (1 + 1e-14); }, min: 0.5, max: 20 });
+    const s = { z: 1 }, owner = {};
+    const zoom = smoothZoom({ get: () => s.z, set: (_v, f) => { s.z = s.z * f * (1 + 1e-14); }, owner: () => owner, min: 0.5, max: 20 });
     zoom.add(0.3);
     run(60);
     expect(s.z).toBeCloseTo(Math.exp(0.3), 6);

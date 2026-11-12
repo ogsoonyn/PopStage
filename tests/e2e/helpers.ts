@@ -58,11 +58,14 @@ export const watchSwingX = (page: Page, ms: number) => page.evaluate(ms => new P
   tick();
 }), ms);
 
-/** 値が動かなくなるまで待って返す(ホイールのズームは目標へなめらかに寄せるので、止まってから測る) */
-export async function settled<T>(read: () => Promise<T>): Promise<T> {
+/**
+ * ホイールのズームが目標に着くまで待って、値を返す。寄せている間は毎フレーム値が変わるので、
+ * 2フレーム進めても変わらなければ着いたとみなす(時間で待つと、描画が遅いときに途中の値を拾う)
+ */
+export async function settled(page: Page, read: () => Promise<number>): Promise<number> {
   let prev = await read();
-  for (let i = 0; i < 50; i++) {
-    await new Promise(r => setTimeout(r, 100));
+  for (let i = 0; i < 100; i++) {
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     const v = await read();
     if (v === prev) return v;
     prev = v;

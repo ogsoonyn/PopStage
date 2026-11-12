@@ -10,7 +10,7 @@ import type { App } from '../app';
 import { defaultMultiCamera, defaultOrthoView } from '../model/project';
 import { ORTHO_ZOOM, type SubViewKind, type ViewRect } from '../stage/stage';
 import { ui } from './ids';
-import { fineFactor, wheelFineFactor, wheelDelta } from './fine';
+import { fineFactor, wheelFineFactor, wheelDelta, isPinchWheel } from './fine';
 import { smoothZoom } from './smoothZoom';
 
 export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: () => void } {
@@ -89,24 +89,24 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
       cam.pitch = Math.max(-1.45, Math.min(1.45, cam.pitch + dy * 0.01));
     });
   free.addEventListener('dblclick', () => { app.multiCam = defaultMultiCamera(); app.cameraChanged(); });
-  // ホイールのズームは、主ビューと同じく目標へなめらかに寄せる(ui/smoothZoom.ts)
-  const freeZoom = smoothZoom({
-    get: () => app.multiCam.zoom,
-    set: z => { app.multiCam.zoom = z; app.cameraChanged(); },
-    min: 0.2, max: 10,
-  });
+  // ホイールのズームは、主ビューと同じく目標へなめらかに寄せる(ui/smoothZoom.ts)。タッチパッドのピンチはその場で変える
+  const setFreeZoom = (z: number) => { app.multiCam.zoom = z; app.cameraChanged(); };
+  const freeZoom = smoothZoom({ get: () => app.multiCam.zoom, set: setFreeZoom, owner: () => app.multiCam, min: 0.2, max: 10 });
   free.addEventListener('wheel', e => {
     e.preventDefault();
-    freeZoom.add(wheelDelta(e) * 0.0012 * wheelFineFactor(e));
+    const d = wheelDelta(e) * 0.0012 * wheelFineFactor(e);
+    if (isPinchWheel(e)) setFreeZoom(Math.max(0.2, Math.min(10, app.multiCam.zoom * Math.exp(d))));
+    else freeZoom.add(d);
   }, { passive: false });
 
   // 正面・右から・下から: ドラッグで平行移動、ホイールでポインタの位置を中心にズーム、ダブルクリックで戻す。
   // 拡大率と平行移動は3つの図で共有する(縮尺と位置の対応がそろったままになる)。
-  // ズームはなめらかに寄せ、寄せる途中も最後にホイールを回した図とポインタの位置を中心にする
+  // ズームはなめらかに寄せ(タッチパッドのピンチはその場で変える)、寄せる途中も最後にホイールを回した図とポインタの位置を中心にする
   let orthoAt: { kind: Exclude<SubViewKind, 'free'>; x: number; y: number } = { kind: 'front', x: 0, y: 0 };
   const orthoZoom = smoothZoom({
     get: () => app.multiOrtho.zoom,
     set: (_z, factor) => app.stage.zoomOrtho(app.multiOrtho, orthoAt.kind, factor, orthoAt.x, orthoAt.y),
+    owner: () => app.multiOrtho,
     min: ORTHO_ZOOM.min, max: ORTHO_ZOOM.max,
   });
   for (const el of cells) {
@@ -120,7 +120,9 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
       e.preventDefault();
       const r = el.getBoundingClientRect();
       orthoAt = { kind, x: e.clientX - (r.left + r.width / 2), y: e.clientY - (r.top + r.height / 2) };
-      orthoZoom.add(-wheelDelta(e) * 0.0012 * wheelFineFactor(e));
+      const d = -wheelDelta(e) * 0.0012 * wheelFineFactor(e);
+      if (isPinchWheel(e)) app.stage.zoomOrtho(app.multiOrtho, kind, Math.exp(d), orthoAt.x, orthoAt.y);
+      else orthoZoom.add(d);
     }, { passive: false });
   }
 
