@@ -26,12 +26,18 @@ export function captureFavorite(
 
 export const copyPhysics = (p: PhysicsParams): PhysicsParams => ({ ...p, motionParams: { ...p.motionParams } });
 
-/** 揺れの設定が同じか(揺らし方の固有設定は、キーの並びによらず比べる) */
+/** 2つの平たいオブジェクトの値がすべて同じか(キーの並びによらない) */
+function sameFlat(a: object, b: object, skip?: string): boolean {
+  const ka = Object.keys(a).filter(k => k !== skip), kb = Object.keys(b).filter(k => k !== skip);
+  return ka.length === kb.length && ka.every(k => Object.prototype.hasOwnProperty.call(b, k) && (a as Record<string, unknown>)[k] === (b as Record<string, unknown>)[k]);
+}
+
+/**
+ * 揺れの設定が同じか。項目を足しても比べ忘れないよう、項目を並べずにすべてのキーを比べる
+ * (比べ忘れると、適用で「同じ」と見なしてその項目だけ戻らなくなる)。揺らし方の固有設定は中まで比べる
+ */
 export function samePhysics(a: PhysicsParams, b: PhysicsParams): boolean {
-  if (a.enabled !== b.enabled || a.preset !== b.preset || a.hardness !== b.hardness || a.mass !== b.mass
-    || a.weight !== b.weight || a.damping !== b.damping || a.motion !== b.motion) return false;
-  const ka = Object.keys(a.motionParams), kb = Object.keys(b.motionParams);
-  return ka.length === kb.length && ka.every(k => Object.prototype.hasOwnProperty.call(b.motionParams, k) && a.motionParams[k] === b.motionParams[k]);
+  return sameFlat(a, b, 'motionParams') && sameFlat(a.motionParams, b.motionParams);
 }
 
 /** レイヤーの設定がお気に入りと同じか */

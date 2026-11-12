@@ -102,13 +102,60 @@ test('お気に入り: 記録を再生しているときに残すと、適用で
   await expect(page.locator('#favAdd')).toBeEnabled();
 });
 
+test('お気に入り: 画角と視点を両方変えても適用で戻る。アンドゥで画角・自動揺らしは戻り、視点は戻らない', async ({ page }) => {
+  await boot(page);
+  await openTab(page, 'anim');
+  const saved = await app(page, a => {
+    Object.assign(a.project.camera, { fov: 30, yaw: 0.3, pitch: 0.2, zoom: 1.5, target: { x: 20, y: 0, z: 0 } });
+    a.addFavorite();
+    const c = a.project.camera;
+    return { fov: c.fov, yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, x: c.target.x, period: a.project.autoSwing.period };
+  });
+  const changed = await app(page, a => {
+    a.store.patchProject({ camera: { ...a.project.camera, fov: 60, yaw: -1, pitch: -0.3, zoom: 3, target: { x: -50, y: 0, z: 0 } } });
+    a.store.patchProject({ autoSwing: { ...a.project.autoSwing, period: 4 } });
+    const c = a.project.camera;
+    return { fov: c.fov, yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, x: c.target.x, period: a.project.autoSwing.period };
+  });
+  await rows(page).first().locator('[data-act=apply]').click();
+  expect(await app(page, a => ({ ...((c: any) => ({ fov: c.fov, yaw: c.yaw, pitch: c.pitch, zoom: c.zoom, x: c.target.x }))(a.project.camera), period: a.project.autoSwing.period }))).toEqual(saved);
+  // アンドゥ: 画角と自動揺らしは変える前に戻り、視点は適用したまま
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+z');
+  const undone = await app(page, a => { const c = a.project.camera; return { fov: c.fov, yaw: c.yaw, period: a.project.autoSwing.period }; });
+  expect(undone).toEqual({ fov: changed.fov, yaw: saved.yaw, period: changed.period });
+  // リドゥで適用し直せる
+  await page.keyboard.press('Control+Shift+z');
+  expect(await app(page, a => [a.project.camera.fov, a.project.autoSwing.period])).toEqual([saved.fov, saved.period]);
+});
+
+test('お気に入り: 残したあとに消したレイヤーは飛ばして適用し、知らせる。プレビュー中は使えない', async ({ page }) => {
+  await boot(page);
+  await openTab(page, 'anim');
+  // 足したレイヤー(選択中)ごと残してから、そのレイヤーを消す
+  const pop0 = await app(page, a => { a.addLayer(); a.addFavorite(); return a.doc.layers[0].pop; });
+  await app(page, a => { a.store.patchLayer(a.doc.layers[0].id, { pop: 321 }); a.deleteLayer(); });
+  expect(await app(page, a => a.doc.layers.length)).toBe(1);
+  await expect(rows(page).first()).toHaveAttribute('aria-current', 'false');
+  await rows(page).first().locator('[data-act=apply]').click();
+  await expect(page.locator('#toasts')).toContainText('1 枚は、もう無いので飛ばしました');
+  expect(await app(page, a => a.doc.layers[0].pop)).toBe(pop0);
+
+  // 全体ぼかしのプレビュー中は、残す・適用・名前の変更ができない
+  await app(page, a => a.beginBlurPreview());
+  await expect(page.locator('#favAdd')).toBeDisabled();
+  await expect(page.locator('#toolNav [data-cmd=addFavorite]')).toBeDisabled();
+  await expect(rows(page).first().locator('[data-act=apply]')).toBeDisabled();
+  await expect(rows(page).first().locator('[data-act=name]')).toBeDisabled();
+  await app(page, a => a.endBlurPreview(false, 0));
+  await expect(page.locator('#favAdd')).toBeEnabled();
+  await expect(rows(page).first().locator('[data-act=apply]')).toBeEnabled();
+});
+
 test('お気に入り: 保存したファイルを開き直しても残っている', async ({ page }) => {
   await boot(page);
   await app(page, a => { a.addFavorite(); a.addFavorite(); a.renameFavorite(a.project.favorites[1].id, 'ふたつめ'); });
-  await app(page, async a => {
-    const { serializeProject } = await import('/src/storage/popstage.ts');
-    await a.openProjectBytes(serializeProject(a.project), 'x.pukupop', null);
-  });
+  await app(page, a => a.openProjectBytes(a.serialize(), 'x.pukupop', null));
   await openTab(page, 'anim');
   await expect(rows(page)).toHaveCount(2);
   await expect(rows(page).nth(1).locator('[data-act=name]')).toHaveValue('ふたつめ');

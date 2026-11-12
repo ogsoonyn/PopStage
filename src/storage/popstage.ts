@@ -21,6 +21,11 @@ export const LEGACY_FILE_EXTENSION = '.popstage';
 
 /** 展開する1ファイルあたりの上限(バイト)。ZIP 爆弾でメモリを使い切らないよう、宣言サイズで弾く */
 export const UNZIP_LIMITS = { json: 16 << 20, take: 16 << 20, image: 256 << 20, weights: 64 << 20, thumbnail: 8 << 20, total: 512 << 20 };
+/**
+ * お気に入りが持つ記録1つの上限(バイト)。最長 60 秒の記録でも 1.2MB ほどなので、余裕を見てこの大きさにする
+ * (最大 30 件あるので、今の記録と同じ上限にすると、細工したファイルで合計の上限を使い切れてしまう)
+ */
+export const FAVORITE_TAKE_LIMIT = 4 << 20;
 
 /** 読み込むドキュメント数の上限(アプリが使うのは先頭だけだが、形式としては複数持てる) */
 const MAX_DOCUMENTS = 8;
@@ -35,6 +40,8 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 export const TAKE_PATH = 'motion/take.json';
 /** お気に入りだけが持つ記録を入れるファイル(今の記録と同じものは TAKE_PATH を指す) */
 const favoriteTakePath = (i: number) => `motion/favorite-${i}.json`;
+/** お気に入りの記録として読んでよいパス(ほかのファイルの名前や上限を横取りさせない) */
+const isFavoriteTakePath = (v: unknown): v is string => typeof v === 'string' && (v === TAKE_PATH || /^motion\/favorite-\d{1,3}\.json$/.test(v));
 /** 記録は作ったあと書き換えないので、自動保存のたびに JSON を作り直さないよう記録ごとに1回だけ作る */
 const takeBytes = new WeakMap<Take, Uint8Array>();
 
@@ -241,7 +248,7 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
   const favsJson = (Array.isArray(json.project?.favorites) ? json.project.favorites : []).filter(isObj<FavoriteJson>).slice(0, LIMITS.favorites);
   // サムネイル・記録は読み込みに要らないので、大きすぎるときは黙って捨てる
   const optional = new Map([['thumbnail.png', UNZIP_LIMITS.thumbnail], [TAKE_PATH, UNZIP_LIMITS.take]]);
-  for (const fj of favsJson) if (typeof fj.take === 'string' && !wanted.has(fj.take)) optional.set(fj.take, UNZIP_LIMITS.take);
+  for (const fj of favsJson) if (isFavoriteTakePath(fj.take) && !optional.has(fj.take)) optional.set(fj.take, FAVORITE_TAKE_LIMIT);
   const files = unzipEntries(bytes, wanted, optional);
 
   const project = createProject();
@@ -338,7 +345,10 @@ function autoSwingOf(v: unknown): AutoSwing {
   };
 }
 
-/** お気に入りを読む。形の合わない値は既定値や範囲に丸め、ファイルに無いレイヤーの分は捨てる */
+/**
+ * お気に入りを読む。形の合わない値は既定値や範囲に丸める。
+ * もう無いレイヤーの分も残す(開いている間と同じく、適用で「飛ばしました」と伝え、今の状態と同じとは見なさない)。
+ */
 function favoritesFrom(
   list: FavoriteJson[], layerIds: Map<string, string>, takeAt: (path: unknown, fov: number) => Take | null, camera: CameraState,
 ): Favorite[] {
@@ -346,9 +356,10 @@ function favoritesFrom(
   for (const fj of list) {
     const layers: FavoriteLayer[] = [], used = new Set<string>();
     for (const lj of Array.isArray(fj.layers) ? fj.layers.slice(0, LIMITS.maxLayers) : []) {
-      if (!lj || typeof lj !== 'object') continue;
-      const id = typeof lj.id === 'string' ? layerIds.get(lj.id) : undefined;
-      if (!id || used.has(id)) continue;
+      if (!lj || typeof lj !== 'object' || typeof lj.id !== 'string' || !lj.id) continue;
+      // 読み込みで振り直したレイヤーは新しい ID に合わせる
+      const id = layerIds.get(lj.id) ?? lj.id.slice(0, 64);
+      if (used.has(id)) continue;
       used.add(id);
       layers.push({
         id, pop: num(lj.pop, LIMITS.pop.min, LIMITS.pop.max, LIMITS.pop.def),
@@ -361,7 +372,7 @@ function favoritesFrom(
     const createdAt = typeof fj.createdAt === 'string' && !Number.isNaN(Date.parse(fj.createdAt)) ? fj.createdAt : new Date(0).toISOString();
     const c = (fj.camera && typeof fj.camera === 'object' ? fj.camera : {}) as Partial<CameraState>;
     const fov = num(c.fov, LIMITS.fov.min, LIMITS.fov.max, camera.fov);
-    const take = takeAt(fj.take, fov);
+    const take = isFavoriteTakePath(fj.take) ? takeAt(fj.take, fov) : null;
     out.push({
       id, name: str(fj.name, '').trim().slice(0, FAVORITE_NAME_MAX) || `お気に入り ${out.length + 1}`, createdAt, layers,
       autoSwing: autoSwingOf(fj.autoSwing),

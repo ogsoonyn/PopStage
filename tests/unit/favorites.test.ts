@@ -52,6 +52,9 @@ describe('お気に入り', () => {
     const p = makeProject().documents[0].layers[0].physics;
     expect(samePhysics(p, { ...p, motionParams: { 'jiggle.amp': 1 } })).toBe(false);
     expect(samePhysics(p, { ...p })).toBe(true);
+    // 後から足した項目も比べる
+    expect(samePhysics(p, { ...p, extra: 1 } as typeof p)).toBe(false);
+    expect(samePhysics({ ...p, extra: 1 } as typeof p, { ...p, extra: 2 } as typeof p)).toBe(false);
   });
 
   it('名前は使われていない番号にする', () => {
@@ -136,7 +139,8 @@ describe('お気に入りの保存', () => {
     const [f0, f1, f2] = q.favorites;
     expect(f0.id).not.toBe(''); expect(f0.name).toBe('お気に入り 1'); expect(f0.createdAt).toBe(new Date(0).toISOString());
     expect(f0.take).toBeNull(); expect(f0.playing).toBe(false);
-    expect(f0.layers.length).toBe(1);
+    // もう無いレイヤー(nope)の分は残し、重なった ID・null は捨てる
+    expect(f0.layers.map(l => l.id)).toEqual([lid, 'nope']);
     expect(f0.layers[0]).toMatchObject({ id: lid, pop: LIMITS.pop.max, blend: 'add' });
     expect(f0.layers[0].physics.preset).toBe('custom'); expect(f0.layers[0].physics.hardness).toBe(1);
     expect(f0.autoSwing.period).toBe(LIMITS.period.min); expect(f0.autoSwing.strength).toBe(0.5);
@@ -153,6 +157,37 @@ describe('お気に入りの保存', () => {
     json.documents[0].layers[1].id = json.documents[0].layers[0].id; // 重なった ID は振り直される
     json.project.favorites[0].layers[1].id = 'missing';
     const q = (await deserializeProject(zipSync({ ...files, 'project.json': strToU8(JSON.stringify(json)) }))).project;
-    expect(q.favorites[0].layers.map(l => l.id)).toEqual([q.documents[0].layers[0].id]);
+    expect(q.favorites[0].layers.map(l => l.id)).toEqual([q.documents[0].layers[0].id, 'missing']);
+    expect(favoriteMatches(q.favorites[0], q, q.documents[0])).toBe(false);
+  });
+
+  it('今の記録が無く、お気に入りだけが記録を持つときも保存して戻る', async () => {
+    const p = makeProject(), doc = p.documents[0];
+    p.take = makeTake(1);
+    p.favorites = [captureFavorite(p, doc, { name: 'a', playing: true })];
+    p.take = null;
+    const bytes = serializeProject(p);
+    expect(Object.keys(unzipSync(bytes)).filter(n => n.startsWith('motion/'))).toEqual(['motion/favorite-0.json']);
+    const q = (await deserializeProject(bytes)).project;
+    expect(q.take).toBeNull();
+    expect(q.favorites[0].take?.samples.length).toBe(p.favorites[0].take!.samples.length);
+    expect(q.favorites[0].take?.keys?.length).toBe(2);
+    expect(q.favorites[0].playing).toBe(true);
+  });
+
+  it('記録のパスにほかのファイルの名前を書いても読まない。大きすぎる記録は捨てて開く', async () => {
+    const p = makeProject();
+    p.favorites = [captureFavorite(p, p.documents[0], { name: 'a', playing: false })];
+    const files = unzipSync(serializeProject(p, { thumbnail: new Uint8Array([1, 2]) }));
+    const json = JSON.parse(strFromU8(files['project.json']));
+    const base = json.project.favorites[0];
+    const paths = ['thumbnail.png', '__proto__', 'constructor', 'project.json', 'images/doc-0.jpg', 'motion/../thumbnail.png', 'motion/favorite-0.json'];
+    json.project.favorites = paths.map((take, i) => ({ ...base, id: `F${i}`, take }));
+    // 上限を超える記録(中身は読めなくてよい。宣言サイズで捨てる)
+    const big = new Uint8Array((4 << 20) + 1).fill(32);
+    const bytes = zipSync({ ...files, 'project.json': strToU8(JSON.stringify(json)), 'motion/favorite-0.json': [big, { level: 0 }] });
+    const { project: q, thumbnail } = await deserializeProject(bytes);
+    expect(thumbnail).toEqual(new Uint8Array([1, 2]));
+    expect(q.favorites.map(f => f.take)).toEqual(paths.map(() => null));
   });
 });

@@ -945,7 +945,8 @@ export class App extends Emitter<AppEvents> {
     if (f.take !== this.project.take) cmds.push(new SetTake(label, this.project.take, f.take));
     if (f.camera.fov !== cam.fov) cmds.push(new SetFov(label, cam.fov, f.camera.fov));
     if (cmds.length) this.history.execute(new Batch(label, cmds));
-    applyView(cam, f.camera);
+    // 画角を変えると camera は新しいオブジェクトに差し替わるので、実行したあとの camera に当てる
+    applyView(this.project.camera, f.camera);
     this.world.cutView(); // 視点が飛ぶだけなので揺らさない
     this.cameraChanged();
     this.emit('status', undefined);
