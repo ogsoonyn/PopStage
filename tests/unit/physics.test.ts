@@ -258,6 +258,19 @@ describe('揺れの物理', () => {
       expect(w.displacement(l.id)).toEqual({ x: 0, y: 0, z: 0 });
     });
 
+    it('視点が一定の速さで動いている途中で揺れを有効にしたレイヤーは、急に動き出したようには弾まない', () => {
+      const l = layerWith({ weight: 0 }), w = new PhysicsWorld(); w.unitPx = 50; l.pop = 15;
+      w.centerOf = () => ({ x: 0.6, y: 0 });
+      let max = 0;
+      for (let i = 0; i < 400; i++) {
+        w.viewTarget = { x: i * 0.5, y: 0, z: 0 }; // 一定の速さの平行移動(加速度は 0)
+        l.physics.enabled = !(i >= 200 && i < 210);
+        w.step([l]);
+        if (i >= 210) { const s = w.displacement(l.id); max = Math.max(max, Math.hypot(s.x, s.y, s.z)); }
+      }
+      expect(max).toBeLessThan(1e-9);
+    });
+
     it('視点が飛んだとき(リセットなど)は、回転・ズームでも揺らさない', () => {
       const l = layerWith({ weight: 0 }), w = new PhysicsWorld(); w.unitPx = 50; l.pop = 30;
       w.step([l]);

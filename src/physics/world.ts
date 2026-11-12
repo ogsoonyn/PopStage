@@ -178,6 +178,8 @@ export class PhysicsWorld {
         st.r = Math.max(SPREAD_MIN, Math.min(SPREAD_MAX, st.r + st.rv * dt));
       }
     }
+    // 消したレイヤーの速度は捨てる
+    if (view) for (const id of view.vel.keys()) if (!layers.some(l => l.id === id)) view.vel.delete(id);
     this.time += dt;
   }
 
@@ -185,12 +187,14 @@ export class PhysicsWorld {
    * 視点の動きを測る準備。1刻み前の視点を返し、今の視点を次の刻みのために残す。
    * 測り直しのときは null(この刻みでは視点の動きで揺らさない)
    */
-  private viewMotion(): { from: Pose; to: Pose; vel: Map<string, Vec3> } | null {
+  private viewMotion(): { from: Pose; to: Pose; vel: Map<string, Vec3>; still: boolean } | null {
     const u = this.unitPx || 1, t = this.viewTarget, a = this.viewAngles;
     const target = v3(t.x / u, t.y / u, t.z / u), view = { yaw: a.yaw, pitch: a.pitch, zoom: a.zoom };
     const b = this.base;
     this.base = { target, view, vel: b?.vel ?? new Map() };
-    return b ? { from: pose(b.target, b.view), to: pose(target, view), vel: b.vel } : null;
+    if (!b) return null;
+    const still = sameVec(b.target, target) && b.view.yaw === view.yaw && b.view.pitch === view.pitch && b.view.zoom === view.zoom;
+    return { from: pose(b.target, b.view), to: pose(target, view), vel: b.vel, still };
   }
 
   /**
@@ -201,12 +205,19 @@ export class PhysicsWorld {
   private viewAccel(layer: Layer, view: ReturnType<PhysicsWorld['viewMotion']>, dt: number): Vec3 {
     const a = this.drive;
     zero(a);
-    if (!view) return a;
+    // 測り直した刻みでは、速さ 0 から測り始める(この後に動けば、動き出しとして揺らす)
+    if (!view) { this.base?.vel.set(layer.id, v3()); return a; }
+    let vel = view.vel.get(layer.id);
+    // 視点が止まっていて速さも残っていなければ、加速度は 0(重心を求めずに済ませる)。止まっているので速さは 0 で測り始めてよい
+    if (view.still && (!vel || Math.abs(vel.x) + Math.abs(vel.y) + Math.abs(vel.z) < 1e-9)) { view.vel.set(layer.id, vel ? (zero(vel), vel) : v3()); return a; }
     const c = this.centerOf?.(layer) ?? { x: 0, y: 0 }, p = this.point;
     p.x = c.x; p.y = c.y; p.z = layer.pop / (this.unitPx || 1);
     const q0 = inCamera(view.from, p, this.q0), q1 = inCamera(view.to, p, this.q1);
-    let vel = view.vel.get(layer.id);
-    if (!vel) view.vel.set(layer.id, (vel = v3()));
+    if (!vel) {
+      // 視点が動いている途中で揺れが有効・表示になったレイヤーは、今の速さから測り始める(0 から急に動き出したとみなして弾ませない)
+      view.vel.set(layer.id, v3((q1.x - q0.x) / dt, (q1.y - q0.y) / dt, (q1.z - q0.z) / dt));
+      return a;
+    }
     const k = 1 - Math.exp(-dt / BASE_SMOOTH);
     const nx = vel.x + ((q1.x - q0.x) / dt - vel.x) * k;
     const ny = vel.y + ((q1.y - q0.y) / dt - vel.y) * k;
@@ -241,6 +252,7 @@ export class PhysicsWorld {
 }
 
 function zero(v: Vec3): void { v.x = v.y = v.z = 0; }
+const sameVec = (a: Vec3, b: Vec3) => a.x === b.x && a.y === b.y && a.z === b.z;
 
 /** カメラの位置と向き。r, u, b は画面の右・上・手前(画像の向きで表す)。e はカメラの位置 */
 interface Pose { e: Vec3; r: Vec3; u: Vec3; b: Vec3 }

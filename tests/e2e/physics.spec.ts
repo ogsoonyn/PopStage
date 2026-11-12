@@ -79,7 +79,11 @@ test('右ドラッグで回しても、ホイールでズームしても揺れ�
   // ホイールで寄る
   const zooming = watch(1200);
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
-  for (let i = 0; i < 3; i++) await page.mouse.wheel(0, -100);
+  // 回転と同じく、描画が重くても視点の飛びとみなされないよう、フレームごとに少しずつ回す
+  for (let i = 0; i < 6; i++) {
+    await page.mouse.wheel(0, -200);
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+  }
   expect((await zooming).z).toBeGreaterThan(0.01);
 });
 
