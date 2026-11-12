@@ -55,12 +55,17 @@ html.mobile #blurDialog { bottom: calc(var(--m-tools) + .5rem); }
 /* ボタンの右上に出すショートカット */
 .tool-key { position: absolute; top: 1px; right: 3px; font: 600 9px/1 ui-monospace, monospace; opacity: .55; }
 .tool[aria-pressed=true] .tool-key { opacity: .85; }
+/* その場で効く操作のうち、表示の切り替えは、入のときに淡い色を敷く(ツールの塗りつぶしと見分けられるように) */
+#toolNav .nav-act[aria-pressed=true] { background: color-mix(in oklab, var(--color-primary) 18%, transparent); color: var(--color-primary); font-weight: 600; }
 /* 高さが足りないときは、アイコンを隠して詰める(それでも入らなければスクロール) */
 @media (max-height: 720px) {
   #toolNav .nav-ico { display: none; }
   #toolNav .btn { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
   #toolNav > .tool, #toolNav .nav-act { padding-left: 2px; padding-right: 12px; }
   #toolNav > .divider { margin: 0; height: 8px; }
+  /* ⇧W のような2文字のキーは名前と重なるので出さない(ツールチップとヘルプには出る) */
+  #toolNav .key-wide .tool-key { display: none; }
+  #toolNav .nav-act.key-wide { padding-right: 2px; }
 }
 
 /* 項目の説明は並べず、「?」で開く(ui/help.ts) */

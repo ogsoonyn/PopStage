@@ -349,7 +349,7 @@ test('左のメニュー: 表示クリアで編集用の表示をまとめて切
 test('左のメニュー: 低い画面でもすべてのボタンに届く', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 620 });
   await boot(page);
-  for (const sel of ['[data-tool=brush]', '[data-tool=view]', '[data-cmd=cleanView]', '[data-cmd=invert]']) {
+  for (const sel of ['[data-tool=brush]', '[data-tool=view]', '[data-cmd=toggleMulti]', '[data-cmd=toggleFade]', '[data-cmd=cleanView]', '[data-cmd=invert]']) {
     const el = page.locator(`#toolNav ${sel}`);
     await el.scrollIntoViewIfNeeded();
     await expect(el).toBeInViewport();
@@ -457,12 +457,33 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(4);
-  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(4);
+  await expect(acts).toHaveCount(8);
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(8);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
   await expect(page.locator('#toolNav [role=group]')).toHaveText([/表示/, /レイヤー/]);
   await page.locator('#toolNav [data-cmd=cleanView]').click();
   await expect(page.locator('#toolNav [data-cmd=cleanView]')).not.toHaveAttribute('aria-pressed', /.*/);
+
+  // 表示の切り替えは、押すと入・切が変わり、aria-pressed とメニューの ✓ に映る。キーで変えても映る
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  const toggles = [['toggleMulti', 'multi', 'M'], ['toggleOverlay', 'overlay', 'W'], ['toggleFade', 'fade', '⇧W'], ['toggleGrid', 'grid', '⇧G']] as const;
+  for (const [cmd, key, label] of toggles) {
+    const b = page.locator(`#toolNav [data-cmd=${cmd}]`);
+    await expect(b.locator('.tool-key')).toHaveText(label);
+    const before = await app(a => ({ ...a.view }));
+    await expect(b).toHaveAttribute('aria-pressed', String(before[key]));
+    await b.click();
+    expect(await app(a => ({ ...a.view }))).toEqual({ ...before, [key]: !before[key] });
+    await expect(b).toHaveAttribute('aria-pressed', String(!before[key]));
+    await expect(page.locator(`#menubar [data-check=${key}]`)).toHaveText(before[key] ? '' : '✓');
+  }
+  await page.locator('#view').focus();
+  await page.keyboard.press('Shift+G');
+  await expect(page.locator('#toolNav [data-cmd=toggleGrid]')).toHaveAttribute('aria-pressed', String(await app(a => a.view.grid)));
+  // 表示クリアで切れたものは、ボタンも切に戻る(3面図は切らない)
+  await app(a => { Object.assign(a.view, { overlay: true, fade: true, grid: true, multi: true }); a.syncView(); });
+  await page.locator('#toolNav [data-cmd=cleanView]').click();
+  await expect(page.locator('#toolNav .nav-act[aria-pressed=true]')).toHaveText([/3面図/]);
 });
 
 test('ツールオプションの欄は選択中のツールの設定だけを出す。膨らみは描く前に形や断面を選べる', async ({ page }) => {
