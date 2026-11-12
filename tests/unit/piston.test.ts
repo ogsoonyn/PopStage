@@ -149,6 +149,7 @@ describe('ピストン(画像全体が動く揺らし方)', () => {
     for (let i = 0; i < n; i++) {
       if (i % 2 === 0 && i < 300) camera.target = { x: Math.sin(i / 30) * 40, y: 0, z: 0 }; // 平行移動の揺れも重なる
       live.viewTarget = camera.target;
+      live.viewAngles = { yaw: camera.yaw, pitch: camera.pitch, zoom: camera.zoom };
       rec.record({ grab: i > 400 && i < 450 ? { x: 0.1, y: 0.05, z: 0 } : null, grabGains: [], camera: structuredClone(camera), viewTarget: { ...live.viewTarget }, viewCut: live.viewCut }, () => live.snapshot());
       live.grab = i > 400 && i < 450 ? { x: 0.1, y: 0.05, z: 0 } : null;
       live.step([l]);
@@ -172,6 +173,7 @@ describe('ピストン(画像全体が動く揺らし方)', () => {
       const stage = { renderFrame: (w: number, h: number) => new Uint8ClampedArray(w * h * 4) };
       await runExport({
         stage: stage as never, store, recorder: new MotionRecorder(),
+        centerOf: () => ({ x: 0, y: 0 }),
         applySwing: (world, d) => frames.push({ g: world.baseOffset(d.layers).y, s: world.displacement(d.layers[0].id).y }),
       }, { format: 'gif', width: 2, height: 2, fps: 30, duration: 2 * T, background: '#fff', motion: 'auto' }, () => {}, new AbortController().signal);
       return frames;

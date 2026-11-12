@@ -3,7 +3,7 @@
  * PC の負荷に関係なく、常に指定 fps でコマ落ちの無い動画になる。
  */
 import type { Stage } from '../stage/stage';
-import type { Store, CameraState, Document } from '../model/project';
+import type { Store, CameraState, Document, Layer } from '../model/project';
 import { PhysicsWorld, PHYSICS_DT } from '../physics/world';
 import { applySample, type MotionRecorder, type RecordSample } from '../physics/recorder';
 import { createEncoder, FORMAT_INFO, even, type ExportFormat } from './encoders';
@@ -27,6 +27,8 @@ export interface ExportContext {
   recorder: MotionRecorder;
   /** 現在のスイングを Stage へ反映する関数(App と同じ処理) */
   applySwing: (world: PhysicsWorld, doc: Document) => void;
+  /** レイヤーの重心(正規化座標。App と同じ値) */
+  centerOf: (layer: Layer) => { x: number; y: number };
 }
 
 export interface ExportResult { blob: Blob; filename: string; frames: number }
@@ -52,6 +54,7 @@ export async function runExport(
   // 書き出し専用の物理。画面側の状態には触れない
   const world = new PhysicsWorld();
   world.unitPx = Math.max(doc.image.width, doc.image.height) / 2;
+  world.centerOf = ctx.centerOf;
   let samples: readonly RecordSample[] | null = null;
   /** 記録の終わりまで来たら初めに戻るか(ループ再生)。戻らないときは最後の1件のまま */
   let wrap = false;

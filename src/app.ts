@@ -273,6 +273,7 @@ export class App extends Emitter<AppEvents> {
     this.stage.setLayers(doc.layers);
     this.pendingUploads.clear();
     this.world.unitPx = Math.max(doc.image.width, doc.image.height) / 2;
+    this.world.centerOf = this.centerOf;
     this.applyBackground();
     this.syncView();
     this.emit('status', undefined);
@@ -1082,6 +1083,14 @@ export class App extends Emitter<AppEvents> {
     this.stage.setBaseOffset({ x: g.x * k, y: g.y * k, z: g.z * k });
   };
 
+  /** 物理に渡すレイヤーの重心(正規化座標)。回転で揺れる大きさを決める */
+  centerOf = (l: Layer): { x: number; y: number } => {
+    const doc = this.doc;
+    if (!doc) return { x: 0, y: 0 };
+    const c = this.layerCenter(doc, l), k = Math.max(doc.image.width, doc.image.height) / 2;
+    return { x: c.x / k, y: c.y / k };
+  };
+
   /** レイヤーのウェイトの重心(画像のローカル座標、元画像のピクセル) */
   private layerCenter(doc: Document, l: Layer): { x: number; y: number } {
     let c = this.centers.get(l.id);
@@ -1103,9 +1112,10 @@ export class App extends Emitter<AppEvents> {
       this.recorder.record({ ...smp, camera: { ...c, target: { ...c.target } } }, () => w.snapshot());
       return;
     }
-    // 平行移動でも、「揺らす」で振っても揺らす
+    // 平行移動・回転・ズームでも、「揺らす」で振っても揺らす
     const s = this.shake;
     w.viewTarget = { x: c.target.x + s.x, y: c.target.y + s.y, z: c.target.z + s.z };
+    w.viewAngles = { yaw: c.yaw, pitch: c.pitch, zoom: c.zoom };
     this.recorder.record({
       viewCut: w.viewCut,
       viewTarget: { ...w.viewTarget },
@@ -1344,7 +1354,7 @@ export class App extends Emitter<AppEvents> {
     this.flushWeights();
     this.emit('status', undefined);
     try {
-      return await runExport({ stage: this.stage, store: this.store, recorder: this.recorder, applySwing: this.applySwing }, s, onProgress, signal);
+      return await runExport({ stage: this.stage, store: this.store, recorder: this.recorder, applySwing: this.applySwing, centerOf: this.centerOf }, s, onProgress, signal);
     } finally {
       this.exporting = false;
       this.emit('status', undefined);

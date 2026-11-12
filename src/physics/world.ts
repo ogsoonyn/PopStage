@@ -5,7 +5,10 @@
  *
  * b は自動揺らしで動かす土台(アンカー)の位置。揺らし方ごとの軌道は motion.ts にある。
  * 土台が急に動いたり止まったりすると、塗った部分が遅れて付いてきて弾む。
- * 視点の平行移動で画像が画面上を動いたときも、その加速度を慣性力として加える(F_inertia)。
+ * 視点を動かして画像が画面上を動いたときも、その加速度を慣性力として加える(F_inertia)。平行移動だけでなく、
+ * 回転とズームも含む。カメラから見た各レイヤーの代表点(ウェイトの重心を、ポップ量だけ手前へ出した所)の
+ * 加速度を求め、画像の向きへ戻して使う。回転の中心(注視点)から遠いほど、ふくらみが高いほど、回転でよく揺れる。
+ * ズームはカメラが画像に近づく・離れる動きとして扱う(近づく量は拡大率の対数に比例させる)。
  * 揺らし方「ピストン」で画像全体が動くときも、その加速度を同じく慣性力として、揺れが有効なすべてのレイヤーに加える。
  * s は画像に対する変位なので、画面上の位置は「画像全体の位置(baseOffset)+ w·s」になる。
  * 塗った範囲を広げる揺らし方(motion.ts の SPREAD_MOTIONS)の広がり r(中心からの距離に対する割合)は、同じ材質のバネで土台(motionSpread)に付いてくる
@@ -22,8 +25,14 @@ const GRAB_GAIN = 140;
 const GRAB_LIMIT = 0.7;
 /** 広がりの範囲。-1 より小さいと裏返るので手前で止める */
 const SPREAD_MIN = -0.8, SPREAD_MAX = 1.5;
-/** 平行移動の速度をならす時定数(秒)。視点は描画フレームごとにしか動かないので、刻みごとのガタつきを消す */
+/** 視点の動きの速度をならす時定数(秒)。視点は描画フレームごとにしか動かないので、刻みごとのガタつきを消す */
 const BASE_SMOOTH = 0.025;
+/**
+ * ズームでカメラが近づく・離れる量(正規化座標、拡大率の対数 1 あたり)。ホイール1段で、平行移動を少し振ったくらいに揺れる。
+ * 本当のカメラの距離(画面の縦横比や画角で変わる)ではなく対数で決めるので、どの拡大率でも1段の揺れは同じで、
+ * 記録の再生・書き出しでも同じ揺れになる。画角を変えても揺らさない
+ */
+const ZOOM_DEPTH = 1.2;
 
 /** s, v: 変位と速度。r, rv: 塗った範囲の広がりとその速さ */
 export interface SpringState { s: Vec3; v: Vec3; r: number; rv: number }
@@ -35,7 +44,10 @@ export function coefficients(p: PhysicsParams): { k: number; m: number; c: numbe
   return { k: lerp(20, 400, p.hardness), m: lerp(0.3, 3, p.mass), c: lerp(0.5, 12, p.damping), g: p.weight * 6 };
 }
 
-interface BaseState { pos: Vec3; vel: Vec3 }
+/** 物理に伝える視点(注視点は viewTarget で別に入れる)。画角は使わない */
+export interface ViewAngles { yaw: number; pitch: number; zoom: number }
+/** 1刻み前の視点(正規化座標の注視点)と、レイヤーごとのならした速度(カメラから見た向き) */
+interface BaseState { target: Vec3; view: ViewAngles; vel: [string, Vec3][] }
 export interface WorldSnapshot { time: number; acc: number; states: [string, SpringState][]; base?: BaseState | null }
 
 export class PhysicsWorld {
@@ -52,6 +64,13 @@ export class PhysicsWorld {
    * 画像を手で動かしたのと同じように揺らす。刻みの前に毎回入れる。
    */
   viewTarget: Vec3 = v3();
+  /** 視点の向きとズーム。回転とズームでも揺らす。刻みの前に毎回入れる */
+  viewAngles: ViewAngles = { yaw: 0, pitch: 0, zoom: 1 };
+  /**
+   * レイヤーのウェイトの重心(正規化座標、画像のローカル座標の x, y)。回転で揺れる大きさを決める。
+   * 無ければ画像の中央とみなす
+   */
+  centerOf: ((layer: Layer) => { x: number; y: number }) | null = null;
   /** 正規化座標の 1 が何ピクセルか(画像の長辺 / 2)。ポップ量を正規化座標へ直すのに使う */
   unitPx = 1;
 
@@ -59,8 +78,8 @@ export class PhysicsWorld {
   private acc = 0;
   private anchor = v3();
   private anchorPrev = v3();
-  /** 画像の見かけの位置と、ならした速度(正規化座標)。null は「次の刻みで今の位置から測り直す」 */
-  private base: BaseState | null = null;
+  /** 1刻み前の視点と、レイヤーごとのならした速度。null は「次の刻みで今の視点から測り直す」 */
+  private base: { target: Vec3; view: ViewAngles; vel: Map<string, Vec3> } | null = null;
   private drive = v3();
   private piston = [v3(), v3(), v3()];
 
@@ -114,18 +133,18 @@ export class PhysicsWorld {
 
   /** 固定刻みで1回進める。 */
   step(layers: readonly Layer[], dt = PHYSICS_DT): void {
-    const drive = this.viewAccel(dt), grab = this.grab, auto = this.autoSwing, on = auto.enabled;
+    const view = this.viewMotion(), grab = this.grab, auto = this.autoSwing, on = auto.enabled;
     const b = this.anchor, bp = this.anchorPrev;
     // 画像全体の動き(ピストン)の加速度。前後の刻みの位置の2階差分で求めると、画面上の位置
     // (画像の位置 + 変位)が、動かない座標で同じ積分をしたものとちょうど一致する
     const [g0, g1, g2] = this.piston;
     this.baseOffset(layers, this.time - dt, g0); this.baseOffset(layers, this.time, g1); this.baseOffset(layers, this.time + dt, g2);
-    drive.x += (g2.x - 2 * g1.x + g0.x) / (dt * dt);
-    drive.y += (g2.y - 2 * g1.y + g0.y) / (dt * dt);
-    drive.z += (g2.z - 2 * g1.z + g0.z) / (dt * dt);
+    const pax = (g2.x - 2 * g1.x + g0.x) / (dt * dt), pay = (g2.y - 2 * g1.y + g0.y) / (dt * dt), paz = (g2.z - 2 * g1.z + g0.z) / (dt * dt);
     for (const layer of layers) {
       const st = this.state(layer.id);
-      if (!layer.physics.enabled || !layer.visible) { zero(st.s); zero(st.v); st.r = st.rv = 0; continue; }
+      if (!layer.physics.enabled || !layer.visible) { zero(st.s); zero(st.v); st.r = st.rv = 0; view?.vel.delete(layer.id); continue; }
+      const drive = this.viewAccel(layer, view, dt);
+      drive.x += pax; drive.y += pay; drive.z += paz;
       const { k, m, c, g } = coefficients(layer.physics);
       // 土台の位置と速度(速度は1刻み前との差から求める)
       if (on) {
@@ -159,31 +178,68 @@ export class PhysicsWorld {
         st.r = Math.max(SPREAD_MIN, Math.min(SPREAD_MAX, st.r + st.rv * dt));
       }
     }
+    // 消したレイヤーの速度は捨てる
+    if (view) for (const id of view.vel.keys()) if (!layers.some(l => l.id === id)) view.vel.delete(id);
     this.time += dt;
   }
 
-  /** 平行移動による画像の見かけの加速度。速度をならしてから、1刻みでの変化を加速度にする */
-  private viewAccel(dt: number): Vec3 {
-    const u = this.unitPx || 1, t = this.viewTarget, a = this.drive;
-    // 注視点が右へ動くと、画像は画面上で左へ動いて見える
-    const pos = v3(-t.x / u, -t.y / u, -t.z / u);
+  /**
+   * 視点の動きを測る準備。1刻み前の視点を返し、今の視点を次の刻みのために残す。
+   * 測り直しのときは null(この刻みでは視点の動きで揺らさない)
+   */
+  private viewMotion(): { from: Pose; to: Pose; vel: Map<string, Vec3>; still: boolean } | null {
+    const u = this.unitPx || 1, t = this.viewTarget, a = this.viewAngles;
+    const target = v3(t.x / u, t.y / u, t.z / u), view = { yaw: a.yaw, pitch: a.pitch, zoom: a.zoom };
     const b = this.base;
-    if (!b) { this.base = { pos, vel: v3() }; zero(a); return a; }
+    this.base = { target, view, vel: b?.vel ?? new Map() };
+    if (!b) return null;
+    const still = sameVec(b.target, target) && b.view.yaw === view.yaw && b.view.pitch === view.pitch && b.view.zoom === view.zoom;
+    return { from: pose(b.target, b.view), to: pose(target, view), vel: b.vel, still };
+  }
+
+  /**
+   * 視点の動きによる、レイヤーの代表点の見かけの加速度(画像の向き)。
+   * 代表点をカメラから見た位置で測り、速度をならしてから、1刻みでの変化を加速度にして画像の向きへ戻す。
+   * 代表点は前後の刻みで同じものを使うので、ポップ量や塗りを変えても揺れない
+   */
+  private viewAccel(layer: Layer, view: ReturnType<PhysicsWorld['viewMotion']>, dt: number): Vec3 {
+    const a = this.drive;
+    zero(a);
+    // 測り直した刻みでは、速さ 0 から測り始める(この後に動けば、動き出しとして揺らす)
+    if (!view) { this.base?.vel.set(layer.id, v3()); return a; }
+    let vel = view.vel.get(layer.id);
+    // 視点が止まっていて速さも残っていなければ、加速度は 0(重心を求めずに済ませる)。止まっているので速さは 0 で測り始めてよい
+    if (view.still && (!vel || Math.abs(vel.x) + Math.abs(vel.y) + Math.abs(vel.z) < 1e-9)) { view.vel.set(layer.id, vel ? (zero(vel), vel) : v3()); return a; }
+    const c = this.centerOf?.(layer) ?? { x: 0, y: 0 }, p = this.point;
+    p.x = c.x; p.y = c.y; p.z = layer.pop / (this.unitPx || 1);
+    const q0 = inCamera(view.from, p, this.q0), q1 = inCamera(view.to, p, this.q1);
+    if (!vel) {
+      // 視点が動いている途中で揺れが有効・表示になったレイヤーは、今の速さから測り始める(0 から急に動き出したとみなして弾ませない)
+      view.vel.set(layer.id, v3((q1.x - q0.x) / dt, (q1.y - q0.y) / dt, (q1.z - q0.z) / dt));
+      return a;
+    }
     const k = 1 - Math.exp(-dt / BASE_SMOOTH);
-    const nx = b.vel.x + ((pos.x - b.pos.x) / dt - b.vel.x) * k;
-    const ny = b.vel.y + ((pos.y - b.pos.y) / dt - b.vel.y) * k;
-    const nz = b.vel.z + ((pos.z - b.pos.z) / dt - b.vel.z) * k;
-    a.x = (nx - b.vel.x) / dt; a.y = (ny - b.vel.y) / dt; a.z = (nz - b.vel.z) / dt;
-    b.pos = pos; b.vel = v3(nx, ny, nz);
+    const nx = vel.x + ((q1.x - q0.x) / dt - vel.x) * k;
+    const ny = vel.y + ((q1.y - q0.y) / dt - vel.y) * k;
+    const nz = vel.z + ((q1.z - q0.z) / dt - vel.z) * k;
+    // カメラから見た向きの加速度を、今の視点の向きで画像の向きへ戻す
+    const ax = (nx - vel.x) / dt, ay = (ny - vel.y) / dt, az = (nz - vel.z) / dt, { r, u, b } = view.to;
+    a.x = r.x * ax + u.x * ay + b.x * az;
+    a.y = r.y * ax + u.y * ay + b.y * az;
+    a.z = r.z * ax + u.z * ay + b.z * az;
+    vel.x = nx; vel.y = ny; vel.z = nz;
     return a;
   }
+  private point = v3();
+  private q0 = v3();
+  private q1 = v3();
 
   snapshot(): WorldSnapshot {
     const b = this.base;
     return {
       time: this.time, acc: this.acc,
       states: [...this.states].map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v }, r: s.r, rv: s.rv }]),
-      base: b ? { pos: { ...b.pos }, vel: { ...b.vel } } : null,
+      base: b ? { target: { ...b.target }, view: { ...b.view }, vel: [...b.vel].map(([id, v]) => [id, { ...v }]) } : null,
     };
   }
 
@@ -191,8 +247,31 @@ export class PhysicsWorld {
     this.time = snap.time; this.acc = snap.acc;
     this.states = new Map(snap.states.map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v }, r: s.r ?? 0, rv: s.rv ?? 0 }]));
     const b = snap.base;
-    this.base = b ? { pos: { ...b.pos }, vel: { ...b.vel } } : null;
+    this.base = b ? { target: { ...b.target }, view: { ...b.view }, vel: new Map(b.vel.map(([id, v]) => [id, { ...v }])) } : null;
   }
 }
 
 function zero(v: Vec3): void { v.x = v.y = v.z = 0; }
+const sameVec = (a: Vec3, b: Vec3) => a.x === b.x && a.y === b.y && a.z === b.z;
+
+/** カメラの位置と向き。r, u, b は画面の右・上・手前(画像の向きで表す)。e はカメラの位置 */
+interface Pose { e: Vec3; r: Vec3; u: Vec3; b: Vec3 }
+
+/**
+ * 視点からカメラの位置と向きを求める(stage.ts の applyCamera と同じ向き)。注視点からの距離は ZOOM_DEPTH で決める。
+ * 回転の揺れは距離によらない(カメラから見た位置の、距離の分は奥行きが一定なだけ)ので、距離はズームの変化だけを表せばよい
+ */
+function pose(target: Vec3, view: ViewAngles): Pose {
+  const sy = Math.sin(view.yaw), cy = Math.cos(view.yaw), sp = Math.sin(view.pitch), cp = Math.cos(view.pitch);
+  const b = v3(sy * cp, sp, cy * cp), d = ZOOM_DEPTH * Math.log(Math.max(1e-3, view.zoom));
+  return { e: v3(target.x + d * b.x, target.y + d * b.y, target.z + d * b.z), r: v3(cy, 0, -sy), u: v3(-sy * sp, cp, -cy * sp), b };
+}
+
+/** 点 p をカメラから見た位置(画面の右・上・手前の成分) */
+function inCamera(c: Pose, p: Vec3, out: Vec3): Vec3 {
+  const dx = p.x - c.e.x, dy = p.y - c.e.y, dz = p.z - c.e.z;
+  out.x = c.r.x * dx + c.r.y * dy + c.r.z * dz;
+  out.y = c.u.x * dx + c.u.y * dy + c.u.z * dz;
+  out.z = c.b.x * dx + c.b.y * dy + c.b.z * dz;
+  return out;
+}
