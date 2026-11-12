@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { PhysicsWorld, PHYSICS_DT } from '../../src/physics/world';
-import { motionAnchor, motionSpread } from '../../src/physics/motion';
+import { motionAnchor, motionSpread, SPREAD_MOTIONS } from '../../src/physics/motion';
 import { MotionRecorder, applySample } from '../../src/physics/recorder';
 import { runExport } from '../../src/export/exporter';
 import { WeightMap } from '../../src/model/weightmap';
 import { Store, createDocument, createProject, applyPreset, defaultCamera, MOTIONS, PRESETS, type Layer, type MotionPattern } from '../../src/model/project';
 
+/** 塗った範囲を広げる揺らし方(ためて膨らむ2 のほかは spreadMotions.test.ts で確かめる)。足し忘れを見張るため、motion.ts とは別に書く */
+const SPREADING = new Set<MotionPattern>(['charge2', 'puff', 'pulse']);
 const image = { bytes: new Uint8Array(), mime: 'image/png', ext: 'png', width: 1024, height: 1024 };
 const STRENGTH = 0.5;
 const layerOf = (preset: keyof typeof PRESETS, motion?: MotionPattern): Layer => {
@@ -40,9 +42,16 @@ describe('ためて膨らむ2(塗った範囲も横に広がる)', () => {
     expect(at(0.64, { 'charge2.spread': 0.4 })).toBeCloseTo(0.4, 9);
     expect(at(0.59, { 'charge2.pinch': 0 })).toBeCloseTo(0, 12);
     expect(at(0.64, { 'charge2.spread': 0 })).toBe(0);
-    for (const t of [0.05, 0.31, 0.77, 1.2, 1.66]) expect(motionSpread('charge2', t + 1.7 * 3, 1.7, 0.6)).toBeCloseTo(motionSpread('charge2', t, 1.7, 0.6), 9);
-    // ほかの揺らし方は広げない
-    for (const m of Object.keys(MOTIONS) as MotionPattern[]) if (m !== 'charge2') expect(motionSpread(m, 1.25, T, 1), m).toBe(0);
+    // 広げる揺らし方はどれも周期 T で元に戻り(ループ書き出しの前提)、ほかの揺らし方はいつも 0
+    expect(new Set(SPREAD_MOTIONS)).toEqual(SPREADING);
+    for (const m of SPREADING) {
+      for (const t of [0.05, 0.31, 0.77, 1.2, 1.66]) expect(motionSpread(m, t + 1.7 * 3, 1.7, 0.6), m).toBeCloseTo(motionSpread(m, t, 1.7, 0.6), 9);
+      expect(Math.max(...Array.from({ length: 170 }, (_, i) => motionSpread(m, i * 0.01, 1.7, 0.6))), m).toBeGreaterThan(0.05);
+    }
+    for (const m of Object.keys(MOTIONS) as MotionPattern[]) {
+      if (SPREADING.has(m)) continue;
+      for (let t = 0; t < T; t += 0.01) expect(motionSpread(m, t, T, 1), m).toBe(0);
+    }
   });
 
   it('手前への動きは「ためて膨らむ」と同じ(固有設定も同じ意味)', () => {
@@ -82,11 +91,12 @@ describe('ためて膨らむ2(塗った範囲も横に広がる)', () => {
     expect(Math.abs(w.spread(l.id))).toBeLessThan(1e-4);
   });
 
-  it('既存の揺らし方では塗った範囲の大きさは変わらず、ためて膨らむ2 だけが面積を変える(計測値の回帰チェック)', () => {
+  it('広げる揺らし方のほかは塗った範囲の大きさを変えない。ためて膨らむ2 の広がりの計測値の回帰チェック', () => {
     for (const [preset, T] of [['tame', 1.2], ['tame', 2], ['puru', 1.2]] as const) {
       for (const m of Object.keys(MOTIONS) as MotionPattern[]) {
         const rs = spreadCycle(layerOf(preset, m), T);
-        if (m !== 'charge2') { expect(rs.every(r => r === 0), m).toBe(true); continue; }
+        if (!SPREADING.has(m)) { expect(rs.every(r => r === 0), m).toBe(true); continue; }
+        if (m !== 'charge2') continue;
         const hi = Math.max(...rs), lo = Math.min(...rs);
         // 計測: tame 1.2秒 +13% / -14%、tame 2秒 +28% / -22%、puru 1.2秒 +27% / -19%
         expect(hi, `${preset} ${T}`).toBeGreaterThan(0.1);
