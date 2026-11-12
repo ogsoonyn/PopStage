@@ -457,10 +457,10 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(4);
-  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(4);
+  await expect(acts).toHaveCount(5);
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(5);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
-  await expect(page.locator('#toolNav [role=group]')).toHaveText([/表示/, /レイヤー/]);
+  await expect(page.locator('#toolNav [role=group]')).toHaveText([/表示/, /レイヤー/, /アニメ/]);
   await page.locator('#toolNav [data-cmd=cleanView]').click();
   await expect(page.locator('#toolNav [data-cmd=cleanView]')).not.toHaveAttribute('aria-pressed', /.*/);
 });
