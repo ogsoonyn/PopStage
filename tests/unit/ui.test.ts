@@ -51,3 +51,11 @@ describe('ショートカットの読み取り', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 });
+
+describe('項目の説明(「?」)', () => {
+  it('data-help が指す説明が index.html にあり、最初は隠れている', () => {
+    const refs = [...html.matchAll(/data-help="([^"]+)"/g)].map(m => m[1]);
+    expect(refs.length).toBeGreaterThan(0);
+    for (const id of refs) expect(html, id).toMatch(new RegExp(`<p id="${id}" class="help-text[^"]*" hidden>`));
+  });
+});

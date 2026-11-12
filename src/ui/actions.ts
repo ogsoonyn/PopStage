@@ -1,5 +1,7 @@
 /**
  * コマンド(メニュー・ボタン・ショートカットで使う操作)と、左のツールバー。
+ * 左のツールバーは、押すと選んだ状態になる「ツール」と、押すとその場で効く「操作」を見た目で分ける
+ * (ツールは塗りつぶしのボタン、操作は見出し付きの枠に入れた枠なしのボタン)。
  * 名前・ショートカット・使える条件はこの表だけに書き、メニューの <kbd>・ボタンのツールチップ・aria-keyshortcuts・
  * ヘルプのショートカット一覧・キーの処理は、すべて表から作る。
  */
@@ -8,6 +10,7 @@ import { ui } from './ids';
 import { toast } from './dom';
 import { isTyping } from './input';
 import { TOOL_GROUPS, TOOLS, toolDef } from './tools';
+import { icon, type IconName } from './icons';
 
 export interface Action {
   /** ツールチップ・ヘルプでの名前 */
@@ -102,6 +105,17 @@ function defineActions(app: App, d: ActionDeps) {
   } satisfies Record<string, Action>;
 }
 
+type CommandName = keyof ReturnType<typeof defineActions>;
+
+/** 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く) */
+const NAV_ACTIONS: readonly { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string }[] }[] = [
+  { label: '表示', title: '表示に効く操作', items: [{ cmd: 'cleanView', icon: 'cleanView', text: '表示クリア' }] },
+  {
+    label: 'レイヤー', title: '選択中のレイヤーに効く操作',
+    items: [{ cmd: 'smoothAll', icon: 'smoothAll', text: '全体ぼかし…' }, { cmd: 'normalize', icon: 'normalize', text: '正規化' }, { cmd: 'invert', icon: 'invert', text: '反転' }],
+  },
+];
+
 /** キーの押し方を 'Ctrl+Shift+Z' の形にする */
 export function keyString(e: KeyboardEvent): string {
   // 日本語入力がオンのときは key が 'Process'、Mac の Option は別の文字になるので、キーの位置(code)から読む
@@ -112,7 +126,8 @@ export function keyString(e: KeyboardEvent): string {
 
 const ariaKeys = (keys: string[]) => keys.map(k => k.replace(/\bCtrl\b/g, 'Control')).join(' ');
 
-const NAV_BTN = 'relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap';
+const TOOL_BTN = 'tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0.5 whitespace-nowrap';
+const ACT_BTN = 'nav-act relative btn btn-xs btn-ghost w-[4.5rem] flex-col h-auto py-1 gap-0.5 whitespace-nowrap font-normal';
 
 export function bindActions(app: App, deps: ActionDeps): void {
   const table: Record<string, Action> = defineActions(app, deps);
@@ -136,20 +151,22 @@ export function bindActions(app: App, deps: ActionDeps): void {
   /** ツールチップ: 「名前 (キー補足): 説明」 */
   const tooltip = (a: Action, keyNote = '') => `${a.label}${a.keys ? ` (${a.keys[0]}${keyNote})` : ''}${a.desc ? `: ${a.desc}` : ''}`;
 
-  /* ---------- 左のツールバー(ツールと表示クリア)を作る ---------- */
+  /* ---------- 左のツールバーを作る(ツール → 区切り → その場で効く操作のまとまり) ---------- */
+  const navItems: Node[] = [];
   const divider = () => Object.assign(document.createElement('div'), { className: 'divider my-0' });
-  const navButton = (icon: string, label: string, key: string) => {
+  /** アイコン・名前・キーの3段のボタン */
+  const navButton = (className: string, ico: IconName, label: string, key = '') => {
     const b = document.createElement('button');
-    b.className = NAV_BTN;
-    b.innerHTML = '<span class="text-base leading-none" aria-hidden="true"></span><span class="text-xs"></span><kbd class="tool-key" aria-hidden="true"></kbd>';
-    b.children[0].textContent = icon; b.children[1].textContent = label; b.children[2].textContent = key;
+    b.type = 'button';
+    b.className = className;
+    b.innerHTML = `${icon(ico, 'nav-ico')}<span class="nav-label"></span><kbd class="tool-key" aria-hidden="true"></kbd>`;
+    b.querySelector('.nav-label')!.textContent = label;
+    b.querySelector('.tool-key')!.textContent = key;
     return b;
   };
-  const navItems: Node[] = [];
   for (const group of TOOL_GROUPS) {
     for (const t of group) {
-      const b = navButton(t.icon, t.label, t.key);
-      b.classList.add('tool');
+      const b = navButton(TOOL_BTN, t.id, t.label, t.key);
       b.dataset.tool = t.id;
       b.title = tooltip(table[`tool.${t.id}`], t.keyNote);
       b.setAttribute('aria-keyshortcuts', t.key);
@@ -158,10 +175,22 @@ export function bindActions(app: App, deps: ActionDeps): void {
     }
     navItems.push(divider());
   }
-  const clean = navButton('✨', '表示クリア', '');
-  clean.dataset.cmd = 'cleanView';
-  navItems.push(clean);
-  ui.toolNav.prepend(...navItems);
+  for (const g of NAV_ACTIONS) {
+    const box = document.createElement('div');
+    box.className = 'nav-group';
+    box.setAttribute('role', 'group');
+    box.setAttribute('aria-label', g.title);
+    const head = Object.assign(document.createElement('span'), { className: 'nav-group-label', textContent: g.label, title: g.title });
+    head.setAttribute('aria-hidden', 'true');
+    box.append(head);
+    for (const it of g.items) {
+      const b = navButton(ACT_BTN, it.icon, it.text);
+      b.dataset.cmd = it.cmd; // 結び付け・キーの表記・ツールチップは、下の data-cmd の処理で付ける
+      box.append(b);
+    }
+    navItems.push(box);
+  }
+  ui.toolNav.replaceChildren(...navItems);
 
   /* ---------- data-cmd の部品に、キーの表記・ツールチップを付けて結び付ける ---------- */
   const cmdButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-cmd]')];

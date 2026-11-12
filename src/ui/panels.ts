@@ -6,6 +6,7 @@ import { prefs } from '../storage/prefs';
 import { ui } from './ids';
 import { drawWeightThumb } from './imageio';
 import { popToSlider, sliderToPop } from './popSlider';
+import { createHelp } from './help';
 
 type Target = 'layer' | 'doc' | 'project';
 
@@ -113,9 +114,12 @@ export function bindPanels(app: App): { refresh: () => void } {
     for (const d of defs) {
       const key = `${motion}.${d.key}`, row = document.createElement('div'), label = `${MOTIONS[motion].label}: ${d.label}`;
       row.className = 'prop';
-      if (d.hint) row.title = d.hint;
-      const name = document.createElement('label');
-      name.textContent = d.label; name.htmlFor = `mp-${d.key}`;
+      const labelEl = document.createElement('label');
+      labelEl.textContent = d.label; labelEl.htmlFor = `mp-${d.key}`;
+      // 補足があれば「?」で開けるようにする(説明は行の下に出す)
+      const help = d.hint ? createHelp(`mp-${d.key}-help`, d.hint) : null;
+      const name = help ? Object.assign(document.createElement('span'), { className: 'prop-name' }) : labelEl;
+      if (help) name.append(labelEl, help.button);
       if (d.options) {
         const sel = document.createElement('select');
         sel.id = `mp-${d.key}`; sel.className = 'select select-xs col-span-2 w-full'; sel.dataset.param = key;
@@ -130,6 +134,7 @@ export function bindPanels(app: App): { refresh: () => void } {
         row.append(name, input, out);
       }
       paramBox.append(row);
+      if (help) paramBox.append(help.text);
     }
   }
 
@@ -323,12 +328,12 @@ export function bindPanels(app: App): { refresh: () => void } {
       setRange(ui.pPop, null, popToSlider(l.pop));
       if (document.activeElement !== ui.pPopN) ui.pPopN.value = String(l.pop);
       blendSel.value = l.blend;
-      // 説明は画面に並べず、選択欄のツールチップに出す(読み上げ用に隠した要素にも入れる)
-      ui.pBlendDesc.textContent = blendSel.title = BLENDS[l.blend].desc;
+      // 説明は画面に並べず、「?」で開く欄に入れる(選択欄の aria-describedby でも読み上げる)
+      ui.pBlendDesc.textContent = BLENDS[l.blend].desc;
       ui.pSwing.checked = ui.tSwing.checked = l.physics.enabled;
       presetSel.value = l.physics.preset;
       motionSel.value = l.physics.motion;
-      ui.pPresetDesc.textContent = presetSel.title = l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
+      ui.pPresetDesc.textContent = l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
       refreshMotionParams(l);
       ui.physSummary.textContent = `— ${MOTIONS[l.physics.motion].label}`;
       setRange(ui.pHard, ui.pHardO, Math.round(l.physics.hardness * 100), pct(l.physics.hardness * 100));

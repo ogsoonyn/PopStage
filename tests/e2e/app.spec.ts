@@ -15,8 +15,8 @@ async function boot(page: Page): Promise<void> {
   expect(errors).toEqual([]);
 }
 
-/** 右のパネルのタブ(編集・アニメーション・表示設定)を開く */
-const openTab = (page: Page, tab: 'edit' | 'anim' | 'view') => page.locator(`#pTabs [data-ptab=${tab}]`).click();
+/** 右のパネルのタブ(レイヤー・アニメーション・画像と表示)を開く */
+const openTab = (page: Page, tab: 'layer' | 'anim' | 'view') => page.locator(`#pTabs [data-ptab=${tab}]`).click();
 
 const glErrors: string[] = [];
 test.beforeEach(() => { glErrors.length = 0; });
@@ -489,7 +489,7 @@ test('3面図: 正面・右・下はホイールでズーム・ドラッグで�
 
 for (const target of ['[data-tool=brush]', '#pPreset']) test(`${target} にフォーカスが残っていても、Space+ドラッグは平行移動になり塗らない`, async ({ page }) => {
   await boot(page);
-  if (target === '#pPreset') await openTab(page, 'anim');
+  if (target === '#pPreset') await openTab(page, 'layer');
   await page.locator(target).focus();
   await expect(page.locator(target)).toBeFocused();
   const before = await page.evaluate(() => ({ t: { ...(window as any).popstage.project.camera.target }, undo: (window as any).popstage.history.canUndo }));
@@ -761,7 +761,7 @@ test('スライダーの変更は1手として元に戻せる', async ({ page })
 
 test('プリセットで材質・揺らし方・周期が変わり、1手で元に戻せる', async ({ page }) => {
   await boot(page);
-  await openTab(page, 'anim');
+  await openTab(page, 'layer');
   const state = () => page.evaluate(() => {
     const a = (window as any).popstage;
     return { preset: a.activeLayer.physics.preset, motion: a.activeLayer.physics.motion, hardness: a.activeLayer.physics.hardness, period: a.project.autoSwing.period };
@@ -791,7 +791,7 @@ test('プリセットで材質・揺らし方・周期が変わり、1手で元�
 
 test('揺らし方の固有設定: 選んだ揺らし方の項目が出て、変えると1手で戻せる', async ({ page }) => {
   await boot(page);
-  await openTab(page, 'anim');
+  await openTab(page, 'layer');
   const params = () => page.evaluate(() => { const p = (window as any).popstage.activeLayer.physics; return { preset: p.preset, mp: p.motionParams }; });
   await page.locator('#physDetails summary').click();
   // 既定(ぷるぷる = 上下に小刻み)の項目
@@ -821,7 +821,7 @@ test('揺らし方の固有設定: 選んだ揺らし方の項目が出て、変
 
 test('揺らし方「ピストン」: 画像全体が上下に動き、塗った所が遅れて付いてくる', async ({ page }) => {
   await boot(page);
-  await openTab(page, 'anim');
+  await openTab(page, 'layer');
   await page.locator('#physDetails summary').click();
   await page.selectOption('#pMotion', 'piston');
   await expect(page.locator('#physSummary')).toContainText('ピストン');
@@ -883,7 +883,7 @@ test('揺らし方「ピストン」: 画像全体が上下に動き、塗った
 
 test('ピストン: 動いている間に塗っても線はまっすぐで、ブラシの円は止まったポインタの下に付いてくる', async ({ page }) => {
   await boot(page);
-  await openTab(page, 'anim');
+  await openTab(page, 'layer');
   await page.selectOption('#pPreset', 'zun');
   await page.evaluate(() => { const a = (window as any).popstage; a.weightOp('全消去', (wm: any) => wm.clear()); a.setViewOption('overlay', false); a.setPaused(false); });
   await page.waitForTimeout(600);
@@ -936,7 +936,7 @@ test('ピストン: 動いている間に塗っても線はまっすぐで、ブ
 
 test('ピストン: 3面図に上がった画像が収まり、回転・拡大した画像ではずれも一緒に回る', async ({ page }) => {
   await boot(page);
-  await openTab(page, 'anim');
+  await openTab(page, 'layer');
   await page.selectOption('#pPreset', 'zun');
   await page.evaluate(() => {
     const a = (window as any).popstage, l = a.activeLayer;
@@ -974,7 +974,7 @@ test('ピストン: 3面図に上がった画像が収まり、回転・拡大�
 
 test('揺らし方「ためて膨らむ2」: 離した直後に、塗った範囲が画像の面内でも外へ広がる', async ({ page }) => {
   await boot(page);
-  await openTab(page, 'anim');
+  await openTab(page, 'layer');
   // 透明な背景に半径 80px の円を描いた画像。円より広く(半径 130px まで)塗り、ポップ量は 0 にして横の広がりだけを見る
   await page.evaluate(async () => {
     const c = document.createElement('canvas'); c.width = 400; c.height = 400;
@@ -1796,7 +1796,7 @@ test('表示の切り替えはキーで変えても覚える。ファイルの�
 
 test('左のメニュー: 表示クリアで編集用の表示をまとめて切る。レイヤー向けの操作と、上のツールバーの揺れの切り替え', async ({ page }) => {
   await boot(page);
-  await openTab(page, 'anim');
+  await openTab(page, 'layer');
   const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
   const state = () => app(a => ({ overlay: a.view.overlay, fade: a.view.fade, flat: a.view.flat, grid: a.view.grid, multi: a.view.multi, paused: a.paused }));
   await app(a => { Object.assign(a.view, { overlay: true, fade: true, flat: true, grid: true, multi: true }); a.syncView(); a.setPaused(true); });
@@ -2073,4 +2073,58 @@ test('コマンドの表から、メニューのキー表記・ボタンのツ�
   await expect(page.locator('#takeRec')).toBeFocused();
   await page.keyboard.press('Enter');
   expect(await app(a => a.takeState)).toBe('idle');
+});
+
+test('右パネルのタブは効く範囲で分ける。説明は「?」で開き、左のツールバーはツールと操作を見分けられる', async ({ page }) => {
+  // 前の版で「編集」タブを選んでいた人は「レイヤー」タブで始まる
+  await page.addInitScript(() => { if (!localStorage.getItem('popstage.prefs.v1')) localStorage.setItem('popstage.prefs.v1', JSON.stringify({ panelTab: 'edit' })); });
+  await boot(page);
+  await expect(page.locator('#pTabs [data-ptab=layer]')).toHaveAttribute('aria-selected', 'true');
+  // レイヤー: 選択中のレイヤーの設定(ポップ量・重ね方・揺れ・プリセット)
+  for (const id of ['#pPop', '#pBlend', '#pSwing', '#pPreset']) await expect(page.locator(id)).toBeVisible();
+  await expect(page.locator('#activeLayerName')).not.toHaveText('-');
+  // アニメーション: 自動揺らし・記録・キーフレーム
+  await openTab(page, 'anim');
+  for (const id of ['#pAuto', '#takeRec', '#keyAdd']) await expect(page.locator(id)).toBeVisible();
+  await expect(page.locator('#pPop')).toBeHidden();
+  // 画像と表示: メッシュ密度・不透明度・表示の切り替え・画角
+  await openTab(page, 'view');
+  for (const id of ['#pDensity', '#pOpacity', '#vGrid', '#pFov']) await expect(page.locator(id)).toBeVisible();
+
+  // 説明は最初は隠れていて、「?」で開閉する。中身は選んだ値に合わせて変わる
+  await openTab(page, 'layer');
+  const help = page.locator('button.help-btn[data-help=pBlendDesc]'), desc = page.locator('#pBlendDesc');
+  await expect(desc).toBeHidden();
+  await expect(help).toHaveAttribute('aria-expanded', 'false');
+  await help.click();
+  await expect(desc).toBeVisible();
+  await expect(help).toHaveAttribute('aria-expanded', 'true');
+  const text = await desc.textContent();
+  await page.locator('#pBlend').selectOption(await page.evaluate(() => (window as any).popstage.activeLayer.blend === 'max' ? 'add' : 'max'));
+  await expect(desc).not.toHaveText(text!);
+  await help.click();
+  await expect(desc).toBeHidden();
+  // 揺らし方の固有設定の補足も「?」で開く(ツールチップにはしない)
+  await page.locator('#physDetails summary').click();
+  const mpHelp = page.locator('#motionParams .help-btn').first();
+  await mpHelp.click();
+  await expect(page.locator('#motionParams .help-text').first()).toBeVisible();
+  await expect(page.locator('#motionParams .prop[title]')).toHaveCount(0);
+  // 表示の切り替えの「?」を押しても、切り替えは変わらない
+  await openTab(page, 'view');
+  const fade = await page.evaluate(() => (window as any).popstage.view.fade);
+  await page.locator('button.help-btn[data-help=vFadeHelp]').click();
+  await expect(page.locator('#vFadeHelp')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).popstage.view.fade)).toBe(fade);
+
+  // 左のツールバー: ツールは押すと選んだ状態になる。その場で効く操作は、見出し付きのまとまりの中に置き、選んだ状態にならない
+  await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
+  await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
+  const acts = page.locator('#toolNav [role=group] .nav-act');
+  await expect(acts).toHaveCount(4);
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(4);
+  await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
+  await expect(page.locator('#toolNav [role=group]')).toHaveText([/表示/, /レイヤー/]);
+  await page.locator('#toolNav [data-cmd=cleanView]').click();
+  await expect(page.locator('#toolNav [data-cmd=cleanView]')).not.toHaveAttribute('aria-pressed', /.*/);
 });

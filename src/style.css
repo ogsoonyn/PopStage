@@ -12,7 +12,7 @@
 #stage.solid { background: var(--stage-bg); }
 #view { display: block; width: 100%; height: 100%; outline: none; }
 
-.prop { display: grid; grid-template-columns: 5.5rem 1fr 3.25rem; align-items: center; gap: .5rem; }
+.prop { display: grid; grid-template-columns: 6.25rem 1fr 3.25rem; align-items: center; gap: .5rem; }
 .prop output { text-align: right; font-variant-numeric: tabular-nums; }
 .key-row { display: grid; grid-template-columns: 1.75rem 2.75rem 1.5rem 4.75rem 1fr; align-items: center; gap: .375rem; }
 .key-head { padding: 0 .125rem; }
@@ -38,21 +38,37 @@
 /* 膨らませる: 3Dビューの下に浮かべ、ほかの操作はそのまま受け付ける */
 #inflateDialog { position: fixed; left: 50%; right: auto; top: auto; bottom: 2.5rem; transform: translateX(-50%); margin: 0; z-index: 40; width: min(34rem, calc(100vw - 2rem)); }
 
-/* 左のツールボタンの右上に出すショートカット */
+/*
+ * 左のツールバー(ui/actions.ts が作る)。押すと選んだ状態になるツールは塗りつぶしのボタン、
+ * 押すとその場で効く操作は、見出し付きの点線の枠に入れた枠なしのボタンにして見分ける
+ */
+#toolNav .nav-ico { width: 1.25rem; height: 1.25rem; }
+#toolNav .nav-label { font-size: .75rem; line-height: 1.1; }
+#toolNav .nav-act .nav-ico { width: 1rem; height: 1rem; }
+#toolNav .nav-act .nav-label { font-size: .6875rem; }
+.nav-group { width: 4.5rem; display: flex; flex-direction: column; gap: 2px; padding: 4px 0 2px; border-radius: 6px; border: 1px dashed color-mix(in oklab, var(--color-base-content) 22%, transparent); }
+/* 枠の線の分だけ広がらないよう、中のボタンは枠の内側に合わせる(ツールバーの幅はツールのボタンと同じ) */
+#toolNav .nav-group .nav-act { width: 100%; }
+.nav-group-label { font-size: 10px; text-align: center; opacity: .6; line-height: 1; }
+/* ボタンの右上に出すショートカット */
 .tool-key { position: absolute; top: 1px; right: 3px; font: 600 9px/1 ui-monospace, monospace; opacity: .55; }
 .tool[aria-pressed=true] .tool-key { opacity: .85; }
-/* 高さが足りないときは、左のメニューのアイコンの行を隠して詰める(それでも入らなければスクロール) */
+/* 高さが足りないときは、アイコンを隠して詰める(それでも入らなければスクロール) */
 @media (max-height: 720px) {
-  #toolNav > .btn > span.text-base { display: none; }
-  #toolNav > .btn { padding-top: 2px; padding-bottom: 2px; padding-right: 12px; min-height: 0; }
+  #toolNav .nav-ico { display: none; }
+  #toolNav .btn { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
+  #toolNav > .tool, #toolNav .nav-act { padding-left: 2px; padding-right: 12px; }
   #toolNav > .divider { margin: 0; height: 8px; }
-  #toolNav .nav-icon { display: none; }
-  #toolNav .nav-group > .btn { padding-top: 2px; padding-bottom: 2px; }
 }
-/* 左のメニューの、選択中のレイヤー向けの操作のまとまり */
-#toolNav .nav-icon { font-size: 14px; line-height: 1; }
-.nav-group { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 2px; border-radius: 6px; background: color-mix(in oklab, var(--color-base-content) 6%, transparent); }
-.nav-group-label { font-size: 10px; text-align: center; opacity: .6; line-height: 1; }
+
+/* 項目の説明は並べず、「?」で開く(ui/help.ts) */
+.prop-name { display: inline-flex; align-items: center; gap: .25rem; min-width: 0; white-space: nowrap; }
+.help-btn { flex-shrink: 0; width: 1rem; height: 1rem; border-radius: 50%; display: inline-grid; place-items: center; font: 700 10px/1 ui-sans-serif, system-ui, sans-serif; border: 1px solid color-mix(in oklab, var(--color-base-content) 35%, transparent); opacity: .6; cursor: pointer; }
+.help-btn:hover, .help-btn[aria-expanded="true"] { opacity: 1; border-color: var(--color-primary); color: var(--color-primary); }
+.help-text { font-size: .75rem; line-height: 1.6; padding: .375rem .5rem; border-radius: .375rem; background: var(--color-base-200); }
+.help-text[hidden] { display: none; }
+.collapse .help-text { background: var(--color-base-100); }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; }
 
 /* ---------- スマホ(ui/mobile.ts が html に .mobile を付ける) ---------- */
 .m-only { display: none !important; }
@@ -130,6 +146,6 @@ html.mobile body > main { padding-bottom: var(--m-tools); }
 html.mobile #toasts { top: calc(var(--m-top) + .5rem); bottom: auto; margin-bottom: 0; }
 html.mobile #mFine { display: inline-flex !important; }
 html.mobile #helpDialog .m-only { display: grid !important; }
-html.mobile #mPanes #pPresetDesc { padding-left: 0; margin-top: 0; }
+html.mobile .help-btn { width: 1.5rem; height: 1.5rem; font-size: 12px; }
 html.mobile #mPanes section { padding: 0; border: 0; }
 html.mobile #mPanes .btn-xs.btn-square { width: 2.25rem; height: 2.25rem; }
