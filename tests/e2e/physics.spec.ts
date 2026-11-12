@@ -1,4 +1,4 @@
-/** E2E: 揺れ(つかむ・揺らす・平行移動・プリセット・揺らし方) */
+/** E2E: 揺れ(つかむ・揺らす・平行移動・回転・ズーム・プリセット・揺らし方) */
 import { test, expect } from '@playwright/test';
 import { watchGlErrors, boot, openTab, watchSwingX } from './helpers';
 
@@ -44,6 +44,43 @@ test('中ドラッグで平行移動すると揺れ、視点のリセットで�
   const [lo2, hi2] = await still;
   expect(await page.evaluate(() => (window as any).popstage.project.camera.target.x)).toBe(0);
   expect(Math.max(Math.abs(lo2 - before), Math.abs(hi2 - before))).toBeLessThan(0.005);
+});
+
+test('右ドラッグで回しても、ホイールでズームしても揺れる', async ({ page }) => {
+  await boot(page);
+  await page.keyboard.press('p'); // 一時停止を解除
+  await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: false } }); });
+  await page.waitForTimeout(1500); // 重さで垂れた所で落ち着かせる
+  /** ms ミリ秒の間の、先頭レイヤーの揺れの、測り始めからの変化の最大(成分ごと) */
+  const watch = (ms: number) => page.evaluate(ms => new Promise<{ x: number; y: number; z: number }>(resolve => {
+    const a = (window as any).popstage, t0 = performance.now(), d = () => a.world.displacement(a.doc.layers[0].id);
+    const s0 = { ...d() }, m = { x: 0, y: 0, z: 0 };
+    const tick = () => {
+      const s = d();
+      m.x = Math.max(m.x, Math.abs(s.x - s0.x)); m.y = Math.max(m.y, Math.abs(s.y - s0.y)); m.z = Math.max(m.z, Math.abs(s.z - s0.z));
+      if (performance.now() - t0 < ms) requestAnimationFrame(tick); else resolve(m);
+    };
+    tick();
+  }), ms);
+  const box = (await page.locator('#view').boundingBox())!;
+  // 左右に回す
+  const rotating = watch(1200);
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.5);
+  await page.mouse.down({ button: 'right' });
+  // 描画が重いと、一度に動かした分がフレームの間に収まらず視点の飛びとみなされるので、フレームごとに少しずつ回す
+  for (let i = 1; i <= 8; i++) {
+    await page.mouse.move(box.x + box.width * (0.4 + 0.025 * i), box.y + box.height * 0.5);
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+  }
+  await page.mouse.up({ button: 'right' });
+  expect((await rotating).x).toBeGreaterThan(0.01);
+
+  await page.waitForTimeout(3000); // 収まるのを待つ
+  // ホイールで寄る
+  const zooming = watch(1200);
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  for (let i = 0; i < 3; i++) await page.mouse.wheel(0, -100);
+  expect((await zooming).z).toBeGreaterThan(0.01);
 });
 
 test('「揺らす」ツール: 左ドラッグで画像は動かずに揺れ、視点も「未保存」も変わらない', async ({ page }) => {

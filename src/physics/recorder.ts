@@ -24,6 +24,9 @@ export function applySample(world: PhysicsWorld, smp: RecordSample): void {
   world.grabGains = new Map(smp.grabGains);
   // 物理に伝える注視点(「揺らす」で振った量を含む)。古い記録には無いので視点の注視点で代える
   world.viewTarget = smp.viewTarget ?? smp.camera.target;
+  // 視点の向きとズーム(回転・ズームでも揺らす)
+  const c = smp.camera;
+  world.viewAngles = { yaw: c.yaw, pitch: c.pitch, zoom: c.zoom };
   if (smp.viewCut) world.cutView();
 }
 

@@ -186,6 +186,87 @@ describe('揺れの物理', () => {
     expect(w.displacement(l.id)).toEqual({ x: 0, y: 0, z: 0 });
   });
 
+  describe('回転とズーム', () => {
+    /** 視点を from から to へ 0.15 秒で動かして止め、その後 1 秒の変位の最大(成分ごとの絶対値) */
+    const flick = (l: Layer, from: Partial<ReturnType<typeof view>>, to: Partial<ReturnType<typeof view>>, w = new PhysicsWorld()) => {
+      w.unitPx = 50;
+      const a = { ...view(), ...from }, b = { ...view(), ...to }, max = { x: 0, y: 0, z: 0 };
+      for (let i = 0; i < 140; i++) {
+        const u = Math.min(1, i / 18), m = (k: 'yaw' | 'pitch' | 'zoom') => a[k] + (b[k] - a[k]) * u;
+        w.viewAngles = { yaw: m('yaw'), pitch: m('pitch'), zoom: m('zoom') };
+        w.step([l]);
+        const s = w.displacement(l.id);
+        max.x = Math.max(max.x, Math.abs(s.x)); max.y = Math.max(max.y, Math.abs(s.y)); max.z = Math.max(max.z, Math.abs(s.z));
+      }
+      return max;
+    };
+    const view = () => ({ yaw: 0, pitch: 0, zoom: 1 });
+
+    it('左右に回すと、ふくらみの高さに応じて横に揺れる。平らなら揺れない', () => {
+      const tall = layerWith({ weight: 0 }); tall.pop = 30;
+      const low = layerWith({ weight: 0 }); low.pop = 10;
+      const flat = layerWith({ weight: 0 }); flat.pop = 0;
+      const t = flick(tall, {}, { yaw: 0.8 }), lo = flick(low, {}, { yaw: 0.8 }), f = flick(flat, {}, { yaw: 0.8 });
+      expect(t.x).toBeGreaterThan(0.01);
+      expect(t.x).toBeGreaterThan(lo.x * 2);
+      expect(f.x).toBeLessThan(1e-9);
+      expect(t.y).toBeLessThan(1e-9);
+    });
+
+    it('上下に回すと縦に揺れる', () => {
+      const l = layerWith({ weight: 0 }); l.pop = 30;
+      const m = flick(l, {}, { pitch: 0.6 });
+      expect(m.y).toBeGreaterThan(0.01);
+      expect(m.x).toBeLessThan(1e-9);
+    });
+
+    it('回転の中心(注視点)から離れたレイヤーほど大きく揺れる', () => {
+      const l = layerWith({ weight: 0 }); l.pop = 10;
+      const near = flick(l, {}, { yaw: 0.8 });
+      const w = new PhysicsWorld(); w.centerOf = () => ({ x: 0.6, y: 0 });
+      const far = flick(l, {}, { yaw: 0.8 }, w);
+      expect(far.z).toBeGreaterThan(0.01); // 横にずれた所は、左右に回すと奥行きの向きに動く
+      expect(far.x + far.z).toBeGreaterThan((near.x + near.z) * 2);
+    });
+
+    it('ズームすると手前・奥の向きに揺れる。拡大率によらず、同じ倍率の変化なら同じだけ揺れる', () => {
+      const l = layerWith({ weight: 0 });
+      const a = flick(l, { zoom: 1 }, { zoom: 0.8 }), b = flick(l, { zoom: 0.25 }, { zoom: 0.2 });
+      expect(a.z).toBeGreaterThan(0.01);
+      expect(a.x + a.y).toBeLessThan(1e-9);
+      expect(b.z).toBeCloseTo(a.z, 2);
+    });
+
+    it('斜めから見ていても、平行移動の揺れは正面から見たときと同じ(画像の向きで同じ量)', () => {
+      const pan = (yaw: number, pitch: number) => {
+        const l = layerWith({ weight: 0 }), w = new PhysicsWorld(); w.unitPx = 50; l.pop = 20;
+        w.viewAngles = { yaw, pitch, zoom: 1 };
+        for (let i = 0; i < 40; i++) { w.viewTarget = { x: Math.min(i, 20) * 2, y: Math.min(i, 20), z: 0 }; w.step([l]); }
+        return w.displacement(l.id);
+      };
+      const a = pan(0, 0), b = pan(-0.7, 0.4);
+      expect(b.x).toBeCloseTo(a.x, 9); expect(b.y).toBeCloseTo(a.y, 9); expect(b.z).toBeCloseTo(a.z, 9);
+      expect(a.x).not.toBe(0);
+    });
+
+    it('視点を止めたままポップ量や塗りの重心を変えても揺れない', () => {
+      const l = layerWith({ weight: 0 }), w = new PhysicsWorld(); w.unitPx = 50;
+      w.viewAngles = { yaw: -0.5, pitch: 0.3, zoom: 1.5 };
+      run(w, [l], 0.5);
+      l.pop = 400; w.centerOf = () => ({ x: 0.7, y: -0.4 });
+      run(w, [l], 0.5);
+      expect(w.displacement(l.id)).toEqual({ x: 0, y: 0, z: 0 });
+    });
+
+    it('視点が飛んだとき(リセットなど)は、回転・ズームでも揺らさない', () => {
+      const l = layerWith({ weight: 0 }), w = new PhysicsWorld(); w.unitPx = 50; l.pop = 30;
+      w.step([l]);
+      w.cutView(); w.viewAngles = { yaw: 1.2, pitch: -0.5, zoom: 3 };
+      run(w, [l], 1);
+      expect(w.displacement(l.id)).toEqual({ x: 0, y: 0, z: 0 });
+    });
+  });
+
   it('平行移動の途中のスナップショットから復元しても同じ結果になる', () => {
     const l = layerWith({ weight: 0 }), w = new PhysicsWorld();
     w.unitPx = 50;
@@ -282,6 +363,7 @@ describe('操作の記録', () => {
       if (i % 2 === 0) camera.target = { x: Math.sin(i / 40) * 80, y: (i % 300) * 0.5, z: Math.cos(i / 55) * 20 }; // 描画フレームごとに動く
       if (i === 400) live.cutView(); // 視点のリセット相当
       live.viewTarget = camera.target;
+      live.viewAngles = { yaw: camera.yaw, pitch: camera.pitch, zoom: camera.zoom };
       rec.record({ grab: null, grabGains: [], camera: structuredClone(camera), viewCut: live.viewCut }, () => live.snapshot());
       live.step([l]);
       xs.push(live.displacement(l.id).x);
@@ -293,6 +375,29 @@ describe('操作の記録', () => {
     for (const smp of r.warmup) { applySample(w, smp); w.step([l]); }
     const start = n - r.samples.length;
     r.samples.forEach((smp, k) => { applySample(w, smp); w.step([l]); expect(w.displacement(l.id).x).toBe(xs[start + k]); });
+    expect(Math.max(...xs.map(Math.abs))).toBeGreaterThan(0.01);
+  });
+
+  it('記録から進め直すと、回転とズームの揺れもライブと一致する', () => {
+    const l = layerWith(), live = new PhysicsWorld(), rec = new MotionRecorder();
+    l.pop = 30; live.unitPx = 50;
+    const camera = defaultCamera(), xs: number[] = [];
+    const n = 600;
+    for (let i = 0; i < n; i++) {
+      if (i % 2 === 0) { camera.yaw = Math.sin(i / 30) * 0.9; camera.pitch = Math.cos(i / 45) * 0.4; camera.zoom = Math.exp(Math.sin(i / 25) * 0.4); }
+      live.viewTarget = camera.target;
+      live.viewAngles = { yaw: camera.yaw, pitch: camera.pitch, zoom: camera.zoom };
+      rec.record({ grab: null, grabGains: [], camera: structuredClone(camera), viewCut: live.viewCut }, () => live.snapshot());
+      live.step([l]);
+      const s = live.displacement(l.id); xs.push(s.x + s.y + s.z);
+    }
+    const r = rec.lastSeconds(n * PHYSICS_DT - 1.3)!;
+    expect(r.warmup.length).toBeGreaterThan(0);
+    const w = new PhysicsWorld(); w.unitPx = 50;
+    w.restore(r.start);
+    for (const smp of r.warmup) { applySample(w, smp); w.step([l]); }
+    const start = n - r.samples.length;
+    r.samples.forEach((smp, k) => { applySample(w, smp); w.step([l]); const s = w.displacement(l.id); expect(s.x + s.y + s.z).toBe(xs[start + k]); });
     expect(Math.max(...xs.map(Math.abs))).toBeGreaterThan(0.01);
   });
 
@@ -313,6 +418,7 @@ describe('操作の記録', () => {
     for (let i = 0; i < n; i++) {
       if (i % 2 === 0 && i < 200) { shake.x = Math.sin(i / 25) * 60; shake.y = (i % 100) * 0.4; }
       live.viewTarget = { x: camera.target.x + shake.x, y: camera.target.y + shake.y, z: camera.target.z + shake.z };
+      live.viewAngles = { yaw: camera.yaw, pitch: camera.pitch, zoom: camera.zoom };
       rec.record({ grab: null, grabGains: [], camera: structuredClone(camera), viewTarget: { ...live.viewTarget }, viewCut: live.viewCut }, () => live.snapshot());
       live.step([l]);
       xs.push(live.displacement(l.id).x);
