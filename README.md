@@ -1,17 +1,15 @@
 # PukuPop
 
 画像を3D空間に置き、塗った所を平面から持ち上げて、ぷるぷる揺らせる Web アプリです。
-「絵を塗って膨らませて揺らす」タイプの懐かしいツールの手触りを、ブラウザだけで動くように作り直しています。
+ブラウザだけで動き、画像やプロジェクトをサーバーへ送りません。
 
 **すぐに試す: https://ogsoonyn.github.io/PukuPop/**
-
-画像とプロジェクトはブラウザの中だけで処理し、サーバーへは送りません。
 
 ## 主な機能
 
 ### 作る
 
-- **塗って持ち上げる**: ブラシで塗った所が、その場で持ち上がります。筆圧に対応し、レイヤーは8枚まで使えます。
+- **塗って持ち上げる**: ブラシで塗った所が、その場で持ち上がります。筆圧に対応し、レイヤーは8枚まで使えます。揺れはレイヤーごとに付くので、別々に揺らしたい所はレイヤーを分けて塗ります。
 - **範囲を膨らませる**: 楕円や矩形をドラッグして、高さ・断面・角度を決めて一度に膨らませます。
 - **まとめて変える**: 複数のレイヤーを選ぶと、ポップ量や揺れを一度に変えられます。
 
@@ -25,15 +23,13 @@
 
 ### 仕上げる
 
-- **書き出し**: MP4 / WebM / 透過WebM / 連番PNG(ZIP) / GIF。記録した操作やキーフレームの動きは、継ぎ目の揃ったループ動画にできます。1フレームずつ計算するので、PC が重くてもコマ落ちしません。
-- **保存**: `.pukupop` 形式で保存します(改名前の `.popstage` も開けます)。作業中の内容はブラウザに自動保存し、次回の起動時に戻せます。最近開いたファイルは縮小画像付きの一覧から開き直せます。
+- **書き出し**: MP4 / WebM / 透過WebM / 連番PNG(ZIP) / GIF。記録した操作やキーフレームの動きは、継ぎ目の揃ったループ動画にできます。
+- **保存**: `.pukupop` 形式で保存します。
 - **スマホ**: 狭い画面では 3Dビューを全面に出し、設定は下から引き上げるシートにまとめます。塗るツールはシートの「レイヤー」→「塗って直す」にあります。
-
-各項目の詳しい説明は、アプリの中で項目の横にある「?」から開けます。
 
 ## 使い方
 
-1. 画像(PNG / JPEG / WebP)をウィンドウへドロップします。起動時はサンプル画像が開きます。
+1. 画像(PNG / JPEG / WebP)をウィンドウへドロップします。
 2. ブラシ(B)で動かしたい所を塗ります。
 3. 右パネルで揺れのプリセットを選びます。
 4. つかむ(G)で画像を引っ張って離すと揺れます。
@@ -46,7 +42,7 @@
 | 視点を回す | 右ドラッグ |
 | 画像を動かす(勢いで揺れる) | 中ドラッグ |
 | ズーム | ホイール |
-| 視点の操作・つかむ・揺らすを細かくする | Ctrl(⌘)か Shift を押しながら操作(動きが 1/5 になる) |
+| 視点の操作・つかむ・揺らす の精密操作 | Ctrl(⌘)か Shift を押しながら操作 |
 | ブラシ / 消しゴム / ぼかし / 膨らみ | B / E / S / I |
 | つかむ / 揺らす / 視点 / 移動 | G / Y / V / H |
 | 元に戻す / やり直す | Ctrl+Z / Ctrl+Shift+Z |
@@ -56,11 +52,14 @@
 
 スマホでは、1本指で選んだツール、2本指で平行移動とピンチズーム、2本指タップで元に戻す、3本指タップでやり直しです。
 
-すべての操作は、アプリの「ヘルプ → 操作方法」にあります。
-
 ## 動作環境
 
-デスクトップ版の Chrome / Edge の最新版を想定しています。スマホは Android の Chrome で確かめています。Firefox と Safari での動作は確認していません。
+### 動作確認済み環境
+
+- デスクトップ版 Chrome / Edge
+- Android Chrome
+
+### 実行環境
 
 | 機能 | 必要なもの |
 | --- | --- |
@@ -69,88 +68,20 @@
 | 透過WebM の書き出し | アルファ付き VP9 のエンコード(Chromium 系) |
 | 上書き保存 | File System Access API(無い場合はダウンロードで保存) |
 
-ホーム画面にアプリとして置けます。一度開いたあとは、電波がなくても起動できます。
-
-- Android(Chrome): メニューの「ホーム画面に追加」または「アプリをインストール」
-- iPhone / iPad(Safari): 共有ボタンから「ホーム画面に追加」
-
-## 既知の制限
-
-- 透過画像を横から見ると、画像の縁が引き伸ばされて見えます。
-- 揺れはレイヤー単位で計算しています。頂点ごとに異なる揺れ方はしません。
-- ウェイトは 8 ビットで持つので、ポップ量を非常に大きくすると段差が見えることがあります。
-
-## 開発
+## ビルド
 
 Node.js 20.19 以降(または 22.12 以降)が必要です。
 
 ```sh
 npm install
-npm run dev        # 開発サーバーを起動する
-npm run build      # 型チェックのあと dist/ へ静的ファイルを出力する
-npm run preview    # ビルド結果を確認する
-npm test           # 単体テスト(Vitest)
-npm run e2e        # E2E テスト(Playwright)
+npm run dev       # 開発サーバーを起動する
+npm run build     # dist/ へ静的ファイルを出力する
+npm run preview   # ビルド結果を確認する
 ```
 
-### 構成
+## 使っている主なライブラリ
 
-| ディレクトリ | 役割 |
-| --- | --- |
-| `src/model` | ドキュメントモデル(Project / Document / Layer)、ウェイトマップ、変更通知 |
-| `src/commands` | 変更操作とアンドゥ(100手 / 256MB まで。塗りは 64px タイルの差分で持つ) |
-| `src/paint` | ストローク処理(補間、ブラシ・消しゴム・ぼかし、筆圧)、範囲を膨らませる処理 |
-| `src/physics` | 揺れの計算(レイヤーごとのバネ・ダンパ、固定 120Hz)、揺らし方のパターン、操作の記録 |
-| `src/stage` | three.js の描画。ウェイトをテクスチャ配列にまとめ、頂点シェーダで持ち上げる |
-| `src/storage` | `.pukupop`(旧 `.popstage`)の読み書き、IndexedDB への自動保存 |
-| `src/export` | フレーム単位の書き出し |
-| `src/ui` | 画面の部品(入力、パネル、ダイアログ、3面図) |
-| `src/app.ts` | 各モジュールをつなぐ本体 |
-
-`model` / `commands` / `paint` / `physics` / `storage` は DOM と three.js を参照しないので、ブラウザ無しで単体テストできます。
-
-### 画面まわりの定義
-
-次の表のファイルを1か所の元にして、ほかはそこから作ります。部品を足したり名前を変えたりするときは、まずここを直してください。
-
-| 何を | どこに |
-| --- | --- |
-| 画面の要素の id と種類(起動時にまとめて取り、合わなければ止まる。`index.html` との突き合わせは単体テスト) | `src/ui/ids.ts` |
-| コマンド(名前・ショートカット・使える条件)。メニューのキー表記・ツールチップ・ヘルプのキー一覧・キーの処理はここから作る | `src/ui/actions.ts` |
-| 左のツールバーのツール(名前・キー・ヒント)。スマホの下のバーもアイコンと名前はここから | `src/ui/tools.ts` |
-| 左のツールバーの、その場で効く操作のまとまり | `src/ui/actions.ts` の `NAV_ACTIONS` |
-| アイコン(PC とスマホで共通) | `src/ui/icons.ts` |
-| 項目の説明(「?」で開く。`data-help` に説明の id) | `src/ui/help.ts` |
-| スマホのシートへ移す部品(`index.html` の `data-m-slot` と、移す先のタブ) | `src/ui/mobile.ts` の `MOBILE_SLOTS` |
-
-### テスト
-
-- **単体テスト**(`tests/unit`): ウェイトマップ、アンドゥ、ストローク、物理、ファイルの読み書きなど、ブラウザの要らない処理を確かめます。
-- **E2E テスト**(`tests/e2e`): 実際のブラウザで、機能ごとにファイルを分けて確かめます。共通の道具は `tests/e2e/helpers.ts` にあります。
-
-E2E テストはインストール済みの Google Chrome を使い(`channel: 'chrome'`)、描画は SwiftShader で行うので GPU が無くても動きます。見た目の比較に使う基準画像は OS ごとに別のファイルです。使っている OS 用のものが無いときは、初回に `npx playwright test --update-snapshots` で作ってください。
-
-### 公開
-
-`main` へ push すると、GitHub Actions(`.github/workflows/deploy-pages.yml`)がテストとビルドを行い、GitHub Pages へ公開します。初回だけ、リポジトリの Settings → Pages で Source を「GitHub Actions」にしてください。
-
-ビルド結果は相対パスで参照し合うので、`dist/` の中身をそのまま任意の静的ホスティングに置いても動きます。
-
-### アイコンと service worker
-
-- アプリアイコンは `scripts/icon-art.mjs` の SVG から作ります。絵を変えたら `node scripts/make-icons.mjs` で `public/icons/` を作り直してください。
-- service worker は `public/sw.js` です。本番ビルドのときだけ登録します(`?e2e` 付きのときも登録しません)。
-
-### 使っている主なライブラリ
-
-| 用途 | ライブラリ |
-| --- | --- |
-| 描画 | [three.js](https://threejs.org/) |
-| 画面 | [Tailwind CSS](https://tailwindcss.com/)、[daisyUI](https://daisyui.com/) |
-| 動画の書き出し | [Mediabunny](https://mediabunny.dev/)(WebCodecs) |
-| GIF の書き出し | [gifenc](https://github.com/mattdesl/gifenc) |
-| ZIP | [fflate](https://github.com/101arrowz/fflate) |
-| ビルド・テスト | [Vite](https://vite.dev/)、[Vitest](https://vitest.dev/)、[Playwright](https://playwright.dev/) |
+[three.js](https://threejs.org/)、[Tailwind CSS](https://tailwindcss.com/)、[daisyUI](https://daisyui.com/)、[Mediabunny](https://mediabunny.dev/)、[gifenc](https://github.com/mattdesl/gifenc)、[fflate](https://github.com/101arrowz/fflate)、[Vite](https://vite.dev/)
 
 ## ライセンス
 
