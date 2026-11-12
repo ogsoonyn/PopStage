@@ -40,7 +40,8 @@ export function bindBlurDialog(app: App): { open: () => void } {
     open() {
       const layer = app.activeLayer;
       if (!layer || !app.beginBlurPreview()) return;
-      ui.blurTarget.textContent = `選択中のレイヤー「${layer.name}」全体にかけます。`;
+      const n = app.selectedLayers.length;
+      ui.blurTarget.textContent = n > 1 ? `選んでいるレイヤー(「${layer.name}」ほか${n - 1}枚)それぞれの全体にかけます。` : `選択中のレイヤー「${layer.name}」全体にかけます。`;
       range.value = num.value = String(lastRadius);
       dlg.show();
       range.focus();

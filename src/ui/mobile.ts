@@ -178,9 +178,10 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
 
   /** プリセットのボタンと自動揺らしのボタンを、今の状態(モデル)に合わせる */
   function syncState(): void {
-    const l = app.activeLayer;
+    const l = app.activeLayer, ls = app.selectedLayers;
     for (const b of presets.querySelectorAll<HTMLButtonElement>('button')) {
-      b.setAttribute('aria-pressed', String(b.dataset.value === l?.physics.preset));
+      // 複数のレイヤーを選んでいるときは、全部がそのプリセットのときだけ押した状態にする
+      b.setAttribute('aria-pressed', String(ls.length > 0 && ls.every(x => x.physics.preset === b.dataset.value)));
       b.disabled = !l;
     }
     ui.mAuto.setAttribute('aria-pressed', String(app.project.autoSwing.enabled));
