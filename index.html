@@ -137,6 +137,9 @@
   <label class="flex items-center gap-2" data-inflate-opt hidden>縁のなだらかさ
     <input id="tInflSoft" type="range" min="0" max="100" value="100" class="range range-xs w-24">
     <output id="tInflSoftO" class="w-10 tabular-nums"></output></label>
+  <label class="flex items-center gap-2" data-inflate-opt hidden title="形の傾き。正で時計回り">角度
+    <input id="tInflAngle" type="range" min="-90" max="90" step="1" value="0" class="range range-xs w-16">
+    <output id="tInflAngleO" class="w-10 tabular-nums"></output></label>
   <label class="flex items-center gap-2" data-inflate-opt hidden>重ね方
     <select id="tInflBlend" class="select select-xs w-32"><option value="max">重ねる(高い方)</option><option value="add">足す</option><option value="replace">置き換える</option></select></label>
   <span id="toolHint" class="opacity-70 hidden md:inline flex-1 min-w-0 truncate"></span>
@@ -453,6 +456,9 @@
       <select id="inflKind" class="select select-sm w-40"><option value="ellipse">楕円</option><option value="rect">矩形</option></select></div>
     <div class="prop2"><span>大きさ</span>
       <div class="flex items-center gap-1">幅 <input id="inflW" type="number" min="2" max="8192" class="input input-sm w-20 text-right"> × 縦 <input id="inflH" type="number" min="2" max="8192" class="input input-sm w-20 text-right"> px</div></div>
+    <div class="prop2"><span class="prop-name">角度<button type="button" class="help-btn" data-help="inflAngleHelp"></button></span>
+      <div class="flex items-center gap-2"><input id="inflAngle" type="range" min="-90" max="90" step="1" class="range range-sm range-primary flex-1"><input id="inflAngleN" type="number" min="-90" max="90" class="input input-sm w-20 text-right"> °</div></div>
+    <p id="inflAngleHelp" class="help-text" hidden>形を傾けます。正の値で時計回り、負の値で反時計回りです。傾けたまま範囲を描き直すと、ドラッグの始点と終点が傾いた形の対角の角になります。</p>
     <div class="prop2"><span>高さ</span>
       <div class="flex items-center gap-2"><input id="inflHeight" type="range" min="0" max="1000" class="range range-sm range-primary flex-1"><input id="inflHeightN" type="number" min="0" max="1500" class="input input-sm w-20 text-right"> px</div></div>
     <div class="prop2"><span class="prop-name">縁のなだらかさ<button type="button" class="help-btn" data-help="inflSoftHelp"></button></span>

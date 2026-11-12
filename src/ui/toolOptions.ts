@@ -1,12 +1,12 @@
 /**
  * ツールオプションの欄(上のバー)。選択中のツールの設定だけを出す。
  *   ブラシ・消しゴム・ぼかし: ブラシのサイズ・強さ・硬さ・筆圧(data-brush-opt)
- *   膨らみ: 次に範囲を描くときの形・断面・縁のなだらかさ・重ね方(data-inflate-opt)。描いたあとのプレビュー中は、
+ *   膨らみ: 次に範囲を描くときの形・断面・縁のなだらかさ・角度・重ね方(data-inflate-opt)。描いたあとのプレビュー中は、
  *           下のパネルと同じ値を変える。次に描くときの設定はブラウザに覚える(適用したときの設定も覚え、キャンセルした分は覚えない)
  *   そのほか(つかむ・揺らす・視点・移動): 設定は無く、操作のヒントだけ
  * スマホでは、ブラシの設定はシートの「ツール」タブへ移す(ui/mobile.ts)。
  */
-import type { App, InflateSettings } from '../app';
+import { INFLATE_ANGLE, type App, type InflateSettings } from '../app';
 import type { InflateBlend, InflateProfile } from '../paint/inflate';
 import { prefs } from '../storage/prefs';
 import { ui } from './ids';
@@ -21,7 +21,7 @@ export function bindToolOptions(app: App): void {
   /* ---------- 膨らみの既定値 ---------- */
 
   const KEY = 'inflateDefaults';
-  const save = () => { const s = app.inflateSettings; prefs.set(KEY, { shape: s.shape, profile: s.profile, softness: s.softness, blend: s.blend }); };
+  const save = () => { const s = app.inflateSettings; prefs.set(KEY, { shape: s.shape, profile: s.profile, softness: s.softness, angle: s.angle, blend: s.blend }); };
   // 覚えている設定を戻す(値は選べるものだけ)
   {
     const v = prefs.get<Partial<InflateSettings>>(KEY) ?? {};
@@ -29,7 +29,11 @@ export function bindToolOptions(app: App): void {
     const shape = pick(v.shape, ['ellipse', 'rect'] as const), profile = pick(v.profile, ['dome', 'cushion', 'cone'] as const);
     const blend = pick(v.blend, ['max', 'add', 'replace'] as const);
     const softness = typeof v.softness === 'number' && v.softness >= 0 && v.softness <= 1 ? v.softness : undefined;
-    app.inflateSettings = { ...app.inflateSettings, ...(shape && { shape }), ...(profile && { profile }), ...(blend && { blend }), ...(softness !== undefined && { softness }) };
+    const angle = typeof v.angle === 'number' && Number.isFinite(v.angle) ? Math.round(Math.max(INFLATE_ANGLE.min, Math.min(INFLATE_ANGLE.max, v.angle))) : undefined;
+    app.inflateSettings = {
+      ...app.inflateSettings, ...(shape && { shape }), ...(profile && { profile }), ...(blend && { blend }),
+      ...(softness !== undefined && { softness }), ...(angle !== undefined && { angle }),
+    };
   }
   /** プレビューへの反映は1フレームに1回にまとめる(大きな画像でも滑らかに動かせるよう) */
   let pending: Partial<InflateSettings> = {}, scheduled = false;
@@ -45,10 +49,14 @@ export function bindToolOptions(app: App): void {
     save();
   };
   const softText = () => { ui.tInflSoftO.textContent = `${ui.tInflSoft.value}%`; };
+  const angleText = () => { ui.tInflAngleO.textContent = `${ui.tInflAngle.value}°`; };
   ui.tInflKind.addEventListener('change', () => setInflate({ shape: ui.tInflKind.value as InflateSettings['shape'] }));
   ui.tInflProfile.addEventListener('change', () => setInflate({ profile: ui.tInflProfile.value as InflateProfile }));
   ui.tInflBlend.addEventListener('change', () => setInflate({ blend: ui.tInflBlend.value as InflateBlend }));
   ui.tInflSoft.addEventListener('input', () => { softText(); setInflate({ softness: +ui.tInflSoft.value / 100 }); });
+  ui.tInflAngle.addEventListener('input', () => { angleText(); setInflate({ angle: +ui.tInflAngle.value }); });
+  // つまみをダブルクリックすると傾きなし(0°)に戻す
+  ui.tInflAngle.addEventListener('dblclick', () => { ui.tInflAngle.value = '0'; angleText(); setInflate({ angle: 0 }); });
 
   /** 欄の値を今の設定に合わせる(入力中の欄は書き換えない) */
   function syncInflate(): void {
@@ -58,7 +66,8 @@ export function bindToolOptions(app: App): void {
     set(ui.tInflProfile, st.profile);
     set(ui.tInflBlend, st.blend);
     set(ui.tInflSoft, String(Math.round(st.softness * 100)));
-    softText();
+    set(ui.tInflAngle, String(st.angle));
+    softText(); angleText();
   }
   app.on('inflate', phase => {
     if (phase === 'end') { pending = {}; save(); } // 適用したら、その設定が次に描くときの設定になる(キャンセルなら前のまま)

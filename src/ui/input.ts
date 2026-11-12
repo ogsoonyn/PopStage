@@ -282,10 +282,14 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     const p = app.stage.pick(e.clientX, e.clientY);
     if (!p || !areaStart) return;
     const dx = p.x - areaStart.x, dy = p.y - areaStart.y;
-    let w = Math.abs(dx), h = Math.abs(dy);
+    // 形を傾けているときは、始点と今の点を傾いた形の対角の角にする(画像の座標は y が上向きなので、時計回りは -θ)
+    const st = app.inflateState?.settings ?? app.inflateSettings, t = st.angle * Math.PI / 180, c = Math.cos(t), n = Math.sin(t);
+    const lu = dx * c - dy * n, lv = dx * n + dy * c;
+    let w = Math.abs(lu), h = Math.abs(lv);
     if (e.shiftKey) w = h = Math.max(w, h);
     if (w < 2 || h < 2) return;
-    const area = { x: areaStart.x + Math.sign(dx || 1) * w / 2, y: areaStart.y + Math.sign(dy || 1) * h / 2, w: Math.round(w), h: Math.round(h) };
+    const hu = Math.sign(lu || 1) * w / 2, hv = Math.sign(lv || 1) * h / 2;
+    const area = { x: areaStart.x + hu * c + hv * n, y: areaStart.y - hu * n + hv * c, w: Math.round(w), h: Math.round(h) };
     if (app.previewingInflate) app.updateInflate({ area });
     else if (app.beginInflateArea(area)) areaBegan = true;
     else { drag.mode = null; areaStart = null; app.holdImage(false); }

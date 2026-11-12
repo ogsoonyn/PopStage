@@ -38,9 +38,13 @@ export interface InflateSettings {
   /** 頂上の高さ(元画像のピクセル)。null はレイヤーのポップ量と同じ */
   height: number | null;
   softness: number; // 0〜1
+  /** 形の傾き(度、-90〜90)。正で時計回り */
+  angle: number;
   profile: InflateProfile;
   blend: InflateBlend;
 }
+/** 形の傾きの範囲(度) */
+export const INFLATE_ANGLE = { min: -90, max: 90 };
 export interface InflateState {
   /** 範囲を描いたレイヤー */
   readonly layerId: string;
@@ -115,7 +119,7 @@ export class App extends Emitter<AppEvents> {
   shake: Vec3 = { x: 0, y: 0, z: 0 };
   brush: BrushOptions = { size: 64, strength: 0.3, hardness: 0, pressure: 'strength' };
   /** 前回の「膨らませる」の設定(次に範囲を描いたときの初期値) */
-  inflateSettings: InflateSettings = { shape: 'ellipse', height: null, softness: 1, profile: 'dome', blend: 'max' };
+  inflateSettings: InflateSettings = { shape: 'ellipse', height: null, softness: 1, angle: 0, profile: 'dome', blend: 'max' };
   imageCanvas: HTMLCanvasElement | null = null;
   /** 表示用の画像の一辺の上限 */
   private get displaySize(): number { return Math.min(4096, this.stage.maxTextureSize); }
@@ -758,6 +762,7 @@ export class App extends Emitter<AppEvents> {
     const level = target.pop > 0 ? Math.min(1, st.height / target.pop) : 0;
     inflateShape(wm, base, {
       kind: st.shape, cx: (a.x / doc.image.width + 0.5) * wm.width, cy: (0.5 - a.y / doc.image.height) * wm.height, rx: a.w / 2 * kx, ry: a.h / 2 * ky,
+      angle: st.angle * Math.PI / 180,
     }, { level, softness: st.softness, profile: st.profile, blend: st.blend });
     this.store.weightsChanged(target.id, wm.fullRect, false);
   }
@@ -775,7 +780,7 @@ export class App extends Emitter<AppEvents> {
     this.inflateSession = null;
     const st = s.settings;
     this.inflateSettings = { ...st }; // 次に描くときも同じ設定で始める
-    const shape = `${st.shape === 'ellipse' ? '楕円' : '矩形'} ${Math.round(s.area.w)}×${Math.round(s.area.h)}px`;
+    const shape = `${st.shape === 'ellipse' ? '楕円' : '矩形'} ${Math.round(s.area.w)}×${Math.round(s.area.h)}px${st.angle ? `・${st.angle}°` : ''}`;
     if (newLayer && !newLayer.weights.data.some(v => v > 0)) {
       // 範囲がすべて画像の外などで何も膨らまなかったときは、空のレイヤーを残さない
       this.inflateSession = s;

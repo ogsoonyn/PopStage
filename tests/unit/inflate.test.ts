@@ -37,6 +37,19 @@ describe('図形で膨らませる', () => {
     expect(half).toBeLessThan(0.9);
   });
 
+  it('傾けた形: 傾いた向きに伸び、外接矩形も傾きに合わせて広がる', () => {
+    // 横長の矩形を時計回りに 90° 傾けると縦長になる
+    const a = new WeightMap(64, 64);
+    const r = inflateShape(a, a.data.slice(), { kind: 'rect', cx: 32, cy: 32, rx: 20, ry: 6, angle: Math.PI / 2 }, params({ softness: 0 }));
+    expect(r).toEqual({ x: 26, y: 12, w: 12, h: 40 });
+    expect(at(a, 32, 15)).toBe(255); expect(at(a, 15, 32)).toBe(0);
+    // 楕円を時計回りに 45° 傾けると、右下・左上の向きに伸びる(行は下へ増える)
+    const b = new WeightMap(64, 64);
+    inflateShape(b, b.data.slice(), { kind: 'ellipse', cx: 32, cy: 32, rx: 24, ry: 6, angle: Math.PI / 4 }, params());
+    expect(at(b, 32 + 14, 32 + 14)).toBeGreaterThan(0); expect(at(b, 32 - 14, 32 - 14)).toBeGreaterThan(0);
+    expect(at(b, 32 + 14, 32 - 14)).toBe(0); expect(at(b, 32 - 14, 32 + 14)).toBe(0);
+  });
+
   it('なだらかさ 0 は平らな台になる', () => {
     const wm = new WeightMap(64, 64), base = wm.data.slice();
     inflateShape(wm, base, { kind: 'rect', cx: 32, cy: 32, rx: 20, ry: 10 }, params({ softness: 0 }));

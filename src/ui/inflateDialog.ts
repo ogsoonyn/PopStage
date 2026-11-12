@@ -2,7 +2,7 @@
  * 「膨らませる」のパネル。膨らみツールで範囲を描くと開き、数値を変えるとその場でプレビューする。
  * 視点を回して形を確かめられるよう、ほかの操作を止めないダイアログ(show)にする。適用で1手として記録する。
  */
-import type { App, InflateArea, InflateSettings } from '../app';
+import { INFLATE_ANGLE, type App, type InflateArea, type InflateSettings } from '../app';
 import type { InflateProfile, InflateBlend } from '../paint/inflate';
 import { LIMITS } from '../model/project';
 import { popToSlider, sliderToPop } from './popSlider';
@@ -13,6 +13,7 @@ export function bindInflateDialog(app: App): void {
   const kind = ui.inflKind, w = ui.inflW, h = ui.inflH;
   const height = ui.inflHeight, heightN = ui.inflHeightN;
   const soft = ui.inflSoft, softN = ui.inflSoftN;
+  const angle = ui.inflAngle, angleN = ui.inflAngleN;
   const blend = ui.inflBlend;
   const profiles = [...document.querySelectorAll<HTMLInputElement>('input[name=inflProfile]')];
   let queued: { settings?: Partial<InflateSettings>; area?: Partial<InflateArea> } = {}, scheduled = false;
@@ -35,9 +36,13 @@ export function bindInflateDialog(app: App): void {
   heightN.addEventListener('input', () => { const v = clampInt(heightN.value, 0, LIMITS.pop.max); height.value = String(popToSlider(v)); update({ settings: { height: v } }); });
   soft.addEventListener('input', () => { softN.value = soft.value; update({ settings: { softness: clampInt(soft.value, 0, 100) / 100 } }); });
   softN.addEventListener('input', () => { soft.value = String(clampInt(softN.value, 0, 100)); update({ settings: { softness: clampInt(softN.value, 0, 100) / 100 } }); });
+  const angleOf = (v: string) => clampInt(v, INFLATE_ANGLE.min, INFLATE_ANGLE.max);
+  angle.addEventListener('input', () => { angleN.value = angle.value; update({ settings: { angle: angleOf(angle.value) } }); });
+  angle.addEventListener('dblclick', () => { angle.value = angleN.value = '0'; update({ settings: { angle: 0 } }); });
+  angleN.addEventListener('input', () => { if (angleN.value === '' || angleN.value === '-') return; angle.value = String(angleOf(angleN.value)); update({ settings: { angle: angleOf(angleN.value) } }); });
   blend.addEventListener('change', () => update({ settings: { blend: blend.value as InflateBlend } }));
   for (const r of profiles) r.addEventListener('change', () => { if (r.checked) update({ settings: { profile: r.value as InflateProfile } }); });
-  for (const el of [w, h, heightN, softN]) el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } });
+  for (const el of [w, h, heightN, softN, angleN]) el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); finish(true); } });
 
   function finish(apply: boolean): void {
     if (!app.previewingInflate) return;
@@ -60,6 +65,7 @@ export function bindInflateDialog(app: App): void {
     set(w, String(Math.round(s.area.w))); set(h, String(Math.round(s.area.h)));
     set(height, String(popToSlider(st.height))); set(heightN, String(st.height));
     set(soft, String(Math.round(st.softness * 100))); set(softN, String(Math.round(st.softness * 100)));
+    set(angle, String(st.angle)); set(angleN, String(st.angle));
     set(blend, st.blend);
     for (const r of profiles) r.checked = r.value === st.profile;
     // 高さ = ウェイト × ポップ量。このレイヤーのポップ量を超えるときは、新しいレイヤーに作ることを知らせる

@@ -10,7 +10,7 @@ export const UI_IDS = {
   docTitle: 'span',
   brushSize: 'input', brushSizeO: 'output', brushStrength: 'input', brushStrengthO: 'output',
   brushHardness: 'input', brushHardnessO: 'output', brushPressure: 'select', toolHint: 'span',
-  tInflKind: 'select', tInflProfile: 'select', tInflSoft: 'input', tInflSoftO: 'output', tInflBlend: 'select',
+  tInflKind: 'select', tInflProfile: 'select', tInflSoft: 'input', tInflSoftO: 'output', tInflAngle: 'input', tInflAngleO: 'output', tInflBlend: 'select',
   tSwing: 'input', tAuto: 'input',
   // ツールバー・3Dビュー
   toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', takeBadge: 'button', mFine: 'button', busy: 'div',
@@ -42,7 +42,7 @@ export const UI_IDS = {
   blurDialog: 'dialog', blurTarget: 'p', blurRadius: 'input', blurRadiusN: 'input', blurCancel: 'button', blurApply: 'button',
   // 膨らませる
   inflateDialog: 'dialog', inflTarget: 'p', inflKind: 'select', inflW: 'input', inflH: 'input', inflHeight: 'input', inflHeightN: 'input',
-  inflSoft: 'input', inflSoftN: 'input', inflBlend: 'select', inflNote: 'p', inflCancel: 'button', inflApply: 'button',
+  inflSoft: 'input', inflSoftN: 'input', inflAngle: 'input', inflAngleN: 'input', inflBlend: 'select', inflNote: 'p', inflCancel: 'button', inflApply: 'button',
   // 確認・数値入力
   askDialog: 'dialog', askTitle: 'h3', askBody: 'p', askInputWrap: 'div', askInputLabel: 'span', askInput: 'input', askNo: 'button', askYes: 'button',
   // 最近開いたファイル・ヘルプ・このアプリについて
