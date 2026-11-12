@@ -107,15 +107,19 @@ function defineActions(app: App, d: ActionDeps) {
 
 type CommandName = keyof ReturnType<typeof defineActions>;
 
-/** 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く) */
-/** 表示の切り替え(入・切が見えるよう、ボタンに aria-pressed を付ける)。値はメニューの data-check と同じ名前 */
+/** 表示の切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す) */
 type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause';
-const NAV_ACTIONS: readonly { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string; check?: ViewCheck }[] }[] = [
+
+/**
+ * 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く)。
+ * check を持つものは切り替えで、入・切を aria-pressed で示す。name は、ボタンの文言を幅に合わせて縮めたときの読み上げ用の名前
+ */
+const NAV_ACTIONS: readonly { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string; check?: ViewCheck; name?: string }[] }[] = [
   {
     label: '表示', title: '表示に効く操作',
     items: [
       { cmd: 'toggleMulti', icon: 'multi', text: '3面図', check: 'multi' },
-      { cmd: 'toggleOverlay', icon: 'overlay', text: 'ウェイト', check: 'overlay' },
+      { cmd: 'toggleOverlay', icon: 'overlay', text: 'ウェイト', check: 'overlay', name: 'ウェイトの重ね表示' },
       { cmd: 'toggleFade', icon: 'fade', text: '画像を薄く', check: 'fade' },
       { cmd: 'toggleGrid', icon: 'grid', text: 'グリッド', check: 'grid' },
       { cmd: 'cleanView', icon: 'cleanView', text: '表示クリア' },
@@ -201,6 +205,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
       const b = navButton(ACT_BTN, it.icon, it.text);
       b.dataset.cmd = it.cmd; // 結び付け・キーの表記・ツールチップは、下の data-cmd の処理で付ける
       if (it.check) b.dataset.pressed = it.check;
+      if (it.name) b.setAttribute('aria-label', it.name);
       box.append(b);
     }
     navItems.push(box);

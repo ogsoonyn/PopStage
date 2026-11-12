@@ -55,17 +55,27 @@ html.mobile #blurDialog { bottom: calc(var(--m-tools) + .5rem); }
 /* ボタンの右上に出すショートカット */
 .tool-key { position: absolute; top: 1px; right: 3px; font: 600 9px/1 ui-monospace, monospace; opacity: .55; }
 .tool[aria-pressed=true] .tool-key { opacity: .85; }
-/* その場で効く操作のうち、表示の切り替えは、入のときに淡い色を敷く(ツールの塗りつぶしと見分けられるように) */
-#toolNav .nav-act[aria-pressed=true] { background: color-mix(in oklab, var(--color-primary) 18%, transparent); color: var(--color-primary); font-weight: 600; }
-/* 高さが足りないときは、アイコンを隠して詰める(それでも入らなければスクロール) */
+/*
+ * その場で効く操作のうち、表示の切り替えは、入のときに淡い色と枠を付ける(ツールの塗りつぶしと見分けられるように)。
+ * 文字の色は変えない(暗いテーマで小さい文字が読みにくくなるため)。枠は outline にして、強制カラーモードでも残す
+ */
+#toolNav .nav-act[aria-pressed=true] { background: color-mix(in oklab, var(--color-primary) 20%, transparent); outline: 1px solid color-mix(in oklab, var(--color-primary) 60%, transparent); outline-offset: -1px; font-weight: 600; }
+#toolNav .nav-act[aria-pressed=true]:hover { background: color-mix(in oklab, var(--color-primary) 30%, transparent); }
+/* 高さが足りないときは、まずその場で効く操作のアイコンを隠し(ツールバーがおよそ 900px より高い画面なら全部入る)、
+   さらに低いときはツールのアイコンも隠して詰める(それでも入らなければスクロール) */
+@media (max-height: 900px) {
+  #toolNav .nav-act .nav-ico { display: none; }
+  /* アイコンが無いと名前が右上のキーと同じ高さに来るので、キーの分だけ右を空ける */
+  #toolNav .nav-act { padding-left: 2px; padding-right: 12px; }
+  /* ⇧W のような2文字のキーは名前と重なるので出さない(ツールチップとヘルプには出る) */
+  #toolNav .nav-act.key-wide .tool-key { display: none; }
+  #toolNav .nav-act.key-wide { padding-right: 2px; }
+}
 @media (max-height: 720px) {
   #toolNav .nav-ico { display: none; }
   #toolNav .btn { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
-  #toolNav > .tool, #toolNav .nav-act { padding-left: 2px; padding-right: 12px; }
+  #toolNav > .tool { padding-left: 2px; padding-right: 12px; }
   #toolNav > .divider { margin: 0; height: 8px; }
-  /* ⇧W のような2文字のキーは名前と重なるので出さない(ツールチップとヘルプには出る) */
-  #toolNav .key-wide .tool-key { display: none; }
-  #toolNav .nav-act.key-wide { padding-right: 2px; }
 }
 
 /* 項目の説明は並べず、「?」で開く(ui/help.ts) */
