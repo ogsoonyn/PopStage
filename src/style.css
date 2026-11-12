@@ -153,6 +153,8 @@ html.mobile #mPanes .range { --range-thumb-size: 1.25rem; height: 1.5rem; }
 html.mobile #mPanes .toggle { --size: 1.5rem; }
 html.mobile #mPanes [data-brush-opt] { display: grid; grid-template-columns: 6.5rem 1fr 3.25rem; align-items: center; }
 html.mobile #mPanes [data-brush-opt] input[type=range] { width: 100%; }
+html.mobile #mPanes [data-inflate-opt]:not([hidden]) { display: grid; grid-template-columns: 6.5rem 1fr 3.25rem; align-items: center; }
+html.mobile #mPanes [data-inflate-opt] input[type=range], html.mobile #mPanes [data-inflate-opt] select { width: 100%; }
 html.mobile #mPanes #layerList { max-height: none; }
 html.mobile #mPanes #layerList + * { margin-top: 0; }
 /* 膨らませるのパネルは「ツール」タブの中に置く */
