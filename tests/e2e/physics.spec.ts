@@ -354,3 +354,35 @@ test('揺らし方「ためて膨らむ2」: 離した直後に、塗った範�
   await page.evaluate(() => (window as any).popstage.setPaused(true));
   expect(await page.evaluate(() => (window as any).popstage.world.spread((window as any).popstage.activeLayer.id))).toBe(0);
 });
+
+test('揺らし方「ふわっと膨らむ」「一瞬膨らむ」: プリセットで選べ、動かすと塗った範囲が横にも広がる', async ({ page }) => {
+  await boot(page);
+  await openTab(page, 'layer');
+  await page.locator('#physDetails summary').click();
+  const cases = [
+    { preset: 'pofu', motion: 'puff', label: 'ふわっと膨らむ', params: ['上下の幅', '下がる深さ', '横の広がり', '揺れる長さ'], axis: 'y' },
+    { preset: 'pon', motion: 'pulse', label: '一瞬膨らむ', params: ['膨らみ', '横の広がり', '膨らむ長さ'], axis: 'z' },
+  ] as const;
+  for (const c of cases) {
+    await page.selectOption('#pPreset', c.preset);
+    await expect(page.locator('#pMotion')).toHaveValue(c.motion);
+    await expect(page.locator('#motionParams label')).toHaveText([...c.params]);
+    expect(await page.locator('#pMotion option:checked').textContent()).toBe(c.label);
+    await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: true } }); a.setPaused(false); });
+    // 2周期ぶん、広がりと、土台が動く向きの変位の振れ幅を記録する
+    const seen = await page.evaluate(axis => new Promise<{ r: number; d: number; side: number }>(resolve => {
+      const a = (window as any).popstage, id = a.activeLayer.id, t0 = performance.now(), T = a.project.autoSwing.period;
+      let r = 0, lo = Infinity, hi = -Infinity, side = 0;
+      const tick = () => {
+        const s = a.world.displacement(id);
+        r = Math.max(r, a.world.spread(id)); lo = Math.min(lo, s[axis]); hi = Math.max(hi, s[axis]); side = Math.max(side, Math.abs(s.x));
+        if (performance.now() - t0 < 2000 * T) requestAnimationFrame(tick); else resolve({ r, d: hi - lo, side });
+      };
+      requestAnimationFrame(tick);
+    }), c.axis);
+    expect(seen.r, c.motion).toBeGreaterThan(0.05);
+    expect(seen.d, c.motion).toBeGreaterThan(0.01);
+    expect(seen.side, c.motion).toBeLessThan(1e-6); // 左右へは動かさない(広がりは面内で中心から外へ)
+    await page.evaluate(() => (window as any).popstage.setPaused(true));
+  }
+});

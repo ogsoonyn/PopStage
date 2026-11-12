@@ -4,9 +4,9 @@
  *
  * - 単位は「画像の長辺 = 2」の正規化座標。y が上、z が手前。
  * - どのパターンも周期 T で元に戻る(T の整数倍の長さで書き出せばループする)。
- * - 振れ幅は strength(0〜1)に比例する。「ためて膨らむ」だけはポップ量にも比例する(pop は正規化座標)。
+ * - 振れ幅は strength(0〜1)に比例する。「ためて膨らむ」「一瞬膨らむ」の手前への動きはポップ量にも比例する(pop は正規化座標)。
  * - 揺らし方ごとの固有設定は params(キーは「揺らし方.項目」)。未設定は MOTION_PARAMS の既定値。
- * - ためて膨らむ2 は手前への動き(motionAnchor)に加えて、塗った範囲の広がりの土台を motionSpread で返す。
+ * - ためて膨らむ2・ふわっと膨らむ・一瞬膨らむは、土台の動き(motionAnchor)に加えて、塗った範囲の広がりの土台を motionSpread で返す。
  * - ピストンだけは土台を動かさず(motionAnchor は 0)、画像全体の位置を pistonOffset で返す。
  *   塗った部分はその加速度を慣性力として受けて、遅れて付いてくる(world.ts)。
  */
@@ -34,6 +34,11 @@ const KICK = 0.08;
 function chargeCurve(u: number, depth: number, time: number, kick: number): number {
   return u < time ? -depth * smooth(u / time) : kick * bump(u, time + KICK / 2, KICK);
 }
+
+/** ふわっと膨らむの上がる山(周期の頭から time の前半)。上下の動きと横の広がりで同じ形を使い、同時に動かす */
+const puffRise = (u: number, time: number) => bump(u, time / 4, time / 2);
+/** 一瞬膨らむの山(周期の頭から time の間)。手前への動きと横の広がりで同じ形を使い、同時に動かす */
+const pulseBump = (u: number, time: number) => bump(u, time / 2, time);
 
 export function motionAnchor(
   pattern: MotionPattern, t: number, period: number, strength: number,
@@ -99,6 +104,14 @@ export function motionAnchor(
       if (dir === 1) out.y = -v; else if (dir === 2) out.x = -v; else if (dir === 3) out.x = v; else if (dir === 4) out.z = v; else out.y = v;
       break;
     }
+    case 'puff': { // 周期の頭で一度だけ、ふわっと上がって少し下がる。あとは止まって余韻だけ
+      const time = P('time');
+      out.y = 0.1 * s * P('height') * (puffRise(u, time) - P('down') * bump(u, (time * 3) / 4, time / 2));
+      break;
+    }
+    case 'pulse': // 周期の頭で一度だけ、手前に少し膨らんですぐ戻る
+      out.z = pop * P('bulge') * 2 * s * pulseBump(u, P('time'));
+      break;
   }
   return out;
 }
@@ -133,12 +146,17 @@ export function pistonReach(strength: number, params?: Record<string, number>): 
 }
 
 /**
- * 塗った範囲の広がりの土台(中心からの距離に対する割合。0 で元の大きさ、0.1 で 1 割外へ)。ためて膨らむ2 だけが動かす。
- * 手前への動きと同じ時刻に、ためている間は内へ縮め、離した瞬間に外へ押し広げる。周期 T で元に戻る。
+ * 塗った範囲の広がりの土台(中心からの距離に対する割合。0 で元の大きさ、0.1 で 1 割外へ)。周期 T で元に戻る。
+ * - ためて膨らむ2: 手前への動きと同じ時刻に、ためている間は内へ縮め、離した瞬間に外へ押し広げる。
+ * - ふわっと膨らむ: 上がるのと同時に外へ広げる。
+ * - 一瞬膨らむ: 手前に膨らむのと同時に外へ広げる。
+ * ほかの揺らし方は 0(広げない)。
  */
 export function motionSpread(pattern: MotionPattern, t: number, period: number, strength: number, params?: Record<string, number>): number {
-  if (pattern !== 'charge2' || strength <= 0) return 0;
+  if ((pattern !== 'charge2' && pattern !== 'puff' && pattern !== 'pulse') || strength <= 0) return 0;
   const T = Math.max(0.05, period), u = (((t % T) + T) % T) / T;
-  const P = (key: string) => motionParam(params, 'charge2', key), a = P('spread') * 2 * strength;
+  const P = (key: string) => motionParam(params, pattern, key), a = P('spread') * 2 * strength;
+  if (pattern === 'puff') return a * puffRise(u, P('time'));
+  if (pattern === 'pulse') return a * pulseBump(u, P('time'));
   return chargeCurve(u, a * P('pinch'), P('time'), a);
 }

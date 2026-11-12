@@ -185,7 +185,7 @@ export class Stage {
   }
 
   /**
-   * 塗った範囲の広がり(ためて膨らむ2)。center はそのレイヤーのウェイトの重心(画像のローカル座標、元画像のピクセル)、
+   * 塗った範囲の広がり(ためて膨らむ2・ふわっと膨らむ・一瞬膨らむ)。center はそのレイヤーのウェイトの重心(画像のローカル座標、元画像のピクセル)、
    * r は中心からの距離に対する割合。広がらないレイヤーは r = 0
    */
   setSpread(index: number, center: { x: number; y: number }, r: number, visible: boolean): void {

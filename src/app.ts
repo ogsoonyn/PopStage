@@ -148,7 +148,7 @@ export class App extends Emitter<AppEvents> {
    * 塗り・膨らませる範囲のドラッグ中は止めて(held)、当たり判定がずれないようにする。設定の切り替えで飛ぶ分は fix でならす
    */
   private base = { shown: { x: 0, y: 0, z: 0 }, live: { x: 0, y: 0, z: 0 }, fix: { x: 0, y: 0, z: 0 }, key: '', held: null as Vec3 | null };
-  /** レイヤーごとのウェイトの重心(元画像のピクセル、ためて膨らむ2 の広がりの中心)。ウェイトが変わったら捨てる */
+  /** レイヤーごとのウェイトの重心(元画像のピクセル、塗った範囲の広がりの中心)。ウェイトが変わったら捨てる */
   private centers = new Map<string, { x: number; y: number }>();
   /** まだ GPU へ送っていない、レイヤーごとの変わった矩形 */
   private pendingUploads = new Map<string, Rect>();
@@ -1073,7 +1073,7 @@ export class App extends Emitter<AppEvents> {
     doc.layers.forEach((l, i) => {
       const s = world.displacement(l.id), on = l.visible && l.physics.enabled;
       this.stage.setSwing(i, { x: s.x * k, y: s.y * k, z: s.z * k }, on);
-      // 塗った範囲の広がり(ためて膨らむ2)。重心はウェイトが変わったときだけ求め直す
+      // 塗った範囲の広がり(ためて膨らむ2・ふわっと膨らむ・一瞬膨らむ)。重心はウェイトが変わったときだけ求め直す
       const r = world.spread(l.id);
       this.stage.setSpread(i, r ? this.layerCenter(doc, l) : { x: 0, y: 0 }, r, on);
     });
