@@ -7,6 +7,8 @@ import { bindActions } from './ui/actions';
 import { bindExportDialog } from './ui/exportDialog';
 import { bindBlurDialog } from './ui/blurDialog';
 import { bindInflateDialog } from './ui/inflateDialog';
+import { bindToolOptions } from './ui/toolOptions';
+import { bindMenus } from './ui/menus';
 import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
 import { bindMobileLayout } from './ui/mobile';
@@ -39,6 +41,8 @@ const checkRestore = !e2e || params.has('restore');
 /** パフォーマンスのデバッグ表示(?debug か Ctrl+Shift+Alt+P)。使うときだけ読み込む */
 const togglePerf = () => void import('./debug/perfOverlay').then(m => m.togglePerfOverlay(app)).catch(e => console.error(e));
 if (params.has('debug')) togglePerf();
+// ステータスバーの fps と頂点数も、開発向けなので ?debug のときだけ出す
+ui.sFps.hidden = ui.sVerts.hidden = !params.has('debug');
 
 bindStageInput(app, canvas);
 const multiView = bindMultiView(app, canvas);
@@ -83,6 +87,7 @@ const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
 const recentDialog = bindRecentDialog(app);
 bindInflateDialog(app);
+bindToolOptions(app);
 
 /* ---------- ファイルを開く ---------- */
 
@@ -114,6 +119,7 @@ bindActions(app, {
   openBlur: () => blurDialog.open(),
   togglePerf,
 });
+bindMenus();
 // スマホの配置。右パネルなどの部品を移すので、ほかの部品を結び付けたあとに呼ぶ
 bindMobileLayout(app);
 
@@ -145,8 +151,10 @@ window.addEventListener('drop', e => {
 
 function refreshStatus(): void {
   const d = app.doc;
-  ui.sFps.textContent = `${app.fps} fps`;
-  ui.sVerts.textContent = `${app.stage.vertexCount.toLocaleString()} 頂点`;
+  if (!ui.sFps.hidden) {
+    ui.sFps.textContent = `${app.fps} fps`;
+    ui.sVerts.textContent = `${app.stage.vertexCount.toLocaleString()} 頂点`;
+  }
   ui.sZoom.textContent = `ズーム ${Math.round(100 / app.project.camera.zoom)}%`;
   ui.sImage.textContent = d ? `${d.image.width}×${d.image.height}px・ウェイト ${d.layers[0]?.weights.width ?? 0}×${d.layers[0]?.weights.height ?? 0}` : '-';
   if (!app.exporting) ui.sRec.textContent = [app.view.flat && 'ポップOFF', app.paused && '揺れ一時停止中'].filter(Boolean).join('・');
@@ -159,6 +167,7 @@ function refreshTitle(): void {
   refreshStatus();
 }
 app.on('status', refreshStatus);
+app.on('fps', refreshStatus); // ズームの表示など、イベントの無い変化もここで拾う(ステータスバーだけを書き直す)
 app.on('view', refreshStatus);
 app.on('file', refreshTitle);
 

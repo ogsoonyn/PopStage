@@ -222,3 +222,22 @@ test("シートのタブは PC の右パネルと同じ分け方で、下のバ�
   await expect(page.locator("#mTools [data-mtool=grab] svg")).toHaveCount(1);
   await expect(page.locator("#mTools [data-mtool=grab] span")).toHaveText("つかむ");
 });
+
+test('全体ぼかしのプレビュー中は、2本指タップで元に戻さない', async ({ page }) => {
+  await boot(page);
+  const cdp = await page.context().newCDPSession(page);
+  await page.evaluate(() => (window as any).popstage.addLayer());
+  const state = () => page.evaluate(() => { const a = (window as any).popstage; return [a.doc.layers.length, a.previewingBlur]; });
+  // シートの「レイヤー」から全体ぼかしを開く(ほかの操作を止めないパネル)
+  await page.locator('[data-mtab="layer"]').click();
+  await page.locator('#mPanes [data-cmd=smoothAll]').click();
+  await expect(page.locator('#blurDialog')).toHaveJSProperty('open', true);
+  expect(await state()).toEqual([2, true]);
+  await page.waitForTimeout(1000);
+  const [cx, cy] = await viewCenter(page);
+  await touch(cdp, 'touchStart', [[cx - 60, cy], [cx + 60, cy]]);
+  await touch(cdp, 'touchEnd', []);
+  expect(await state()).toEqual([2, true]);
+  await page.locator('#blurCancel').click();
+  expect(await state()).toEqual([2, false]);
+});

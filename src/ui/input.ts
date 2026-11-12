@@ -126,7 +126,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     const t = tap; tap = null;
     const quick = performance.now() - t.t < 300;
     if (t.n >= 2) {
-      if (!quick || t.moved > 16 || app.stroking || app.previewingInflate) return;
+      // 全体ぼかし・膨らませるのプレビュー中は、プレビュー中のウェイトに履歴を書き戻さないよう止める
+      if (!quick || t.moved > 16 || app.stroking || app.previewing) return;
       if (t.n === 2 ? app.history.undo() : app.history.redo()) toast(t.n === 2 ? '元に戻しました' : 'やり直しました');
       return;
     }

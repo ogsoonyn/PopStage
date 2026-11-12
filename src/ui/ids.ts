@@ -10,6 +10,7 @@ export const UI_IDS = {
   docTitle: 'span',
   brushSize: 'input', brushSizeO: 'output', brushStrength: 'input', brushStrengthO: 'output',
   brushHardness: 'input', brushHardnessO: 'output', brushPressure: 'select', toolHint: 'span',
+  tInflKind: 'select', tInflProfile: 'select', tInflSoft: 'input', tInflSoftO: 'output', tInflBlend: 'select',
   tSwing: 'input', tAuto: 'input',
   // ツールバー・3Dビュー
   toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', takeBadge: 'button', mFine: 'button', busy: 'div',

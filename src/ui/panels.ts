@@ -323,8 +323,9 @@ export function bindPanels(app: App): { refresh: () => void } {
     // 膨らませるのプレビュー中は、新しいレイヤーに作るかどうかがこのレイヤーのポップ量で決まるので、ポップ量は触らせない。
     // レイヤー一覧も、仮に入れたレイヤーの名前や表示を変えて記録しないよう、操作できなくする
     if (app.previewingInflate) ui.pPop.disabled = ui.pPopN.disabled = true;
-    list.inert = app.previewingInflate;
-    list.classList.toggle('opacity-60', app.previewingInflate);
+    // 全体ぼかしのプレビュー中も、ぼかしているレイヤーを切り替えたり消したりしないよう、一覧は操作できなくする
+    list.inert = app.previewing;
+    list.classList.toggle('opacity-60', app.previewing);
     ui.activeLayerName.textContent = l?.name ?? '-';
     if (l) {
       setRange(ui.pPop, null, popToSlider(l.pop));
@@ -372,6 +373,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   app.on('active', () => { updateSelection(); refresh(); });
   app.on('view', refresh);
   app.on('inflate', refresh); // プレビュー中はポップ量を触らせない
+  app.on('blur', refresh);
 
   renderList(); refresh();
   return { refresh };

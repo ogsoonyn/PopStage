@@ -5,6 +5,7 @@
  */
 import type { App } from '../app';
 import { ui } from './ids';
+import { icon } from './icons';
 import { KEY_SECONDS, MAX_KEYS, TAKE_MIN_SECONDS, takeSeconds, type KeyMode } from '../physics/take';
 
 const sec = (v: number) => `${v.toFixed(1)}秒`;
@@ -44,11 +45,12 @@ export function bindTakeControls(app: App): void {
   function keyRow(): HTMLLIElement {
     const li = document.createElement('li');
     li.className = 'key-row';
+    // 番号・次まで・通り方・今の視点で上書き・削除の順(よく触る値を前に、上書きと削除は行の末尾に寄せる)
     li.innerHTML = `<button class="btn btn-xs btn-ghost key-no" data-act="go" title="この視点を見る"></button>`
-      + `<button class="btn btn-xs" data-act="set" title="今の視点で登録し直す">登録</button>`
-      + `<button class="btn btn-xs btn-ghost btn-square" data-act="del" title="削除" aria-label="削除">×</button>`
       + `<label class="flex items-center gap-0.5"><input data-act="sec" type="number" min="${KEY_SECONDS.min}" max="${KEY_SECONDS.max}" step="0.1" class="input input-xs w-14 text-right" title="次のフレームまでの時間(最後は最初へ戻るまで)" aria-label="次まで(秒)"><span class="text-xs">秒</span></label>`
-      + `<select data-act="mode" class="select select-xs" title="なめらか: 止まらず通り抜ける / 弾む: 急に止まって揺れる" aria-label="通り方"><option value="smooth">なめらか</option><option value="bounce">弾む</option></select>`;
+      + `<select data-act="mode" class="select select-xs" title="なめらか: 止まらず通り抜ける / 弾む: 急に止まって揺れる" aria-label="通り方"><option value="smooth">なめらか</option><option value="bounce">弾む</option></select>`
+      + `<button class="btn btn-xs btn-ghost btn-square key-set" data-act="set" title="今の視点で上書きする" aria-label="今の視点で上書き">${icon('keySet')}</button>`
+      + `<button class="btn btn-xs btn-ghost btn-square" data-act="del" title="削除" aria-label="削除">×</button>`;
     return li;
   }
 

@@ -204,8 +204,8 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     if (on && !PAINT_TOOLS.includes(app.tool)) app.setTool('brush');
     if (!on && PAINT_TOOLS.includes(app.tool)) app.setTool(lastMain);
   }
-  ui.mPaintMode.addEventListener('click', () => { if (app.previewingInflate) return; setPaintMode(true); setSheet('closed'); });
-  ui.mPaintDone.addEventListener('click', () => { if (!app.previewingInflate) setPaintMode(false); });
+  ui.mPaintMode.addEventListener('click', () => { if (app.previewing) return; setPaintMode(true); setSheet('closed'); });
+  ui.mPaintDone.addEventListener('click', () => { if (!app.previewing) setPaintMode(false); });
   // PC の左のツールボタン(.tool)とは別に結び付ける(同じ data-tool のボタンが2つになるので、クラスは分ける)。
   // アイコンと名前は PC と同じ表(ui/tools.ts・ui/icons.ts)から入れる
   for (const b of ui.mTools.querySelectorAll<HTMLButtonElement>('[data-mtool]')) {
@@ -213,7 +213,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     b.innerHTML = `${icon(t.id)}<span></span>`;
     b.querySelector('span')!.textContent = t.label;
   }
-  for (const b of ui.mTools.querySelectorAll<HTMLButtonElement>('[data-mtool]')) b.addEventListener('click', () => { if (!app.previewingInflate) app.setTool(b.dataset.mtool as Tool); });
+  for (const b of ui.mTools.querySelectorAll<HTMLButtonElement>('[data-mtool]')) b.addEventListener('click', () => { if (!app.previewing) app.setTool(b.dataset.mtool as Tool); });
   function syncTool(): void {
     // 画像を開いたときなどに、塗りのツールへ切り替わることがある。スマホでは塗りは「塗って直す」の中だけなので戻す
     if (mq.matches && root.dataset.mset !== 'paint' && PAINT_TOOLS.includes(app.tool)) { app.setTool(lastMain); return; }
