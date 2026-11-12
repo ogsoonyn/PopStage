@@ -7,9 +7,11 @@ import { zipParts, concatParts, type ZipEntry } from './zip';
 import {
   LIMITS, PRESETS, MOTIONS, BLENDS, MOTION_PARAMS, createProject, createLayer, defaultCamera, defaultMultiCamera, newId,
   type Project, type CameraState, type Document, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type BlendMode,
+  type Favorite, type FavoriteLayer, type AutoSwing,
 } from '../model/project';
 import { WeightMap, weightSizeFor } from '../model/weightmap';
 import { takeToJson, takeFromJson, type Take } from '../physics/take';
+import { FAVORITE_NAME_MAX } from '../model/favorites';
 import { encodeGrayPng, decodePngToGray, readPngSize, MAX_PNG_SIDE, type GrayImage } from './png';
 
 export const FORMAT_VERSION = 1;
@@ -31,6 +33,8 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 /** 操作の記録(ループ再生用)を入れるファイル。無いファイル(古い版・記録なし)は記録なしとして開く */
 export const TAKE_PATH = 'motion/take.json';
+/** お気に入りだけが持つ記録を入れるファイル(今の記録と同じものは TAKE_PATH を指す) */
+const favoriteTakePath = (i: number) => `motion/favorite-${i}.json`;
 /** 記録は作ったあと書き換えないので、自動保存のたびに JSON を作り直さないよう記録ごとに1回だけ作る */
 const takeBytes = new WeakMap<Take, Uint8Array>();
 
@@ -46,13 +50,18 @@ interface DocumentJson {
   position: Project['documents'][number]['position']; rotation: Project['documents'][number]['rotation'];
   scale: number; meshDensity: number; opacity: number; layers: LayerJson[];
 }
+/** お気に入り。記録は別のファイルに入れ、take にそのパスを書く(記録が無ければ null) */
+interface FavoriteJson {
+  id: string; name: string; createdAt: string; layers: FavoriteLayer[]; autoSwing: AutoSwing; camera: CameraState;
+  take: string | null; playing: boolean;
+}
 export interface ProjectJson {
   formatVersion: number;
   /** 書き出したアプリ。改名前のファイルは 'PopStage' */
   app: 'PukuPop' | 'PopStage';
   savedAt: string;
-  /** multiCamera は後から足した項目なので、古いファイルには無い */
-  project: Pick<Project, 'background' | 'camera' | 'fps' | 'autoSwing'> & { multiCamera?: Project['multiCamera'] };
+  /** multiCamera・favorites は後から足した項目なので、古いファイルには無い */
+  project: Pick<Project, 'background' | 'camera' | 'fps' | 'autoSwing'> & { multiCamera?: Project['multiCamera']; favorites?: FavoriteJson[] };
   documents: DocumentJson[];
 }
 
@@ -132,17 +141,32 @@ function projectParts(project: Project, opts: SerializeOptions): Uint8Array[] {
       }),
     };
   });
+  // 記録は、同じものをいくつ持っていても1回だけ書く(今の記録は TAKE_PATH、お気に入りだけが持つ記録は別のファイル)
+  const takePaths = new Map<Take, string>();
+  const pushTake = (take: Take, name: string) => {
+    let data = takeBytes.get(take);
+    if (!data) { data = strToU8(JSON.stringify(takeToJson(take))); takeBytes.set(take, data); }
+    files.push({ name, data, level: 6, stable: true });
+    takePaths.set(take, name);
+  };
+  if (project.take) pushTake(project.take, TAKE_PATH);
+  const favorites: FavoriteJson[] = project.favorites.map(f => {
+    if (f.take && !takePaths.has(f.take)) pushTake(f.take, favoriteTakePath(takePaths.size));
+    return {
+      id: f.id, name: f.name, createdAt: f.createdAt,
+      layers: f.layers.map(l => ({ id: l.id, pop: l.pop, blend: l.blend, physics: { ...l.physics, motionParams: { ...l.physics.motionParams } } })),
+      autoSwing: { ...f.autoSwing }, camera: structuredClone(f.camera), take: f.take ? takePaths.get(f.take)! : null, playing: f.playing,
+    };
+  });
   const json: ProjectJson = {
     formatVersion: FORMAT_VERSION, app: 'PukuPop', savedAt: new Date().toISOString(),
-    project: { background: project.background, camera: structuredClone(project.camera), multiCamera: structuredClone(project.multiCamera), fps: project.fps, autoSwing: { ...project.autoSwing } },
+    project: {
+      background: project.background, camera: structuredClone(project.camera), multiCamera: structuredClone(project.multiCamera), fps: project.fps, autoSwing: { ...project.autoSwing },
+      ...(favorites.length ? { favorites } : {}),
+    },
     documents: docs,
   };
   files.push({ name: 'project.json', data: strToU8(JSON.stringify(json, null, 2)), level: 6 });
-  if (project.take) {
-    let data = takeBytes.get(project.take);
-    if (!data) { data = strToU8(JSON.stringify(takeToJson(project.take))); takeBytes.set(project.take, data); }
-    files.push({ name: TAKE_PATH, data, level: 6, stable: true });
-  }
   if (opts.thumbnail) files.push({ name: 'thumbnail.png', data: opts.thumbnail });
   return zipParts(files);
 }
@@ -213,8 +237,12 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
       if (typeof lj?.weights?.path === 'string') wanted.set(lj.weights.path, UNZIP_LIMITS.weights);
     }
   }
-  // サムネイルは読み込みに要らないので、大きすぎるときは黙って捨てる
-  const files = unzipEntries(bytes, wanted, new Map([['thumbnail.png', UNZIP_LIMITS.thumbnail], [TAKE_PATH, UNZIP_LIMITS.take]]));
+  // お気に入り(数の上限まで)と、それが持つ記録のファイル。記録が読めなくても、お気に入りは残す
+  const favsJson = (Array.isArray(json.project?.favorites) ? json.project.favorites : []).filter(isObj<FavoriteJson>).slice(0, LIMITS.favorites);
+  // サムネイル・記録は読み込みに要らないので、大きすぎるときは黙って捨てる
+  const optional = new Map([['thumbnail.png', UNZIP_LIMITS.thumbnail], [TAKE_PATH, UNZIP_LIMITS.take]]);
+  for (const fj of favsJson) if (typeof fj.take === 'string' && !wanted.has(fj.take)) optional.set(fj.take, UNZIP_LIMITS.take);
+  const files = unzipEntries(bytes, wanted, optional);
 
   const project = createProject();
   const p = json.project ?? {} as ProjectJson['project'];
@@ -230,18 +258,25 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
   // 3面図の自由角度の視点(古いファイルには無いので、そのときは初めの視点)
   project.multiCamera = cameraOf(p.multiCamera, defaultMultiCamera());
   project.fps = 60;
-  project.autoSwing = {
-    enabled: p.autoSwing?.enabled !== false,
-    period: num(p.autoSwing?.period, LIMITS.period.min, LIMITS.period.max, LIMITS.period.def),
-    strength: unit(p.autoSwing?.strength, 0.5),
+  project.autoSwing = autoSwingOf(p.autoSwing);
+  // 操作の記録。読めなければ記録なしとして開く(画像やウェイトは開けるので、ファイルごと諦めない)。
+  // 同じファイルを指す記録は同じものとして読む(お気に入りの記録が今の記録と同じかを見分けられるように)
+  const takes = new Map<string, Take | null>();
+  const takeAt = (path: unknown, fov: number): Take | null => {
+    if (typeof path !== 'string' || !own(files, path)) return null;
+    if (!takes.has(path)) {
+      let t: Take | null = null;
+      try { t = takeFromJson(JSON.parse(strFromU8(files[path])), fov); } catch { t = null; }
+      takes.set(path, t);
+    }
+    return takes.get(path)!;
   };
-  // 操作の記録。読めなければ記録なしとして開く(画像やウェイトは開けるので、ファイルごと諦めない)
-  if (own(files, TAKE_PATH)) {
-    try { project.take = takeFromJson(JSON.parse(strFromU8(files[TAKE_PATH])), project.camera.fov); } catch { project.take = null; }
-  }
+  project.take = takeAt(TAKE_PATH, project.camera.fov);
 
   // ID はレイヤーやドキュメントを探す鍵なので、空・重複していたら振り直す
   const seenIds = new Set<string>();
+  /** ファイルに書かれたレイヤーの ID → 読み込んだレイヤーの ID(振り直したときに、お気に入りの突き合わせも合わせる) */
+  const layerIds = new Map<string, string>();
   const uniqueId = (v: unknown, prefix: string) => {
     let id = typeof v === 'string' && v ? v : newId(prefix);
     while (seenIds.has(id)) id = newId(prefix);
@@ -275,8 +310,10 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
         }
         weights = WeightMap.resampled(new WeightMap(g.width, g.height, g.data), ws.w, ws.h);
       }
+      const lid = uniqueId(lj.id, 'L');
+      if (typeof lj.id === 'string' && !layerIds.has(lj.id)) layerIds.set(lj.id, lid);
       const layer: Layer = {
-        id: uniqueId(lj.id, 'L'), name: str(lj.name, `レイヤー${doc.layers.length + 1}`),
+        id: lid, name: str(lj.name, `レイヤー${doc.layers.length + 1}`),
         visible: lj.visible !== false, pop: num(lj.pop, LIMITS.pop.min, LIMITS.pop.max, LIMITS.pop.def),
         // 重ね方が無い(古いファイル)・知らない値は加算として読む
         blend: own(BLENDS, lj.blend) ? lj.blend as BlendMode : 'add',
@@ -288,7 +325,51 @@ export async function deserializeProject(bytes: Uint8Array, opts: LoadOptions = 
     if (!doc.layers.length) { const l = createLayer(doc); seenIds.add(l.id); doc.layers.push(l); }
     project.documents.push(doc);
   }
+  project.favorites = favoritesFrom(favsJson, layerIds, takeAt, project.camera);
   return { project, thumbnail: files['thumbnail.png'] };
+}
+
+function autoSwingOf(v: unknown): AutoSwing {
+  const a = (v && typeof v === 'object' ? v : {}) as Partial<AutoSwing>;
+  return {
+    enabled: a.enabled !== false,
+    period: num(a.period, LIMITS.period.min, LIMITS.period.max, LIMITS.period.def),
+    strength: unit(a.strength, 0.5),
+  };
+}
+
+/** お気に入りを読む。形の合わない値は既定値や範囲に丸め、ファイルに無いレイヤーの分は捨てる */
+function favoritesFrom(
+  list: FavoriteJson[], layerIds: Map<string, string>, takeAt: (path: unknown, fov: number) => Take | null, camera: CameraState,
+): Favorite[] {
+  const out: Favorite[] = [], seen = new Set<string>();
+  for (const fj of list) {
+    const layers: FavoriteLayer[] = [], used = new Set<string>();
+    for (const lj of Array.isArray(fj.layers) ? fj.layers.slice(0, LIMITS.maxLayers) : []) {
+      if (!lj || typeof lj !== 'object') continue;
+      const id = typeof lj.id === 'string' ? layerIds.get(lj.id) : undefined;
+      if (!id || used.has(id)) continue;
+      used.add(id);
+      layers.push({
+        id, pop: num(lj.pop, LIMITS.pop.min, LIMITS.pop.max, LIMITS.pop.def),
+        blend: own(BLENDS, lj.blend) ? lj.blend : 'add', physics: physicsFrom(lj.physics),
+      });
+    }
+    let id = typeof fj.id === 'string' && fj.id ? fj.id : newId('F');
+    while (seen.has(id)) id = newId('F');
+    seen.add(id);
+    const createdAt = typeof fj.createdAt === 'string' && !Number.isNaN(Date.parse(fj.createdAt)) ? fj.createdAt : new Date(0).toISOString();
+    const c = (fj.camera && typeof fj.camera === 'object' ? fj.camera : {}) as Partial<CameraState>;
+    const fov = num(c.fov, LIMITS.fov.min, LIMITS.fov.max, camera.fov);
+    const take = takeAt(fj.take, fov);
+    out.push({
+      id, name: str(fj.name, '').trim().slice(0, FAVORITE_NAME_MAX) || `お気に入り ${out.length + 1}`, createdAt, layers,
+      autoSwing: autoSwingOf(fj.autoSwing),
+      camera: { fov, yaw: num(c.yaw, -1e3, 1e3, camera.yaw), pitch: num(c.pitch, -1.5, 1.5, camera.pitch), zoom: num(c.zoom, 0.05, 20, camera.zoom), target: vec(c.target) },
+      take, playing: fj.playing === true && !!take,
+    });
+  }
+  return out;
 }
 
 /**

@@ -87,6 +87,7 @@
       <li><button data-cmd="toggleRecording">操作の記録(開始・停止)</button></li>
       <li><button data-cmd="togglePlay">ループ再生(開始・停止)</button></li>
       <li><button data-cmd="clearTake">記録を消す</button></li>
+      <li><button data-cmd="addFavorite">お気に入りに残す</button></li>
     </ul>
   </div>
   <div class="dropdown">
@@ -226,6 +227,18 @@
       </div>
 
       <div class="flex flex-col gap-4" data-ppane="anim" hidden>
+        <!-- お気に入り: いい揺れ・動きの組み合わせを残し、あとで当て直す(画像とウェイトは残さない) -->
+        <section class="flex flex-col gap-2" aria-labelledby="favTitle" data-m-slot="favorites">
+          <div class="flex items-center gap-2">
+            <h2 id="favTitle" class="font-bold">お気に入り</h2><button type="button" class="help-btn" data-help="favHelp"></button>
+            <span id="favCount" class="text-xs opacity-60 tabular-nums"></span>
+            <button id="favAdd" class="btn btn-xs ml-auto" data-cmd="addFavorite"><span aria-hidden="true">☆</span> 残す</button>
+          </div>
+          <p id="favHelp" class="help-text" hidden>今の揺れと動きの組み合わせ(全レイヤーのポップ量・重ね方・揺れ、自動揺らし、操作の記録とキーフレーム、視点)を残します。画像とウェイトは残さないので、ファイルはほとんど大きくなりません。「適用」でその組み合わせに戻ります(視点のほかは元に戻せます)。● は今の状態と同じものです。名前はその場で書き換えられます。プロジェクトに保存されます。</p>
+          <p id="favEmpty" class="text-xs opacity-60">いい動きを見つけたら「☆ 残す」(K)。</p>
+          <ol id="favList" class="flex flex-col gap-1" aria-label="お気に入り一覧"></ol>
+        </section>
+
         <section class="flex flex-col gap-2" data-m-slot="autoSwing">
           <h2 class="font-bold">自動揺らし</h2>
           <label class="flex items-center justify-between">自動で揺らす <input id="pAuto" type="checkbox" class="toggle toggle-sm"></label>

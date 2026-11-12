@@ -13,6 +13,7 @@ import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
 import { bindMobileLayout } from './ui/mobile';
 import { bindTakeControls } from './ui/take';
+import { bindFavoriteControls } from './ui/favorites';
 import { isTool } from './ui/tools';
 import { bindHelp } from './ui/help';
 import { FILE_EXTENSION, LEGACY_FILE_EXTENSION } from './storage/popstage';
@@ -48,6 +49,7 @@ bindStageInput(app, canvas);
 const multiView = bindMultiView(app, canvas);
 bindPanels(app);
 bindTakeControls(app);
+bindFavoriteControls(app);
 
 /* ---------- 右のパネルのタブ(レイヤー・アニメーション・画像と表示)。選んだタブはブラウザに覚える ---------- */
 {

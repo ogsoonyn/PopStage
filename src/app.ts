@@ -5,7 +5,9 @@
 import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultOrthoView, LIMITS, PRESETS, applyPreset, type PresetName, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
 import type { Rect } from './model/weightmap';
-import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, SetTake, PatchLayer, PatchProject, Batch, weightOperation, diffTiles } from './commands/commands';
+import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, SetTake, SetFavorites, SetFov, PatchLayer, PatchProject, Batch, weightOperation, diffTiles } from './commands/commands';
+import type { Command } from './commands/history';
+import { captureFavorite, copyPhysics, sameLayer, nextFavoriteName, applyView, FAVORITE_NAME_MAX } from './model/favorites';
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld, PHYSICS_DT } from './physics/world';
 import { MotionRecorder, applySample, type RecordSample } from './physics/recorder';
@@ -881,6 +883,74 @@ export class App extends Emitter<AppEvents> {
       toast(`ほかにも揺れているレイヤーがあるので、自動揺らしの周期は変えていません(このプリセットのおすすめは ${pr.period.toFixed(1)} 秒。「アニメーション」タブで変えられます)。`, 'info', 6000);
     } else if (!this.project.autoSwing.enabled) toast('「自動で揺らす」がオフなので、自動では動きません。「つかむ」「揺らす」で揺らすか、自動揺らしをオンにしてください。', 'info', 5000);
     else if (!l.physics.enabled) toast('このレイヤーは「揺れ」がオフです。', 'info');
+  }
+
+  /* ---------- お気に入り(揺れと動きの組み合わせ。右パネル・メニュー・左のツールバー・キーのどこからも、ここを通す) ---------- */
+
+  /** お気に入りを今触れるか(記録中・書き出し中・プレビュー中は、残す中身が定まらないので触らせない) */
+  get canEditFavorites(): boolean {
+    return !!this.doc && this.takeState !== 'recording' && !this.exporting && !this.previewing && !this.stroking;
+  }
+
+  /** 今の揺れと動きの組み合わせを、お気に入りの末尾に残す(アンドゥできる) */
+  addFavorite(): void {
+    const doc = this.doc, list = this.project.favorites;
+    if (!doc || !this.canEditFavorites) return;
+    if (list.length >= LIMITS.favorites) { toast(`お気に入りは ${LIMITS.favorites} 件までです。要らないものを消してから残してください。`, 'warning'); return; }
+    const f = captureFavorite(this.project, doc, { name: nextFavoriteName(list), playing: this.takeState === 'playing' });
+    this.history.execute(new SetFavorites(`お気に入りに残す「${f.name}」`, list, [...list, f]));
+    toast(`「${f.name}」に残しました。`, 'success', 2000);
+  }
+
+  /** お気に入りを今の状態で上書きする(名前と並びはそのまま) */
+  overwriteFavorite(id: string): void {
+    const doc = this.doc, list = this.project.favorites, i = list.findIndex(f => f.id === id);
+    if (!doc || i < 0 || !this.canEditFavorites) return;
+    const old = list[i];
+    const f = captureFavorite(this.project, doc, { name: old.name, id: old.id, createdAt: new Date().toISOString(), playing: this.takeState === 'playing' });
+    this.history.execute(new SetFavorites(`お気に入りを上書き「${old.name}」`, list, list.map((x, j) => (j === i ? f : x))));
+    toast(`「${old.name}」を今の状態で上書きしました。`, 'success', 2000);
+  }
+
+  renameFavorite(id: string, name: string): void {
+    const list = this.project.favorites, i = list.findIndex(f => f.id === id), v = name.trim().slice(0, FAVORITE_NAME_MAX);
+    if (i < 0 || !v || v === list[i].name || !this.canEditFavorites) return;
+    this.history.execute(new SetFavorites('お気に入りの名前の変更', list, list.map((x, j) => (j === i ? { ...x, name: v } : x))));
+  }
+
+  removeFavorite(id: string): void {
+    const list = this.project.favorites, f = list.find(x => x.id === id);
+    if (!f || !this.canEditFavorites) return;
+    this.history.execute(new SetFavorites(`お気に入りを消す「${f.name}」`, list, list.filter(x => x !== f)));
+  }
+
+  /**
+   * お気に入りの組み合わせを当てる。レイヤー(ポップ量・重ね方・揺れ)・自動揺らし・記録・画角は1手にまとめてアンドゥでき、
+   * 視点(回転・ズーム・位置)はほかの視点の操作と同じくアンドゥには積まない。残したときに再生していたら、再生を始める。
+   * お気に入りにあって今は無いレイヤーは飛ばし、後から足したレイヤーはそのままにする。
+   */
+  applyFavorite(id: string): void {
+    const doc = this.doc, f = this.project.favorites.find(x => x.id === id);
+    if (!doc || !f || !this.canEditFavorites) return;
+    this.stopTake();
+    const label = `お気に入り「${f.name}」`, cam = this.project.camera, cmds: Command[] = [];
+    let missing = 0;
+    for (const fl of f.layers) {
+      const l = doc.layers.find(x => x.id === fl.id);
+      if (!l) { missing++; continue; }
+      if (!sameLayer(fl, l)) cmds.push(PatchLayer.from(this.store, l.id, { pop: fl.pop, blend: fl.blend, physics: copyPhysics(fl.physics) }, label));
+    }
+    const a = f.autoSwing, b = this.project.autoSwing;
+    if (a.enabled !== b.enabled || a.period !== b.period || a.strength !== b.strength) cmds.push(PatchProject.from(this.store, { autoSwing: { ...a } }, label));
+    if (f.take !== this.project.take) cmds.push(new SetTake(label, this.project.take, f.take));
+    if (f.camera.fov !== cam.fov) cmds.push(new SetFov(label, cam.fov, f.camera.fov));
+    if (cmds.length) this.history.execute(new Batch(label, cmds));
+    applyView(cam, f.camera);
+    this.world.cutView(); // 視点が飛ぶだけなので揺らさない
+    this.cameraChanged();
+    this.emit('status', undefined);
+    if (f.playing && this.project.take) this.playTake();
+    if (missing) toast(`「${f.name}」にあったレイヤーのうち ${missing} 枚は、もう無いので飛ばしました。`, 'info', 5000);
   }
 
   /* ---------- 物理と描画のループ ---------- */

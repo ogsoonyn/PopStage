@@ -11,6 +11,7 @@ import { toast } from './dom';
 import { isTyping } from './input';
 import { TOOL_GROUPS, TOOLS } from './tools';
 import { icon, type IconName } from './icons';
+import { LIMITS } from '../model/project';
 
 export interface Action {
   /** ツールチップ・ヘルプでの名前 */
@@ -95,6 +96,11 @@ function defineActions(app: App, d: ActionDeps) {
     deleteLayer: { label: '削除', run: () => app.deleteLayer(), enabled: () => (app.doc?.layers.length ?? 0) > 1 },
     layerUp: { label: '上へ', run: () => app.moveLayer(1), enabled: () => app.activeIndex >= 0 && app.activeIndex < (app.doc?.layers.length ?? 0) - 1 },
     layerDown: { label: '下へ', run: () => app.moveLayer(-1), enabled: () => app.activeIndex > 0 },
+    // お気に入り
+    addFavorite: {
+      label: 'お気に入りに残す', keys: ['K'], desc: '今の揺れと動きの組み合わせを残す(画像とウェイトは残さない)',
+      run: () => app.addFavorite(), enabled: () => app.canEditFavorites && app.project.favorites.length < LIMITS.favorites,
+    },
     // ヘルプ・その他
     help: { label: '操作方法', run: () => ui.helpDialog.showModal(), duringPreview: true },
     about: {
@@ -114,6 +120,8 @@ const NAV_ACTIONS: readonly { label: string; title: string; items: readonly { cm
     label: 'レイヤー', title: '選択中のレイヤーに効く操作',
     items: [{ cmd: 'smoothAll', icon: 'smoothAll', text: '全体ぼかし…' }, { cmd: 'normalize', icon: 'normalize', text: '正規化' }, { cmd: 'invert', icon: 'invert', text: '反転' }],
   },
+  // 揺らしながら試している最中に、いい動きをすぐ残せるように
+  { label: 'アニメ', title: '揺れと動きの組み合わせに効く操作', items: [{ cmd: 'addFavorite', icon: 'favorite', text: 'お気に入り' }] },
 ];
 
 /** キーの押し方を 'Ctrl+Shift+Z' の形にする */
