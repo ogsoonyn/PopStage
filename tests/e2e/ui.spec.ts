@@ -287,6 +287,62 @@ test('表示の切り替えはキーで変えても覚える。ファイルの�
   expect(await page.evaluate(() => (window as any).__downloads)).toBe(0);
 });
 
+test('塗るツールを選ぶと重ね表示を自動でONにする。設定で切れて、ブラウザに覚える', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  const overlay = () => app(a => a.view.overlay as boolean);
+  const reboot = async () => {
+    await page.waitForTimeout(400);
+    await page.goto('/?e2e');
+    await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  };
+  await openTab(page, 'view');
+  await expect(page.locator('#vAutoOverlay')).toBeChecked();
+  await page.locator('#view').focus();
+
+  // 塗るツールに切り替えるとONになる
+  for (const key of ['b', 'e', 's', 'i']) {
+    await page.keyboard.press('g');
+    if (await overlay()) await page.keyboard.press('w');
+    expect(await overlay()).toBe(false);
+    await page.keyboard.press(key);
+    expect(await overlay(), key).toBe(true);
+    await expect(page.locator('#vOverlay')).toBeChecked();
+  }
+  // 塗るツールから離れても切らない。塗るツールのままOFFにしたら、そのまま
+  await page.keyboard.press('g');
+  expect(await overlay()).toBe(true);
+  await page.keyboard.press('b');
+  await page.keyboard.press('w');
+  expect(await overlay()).toBe(false);
+  await page.keyboard.press('b'); // 選び直しでは入れない
+  expect(await overlay()).toBe(false);
+  // 「全体をぼかす」を開いてもONになる
+  await page.evaluate(() => (document.querySelector('[data-cmd=smoothAll]') as HTMLButtonElement).click());
+  await expect(page.locator('#blurDialog')).toBeVisible();
+  expect(await overlay()).toBe(true);
+  await page.locator('#blurCancel').click();
+
+  // 起動して前回の塗るツールを戻すだけでは入れない
+  await page.locator('#view').focus();
+  await page.keyboard.press('w');
+  expect(await overlay()).toBe(false);
+  await reboot();
+  expect(await app(a => [a.tool, a.view.overlay, a.autoOverlay])).toEqual(['brush', false, true]);
+
+  // 設定を切ると入らない。切ったことは覚える
+  await openTab(page, 'view');
+  await page.locator('#vAutoOverlay').uncheck();
+  await page.locator('#view').focus();
+  await page.keyboard.press('g');
+  await page.keyboard.press('b');
+  expect(await overlay()).toBe(false);
+  await reboot();
+  expect(await app(a => a.autoOverlay)).toBe(false);
+  await openTab(page, 'view');
+  await expect(page.locator('#vAutoOverlay')).not.toBeChecked();
+});
+
 test('左のメニュー: 表示クリアで編集用の表示をまとめて切る。レイヤー向けの操作と、上のツールバーの揺れの切り替え', async ({ page }) => {
   await boot(page);
   await openTab(page, 'layer');
