@@ -41,14 +41,17 @@ function blend(base: number, v: number, mode: InflateBlend): number {
 }
 
 /** 図形の中の、縁からの深さ 0〜1(外は 0 以下)。x, y はピクセルの中心 */
-export function shapeDepth(s: InflateShape, x: number, y: number): number {
+export function shapeDepth(s: InflateShape, x: number, y: number, rot = rotation(s)): number {
   let dx = x - s.cx, dy = y - s.cy;
   // 傾いた形は、点を逆に回して傾ける前の形で測る
-  if (s.angle) { const c = Math.cos(s.angle), n = Math.sin(s.angle); [dx, dy] = [dx * c + dy * n, -dx * n + dy * c]; }
+  if (rot) { const { c, n } = rot, u = dx * c + dy * n; dy = -dx * n + dy * c; dx = u; }
   if (s.kind === 'ellipse') return 1 - Math.hypot(dx / s.rx, dy / s.ry);
   // 矩形は縁からの距離を短い方の半径で割る(長い辺に沿って稜線ができる寄棟屋根の形)
   return Math.min(s.rx - Math.abs(dx), s.ry - Math.abs(dy)) / Math.min(s.rx, s.ry);
 }
+
+/** 傾きの cos・sin(傾けていなければ null)。ピクセルごとに計算しないよう、先に1回だけ求める */
+const rotation = (s: InflateShape) => (s.angle ? { c: Math.cos(s.angle), n: Math.sin(s.angle) } : null);
 
 /** 傾けた形の外接矩形の半分の幅・縦 */
 export function shapeExtent(s: InflateShape): { ex: number; ey: number } {
@@ -72,9 +75,9 @@ function shapeBounds(s: InflateShape, w: number, h: number): Rect | null {
 export function inflateShape(wm: WeightMap, base: Uint8Array, s: InflateShape, p: InflateParams): Rect | null {
   if (s.rx < 0.5 || s.ry < 0.5) return null;
   const r = shapeBounds(s, wm.width, wm.height); if (!r) return null;
-  const W = wm.width, d = wm.data, R = Math.min(s.rx, s.ry);
+  const W = wm.width, d = wm.data, R = Math.min(s.rx, s.ry), rot = rotation(s);
   for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) {
-    const depth = shapeDepth(s, x + 0.5, y + 0.5);
+    const depth = shapeDepth(s, x + 0.5, y + 0.5, rot);
     if (depth <= 0) continue;
     const i = y * W + x;
     d[i] = blend(base[i], p.level * profileAt(ramp(depth, p.softness, R), p.profile), p.blend);

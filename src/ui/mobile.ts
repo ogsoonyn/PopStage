@@ -76,6 +76,8 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     for (const s of slotEls) move(s.el, pane(s.tab), s.prepend);
     move(ui.inflateDialog, pane('tool'));
     for (const el of document.querySelectorAll('[data-brush-opt]')) move(el, ui.mBrushOpts);
+    // 膨らみの、次に描くときの設定(特に角度はドラッグの向きを変えるので、描く前に見えるようにする)
+    for (const el of document.querySelectorAll('[data-inflate-opt]')) move(el, ui.mInflOpts);
     // 3面図は縦長の画面では狭すぎるので使わない。塗りのツールのまま来たら、主のツールにする
     if (app.view.multi) app.setViewOption('multi', false);
     desktopTool = app.tool;
@@ -222,8 +224,11 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     if (!PAINT_TOOLS.includes(app.tool)) lastMain = app.tool;
     ui.mToolDesc.textContent = TOOL_DESC[app.tool];
     ui.mBrushOpts.hidden = !BRUSH_TOOLS.includes(app.tool);
+    // 描いたあとはパネル(同じタブに出る)で同じ値を変えるので、重ねて出さない
+    ui.mInflOpts.hidden = app.tool !== 'inflate' || app.previewingInflate;
   }
   app.on('tool', syncTool);
+  app.on('inflate', syncTool);
 
   // 範囲を描いたら、高さや断面を決められるよう「ツール」タブを開く。終わったら元の高さに戻す
   let before: SheetState | null = null;

@@ -29,7 +29,7 @@ export const UI_IDS = {
   vOverlay: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
   pFov: 'input', pFovO: 'output', pBgTransparent: 'input', pBgColor: 'input',
   // スマホのシート・下のバー
-  mSheet: 'section', mGrip: 'div', mPresets: 'div', mPanes: 'div', mToolDesc: 'p', mBrushOpts: 'div', mPaintMode: 'button',
+  mSheet: 'section', mGrip: 'div', mPresets: 'div', mPanes: 'div', mToolDesc: 'p', mBrushOpts: 'div', mInflOpts: 'div', mPaintMode: 'button',
   mModeBar: 'div', mTools: 'nav', mPaintDone: 'button',
   // ステータスバー
   sFps: 'span', sVerts: 'span', sZoom: 'span', sImage: 'span', sRec: 'span', sSave: 'span',
