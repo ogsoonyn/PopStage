@@ -1,26 +1,35 @@
 import './style.css';
-import { App, type Tool } from './app';
-import { bindStageInput, isTyping } from './ui/input';
+import { App } from './app';
+import { initUI, ui } from './ui/ids';
+import { bindStageInput } from './ui/input';
 import { bindPanels } from './ui/panels';
+import { bindActions } from './ui/actions';
 import { bindExportDialog } from './ui/exportDialog';
 import { bindBlurDialog } from './ui/blurDialog';
 import { bindInflateDialog } from './ui/inflateDialog';
+import { bindToolOptions } from './ui/toolOptions';
+import { bindMenus } from './ui/menus';
 import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
 import { bindMobileLayout } from './ui/mobile';
 import { bindTakeControls } from './ui/take';
+import { isTool } from './ui/tools';
+import { bindHelp } from './ui/help';
 import { FILE_EXTENSION, LEGACY_FILE_EXTENSION } from './storage/popstage';
-import { $, ask, toast, retryWithClick } from './ui/dom';
+import { ask, toast, retryWithClick } from './ui/dom';
 import { autosave } from './storage/autosave';
 import { prefs, persistControls } from './storage/prefs';
 import { isImageFile, isProjectFile } from './ui/imageio';
 
-const canvas = $<HTMLCanvasElement>('view');
+// 画面の要素をまとめて取る(index.html と ui/ids.ts の一覧が合わなければ、ここで止まる)
+initUI();
+bindHelp();
+const canvas = ui.view;
 let app: App;
 try {
   app = new App(canvas);
 } catch (e) {
-  document.getElementById('stage')!.innerHTML = '<p class="p-6 text-error">WebGL2 を初期化できませんでした。Chrome / Edge / Firefox の最新版でお試しください。</p>';
+  ui.stage.innerHTML = '<p class="p-6 text-error">WebGL2 を初期化できませんでした。Chrome / Edge / Firefox の最新版でお試しください。</p>';
   throw e;
 }
 const params = new URLSearchParams(location.search);
@@ -32,28 +41,29 @@ const checkRestore = !e2e || params.has('restore');
 /** パフォーマンスのデバッグ表示(?debug か Ctrl+Shift+Alt+P)。使うときだけ読み込む */
 const togglePerf = () => void import('./debug/perfOverlay').then(m => m.togglePerfOverlay(app)).catch(e => console.error(e));
 if (params.has('debug')) togglePerf();
+// ステータスバーの fps と頂点数も、開発向けなので ?debug のときだけ出す
+ui.sFps.hidden = ui.sVerts.hidden = !params.has('debug');
 
 bindStageInput(app, canvas);
 const multiView = bindMultiView(app, canvas);
 bindPanels(app);
 bindTakeControls(app);
 
-/* ---------- 右のパネルのタブ(編集・アニメーション・表示設定)。選んだタブはブラウザに覚える ---------- */
+/* ---------- 右のパネルのタブ(レイヤー・アニメーション・画像と表示)。選んだタブはブラウザに覚える ---------- */
 {
   const tabs = [...document.querySelectorAll<HTMLButtonElement>('#pTabs [data-ptab]')];
   const select = (t: string) => {
-    if (!tabs.some(b => b.dataset.ptab === t)) t = 'edit';
+    if (!tabs.some(b => b.dataset.ptab === t)) t = 'layer'; // 知らない値(前の版の「編集」タブなど)は「レイヤー」で始める
     for (const b of tabs) { const on = b.dataset.ptab === t; b.setAttribute('aria-selected', String(on)); b.classList.toggle('tab-active', on); }
-    for (const p of document.querySelectorAll<HTMLElement>('#props [data-ppane]')) p.hidden = p.dataset.ppane !== t;
+    for (const p of ui.props.querySelectorAll<HTMLElement>('[data-ppane]')) p.hidden = p.dataset.ppane !== t;
     prefs.set('panelTab', t);
   };
   for (const b of tabs) b.addEventListener('click', () => select(b.dataset.ptab!));
-  select(prefs.get<string>('panelTab') ?? 'edit');
+  select(prefs.get<string>('panelTab') ?? 'layer');
 }
 
 /* ---------- 設定をブラウザに覚える(ファイルには書かない) ---------- */
-const byId = <T extends HTMLElement>(...ids: string[]) => ids.map(id => $<T>(id));
-persistControls('brush', byId<HTMLInputElement | HTMLSelectElement>('brushSize', 'brushStrength', 'brushHardness', 'brushPressure'));
+persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.brushPressure]);
 // 「ポップを一時OFF」「揺れを一時停止」は一時的な切り替えなので覚えない
 {
   // キー・メニュー・チェックボックスのどれで切り替えても覚えるよう、アプリの表示の状態から覚える
@@ -63,9 +73,8 @@ persistControls('brush', byId<HTMLInputElement | HTMLSelectElement>('brushSize',
   app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, grid: v.grid, fade: v.fade, multi: v.multi }); });
 }
 {
-  const TOOLS: Tool[] = ['brush', 'erase', 'smooth', 'inflate', 'grab', 'shake', 'view', 'pan'];
   const t = prefs.get<string>('tool');
-  if (t && (TOOLS as string[]).includes(t)) app.setTool(t as Tool);
+  if (isTool(t)) app.setTool(t);
   app.on('tool', t => prefs.set('tool', t));
 }
 // 背景・自動揺らし・画角は、変えたら「新しい画像を開いたときの既定」として覚える
@@ -78,12 +87,11 @@ const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
 const recentDialog = bindRecentDialog(app);
 bindInflateDialog(app);
-// スマホの配置。右パネルなどの部品を移すので、ほかの部品を結び付けたあとに呼ぶ
-bindMobileLayout(app);
+bindToolOptions(app);
 
 /* ---------- ファイルを開く ---------- */
 
-const fileImage = $<HTMLInputElement>('fileImage'), fileProject = $<HTMLInputElement>('fileProject');
+const { fileImage, fileProject } = ui;
 fileImage.addEventListener('change', () => { const f = fileImage.files?.[0]; fileImage.value = ''; if (f) void app.openFile(f); });
 fileProject.addEventListener('change', () => { const f = fileProject.files?.[0]; fileProject.value = ''; if (f) void app.openFile(f); });
 
@@ -100,153 +108,26 @@ async function pickAndOpen(types: FilePickerAcceptType[], fallback: HTMLInputEle
     } catch (e) { if ((e as DOMException).name !== 'AbortError') toast(String(e), 'error'); }
   } else fallback.click();
 }
-const openProjectDialog = () => pickAndOpen([{ description: 'PukuPop プロジェクト / 画像', accept: { 'application/zip': [FILE_EXTENSION, LEGACY_FILE_EXTENSION], ...IMAGE_ACCEPT } }], fileProject);
-const openImageDialog = () => pickAndOpen([{ description: '画像', accept: IMAGE_ACCEPT }], fileImage);
 
-/* ---------- コマンド(メニュー・ボタン・ショートカット共通) ---------- */
-
-const commands: Record<string, { run: () => unknown; enabled?: () => boolean }> = {
-  openImage: { run: openImageDialog },
-  open: { run: openProjectDialog },
-  recent: { run: () => recentDialog.open() },
-  save: { run: () => app.save(false), enabled: () => !!app.doc },
-  saveAs: { run: () => app.save(true), enabled: () => !!app.doc },
-  export: { run: () => exportDialog.open(), enabled: () => !!app.doc },
-  sample: { run: async () => { if (await app.confirmDiscard()) await app.loadSample(); } },
-  undo: { run: () => app.history.undo(), enabled: () => app.history.canUndo && !app.stroking },
-  redo: { run: () => app.history.redo(), enabled: () => app.history.canRedo && !app.stroking },
-  smoothAll: { run: () => blurDialog.open(), enabled: () => !!app.activeLayer },
-  normalize: { run: () => app.weightOp('正規化', wm => wm.normalize()), enabled: () => !!app.activeLayer },
-  invert: { run: () => app.weightOp('反転', wm => wm.invert()), enabled: () => !!app.activeLayer },
-  fromAlpha: { run: () => app.fromAlpha(), enabled: () => !!app.activeLayer },
-  clearWeights: { run: () => app.weightOp('全消去', wm => wm.clear()), enabled: () => !!app.activeLayer },
-  toggleOverlay: { run: () => app.setViewOption('overlay', !app.view.overlay) },
-  toggleGrid: { run: () => app.setViewOption('grid', !app.view.grid) },
-  toggleFade: { run: () => app.setViewOption('fade', !app.view.fade) },
-  toggleFlat: { run: () => app.setViewOption('flat', !app.view.flat) },
-  togglePause: { run: () => app.setPaused(!app.paused) },
-  cleanView: { run: () => app.clearEditView() },
-  toggleMulti: { run: () => app.setViewOption('multi', !app.view.multi) },
-  resetView: { run: () => app.resetView() },
-  toggleRecording: { run: () => app.toggleRecording(), enabled: () => !!app.doc },
-  togglePlay: { run: () => app.togglePlay(), enabled: () => !!app.project.take && app.takeState !== 'recording' },
-  addLayer: { run: () => app.addLayer(), enabled: () => !!app.doc },
-  duplicateLayer: { run: () => app.duplicateLayer(), enabled: () => !!app.activeLayer },
-  deleteLayer: { run: () => app.deleteLayer(), enabled: () => (app.doc?.layers.length ?? 0) > 1 },
-  layerUp: { run: () => app.moveLayer(1), enabled: () => app.activeIndex >= 0 && app.activeIndex < (app.doc?.layers.length ?? 0) - 1 },
-  layerDown: { run: () => app.moveLayer(-1), enabled: () => app.activeIndex > 0 },
-  help: { run: () => $<HTMLDialogElement>('helpDialog').showModal() },
-  about: { run: () => { $('aboutVersion').textContent = `バージョン ${__APP_VERSION__} ・ .pukupop 形式 v1`; $<HTMLDialogElement>('aboutDialog').showModal(); } },
-};
-
-/** 膨らませるのプレビュー中は、表示の切り替え以外はできない(プレビュー中のウェイトを元に戻すなどしないように) */
-const SAFE_WHILE_INFLATING = new Set(['toggleOverlay', 'toggleGrid', 'toggleFade', 'toggleFlat', 'togglePause', 'toggleMulti', 'cleanView', 'resetView', 'help', 'about']);
-const commandEnabled = (name: string): boolean => {
-  const c = commands[name];
-  if (!c) return false;
-  if (app.previewingInflate && !SAFE_WHILE_INFLATING.has(name)) return false;
-  return !c.enabled || c.enabled();
-};
-
-function runCommand(name: string): void {
-  const c = commands[name];
-  if (!c || !commandEnabled(name)) return;
-  void Promise.resolve(c.run()).catch(e => { console.error(e); toast(String(e instanceof Error ? e.message : e), 'error'); });
-}
-
-document.querySelectorAll<HTMLButtonElement>('[data-cmd]').forEach(b => b.addEventListener('click', () => {
-  // ドロップダウンを閉じる
-  (document.activeElement as HTMLElement | null)?.blur();
-  runCommand(b.dataset.cmd!);
-}));
-
-function refreshCommands(): void {
-  document.querySelectorAll<HTMLButtonElement>('[data-cmd]').forEach(b => {
-    b.disabled = !commandEnabled(b.dataset.cmd!);
-  });
-  document.querySelector('[data-label=undo]')!.textContent = app.history.undoLabel ? `(${app.history.undoLabel})` : '';
-  document.querySelector('[data-label=redo]')!.textContent = app.history.redoLabel ? `(${app.history.redoLabel})` : '';
-  const checks: Record<string, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused };
-  document.querySelectorAll<HTMLElement>('[data-check]').forEach(el => { el.textContent = checks[el.dataset.check!] ? '✓' : ''; });
-}
-app.history.on('change', refreshCommands);
-app.on('active', refreshCommands);
-app.on('view', refreshCommands);
-app.store.on('layers', refreshCommands);
-app.store.on('replace', refreshCommands);
-app.on('inflate', refreshCommands);
-
-/* ---------- ツール ---------- */
-
-const TOOL_HINTS: Record<Tool, string> = {
-  brush: 'ドラッグで塗る(Alt で消しゴム)/ 右ドラッグで回転 / ホイールでズーム',
-  erase: 'ドラッグでウェイトを消す',
-  smooth: 'ドラッグで段差をならす',
-  inflate: 'ドラッグした範囲を一括で膨らませる(Shift で正円・正方形)/ 高さや断面は下のパネルで調整',
-  grab: 'ドラッグで引っ張って離すと揺れる',
-  shake: 'ドラッグで画像を振る(カメラが付いてくるので画像は動かず、揺れだけが見える)/ 中ドラッグで画像を動かす / 右ドラッグで回転',
-  view: 'ドラッグで視点を回す / Space+ドラッグで平行移動',
-  pan: 'ドラッグで画像を動かす(動かした勢いで揺れる)/ 右ドラッグで回転 / ホイールでズーム',
-};
-function refreshTool(): void {
-  document.querySelectorAll<HTMLButtonElement>('.tool').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === app.tool)));
-  const paint = app.tool === 'brush' || app.tool === 'erase' || app.tool === 'smooth';
-  document.querySelectorAll<HTMLElement>('[data-brush-opt]').forEach(el => el.classList.toggle('opacity-40', !paint));
-  $('toolHint').textContent = TOOL_HINTS[app.tool];
-}
-// 膨らませるのプレビュー中はツールを切り替えない(キーと同じ)
-document.querySelectorAll<HTMLButtonElement>('.tool').forEach(b => b.addEventListener('click', () => { if (!app.previewingInflate) app.setTool(b.dataset.tool as Tool); }));
-app.on('tool', refreshTool);
-
-/* ---------- ショートカット ---------- */
-
-const anyDialogOpen = () => !!document.querySelector('dialog[open]');
-
-/** 画面を覆うダイアログ(確認・書き出しなど)が開いているか。膨らませるのパネルのように画面を覆わないものは含めない */
-const modalOpen = () => !!document.querySelector('dialog[open]:modal');
-
-window.addEventListener('keydown', e => {
-  // 膨らませるのパネルを開いている間も、表示の切り替えなどは効かせる(できない操作は commandEnabled で止める)
-  if (isTyping(e) || modalOpen()) return;
-  // 日本語入力がオンのときは key が 'Process' になるので、キーの位置(code)から読む
-  const key = e.key === 'Process' && /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : e.key;
-  const k = key.toLowerCase(), ctrl = e.ctrlKey || e.metaKey;
-  const hit = (name: string) => { e.preventDefault(); runCommand(name); };
-  if (ctrl && e.shiftKey && e.altKey && e.code === 'KeyP') { e.preventDefault(); togglePerf(); return; }
-  if (ctrl) {
-    if (k === 'z') return hit(e.shiftKey ? 'redo' : 'undo');
-    if (k === 'y') return hit('redo');
-    if (k === 's') return hit(e.shiftKey ? 'saveAs' : 'save');
-    if (k === 'o') return hit(e.shiftKey ? 'openImage' : 'open');
-    if (k === 'e') return hit('export');
-    return;
-  }
-  if (e.altKey) return;
-  if (e.shiftKey && k === 'g') return hit('toggleGrid');
-  if (e.shiftKey && k === 'w') return hit('toggleFade');
-  if (e.key === 'Home') return hit('resetView');
-  const tools: Record<string, Tool> = { b: 'brush', e: 'erase', s: 'smooth', i: 'inflate', g: 'grab', y: 'shake', v: 'view', h: 'pan' };
-  if (!e.shiftKey && tools[k]) { e.preventDefault(); if (!app.previewingInflate) app.setTool(tools[k]); return; }
-  if (k === 'w') return hit('toggleOverlay');
-  if (k === 'f') return hit('toggleFlat');
-  if (k === 'p') return hit('togglePause');
-  if (k === 'm') return hit('toggleMulti');
-  if (k === 'c') return hit('cleanView');
-  if (k === 'r') return hit('toggleRecording');
-  if (k === 'l') return hit('togglePlay');
-  if (e.key === '[' || e.key === ']') {
-    const el = $<HTMLInputElement>('brushSize'), step = Math.max(2, Math.round(app.brush.size * 0.15));
-    el.value = String(app.brush.size + (e.key === ']' ? step : -step));
-    el.dispatchEvent(new Event('input'));
-    e.preventDefault();
-  }
+/* ---------- コマンド(メニュー・ボタン・ショートカット共通。定義は ui/actions.ts) ---------- */
+// メニューやボタンを結び付けるので、data-cmd の部品をスマホのシートへ移す前に呼ぶ(移しても結び付けは残る)
+bindActions(app, {
+  openImage: () => pickAndOpen([{ description: '画像', accept: IMAGE_ACCEPT }], fileImage),
+  openProject: () => pickAndOpen([{ description: 'PukuPop プロジェクト / 画像', accept: { 'application/zip': [FILE_EXTENSION, LEGACY_FILE_EXTENSION], ...IMAGE_ACCEPT } }], fileProject),
+  openRecent: () => recentDialog.open(),
+  openExport: () => exportDialog.open(),
+  openBlur: () => blurDialog.open(),
+  togglePerf,
 });
+bindMenus();
+// スマホの配置。右パネルなどの部品を移すので、ほかの部品を結び付けたあとに呼ぶ
+bindMobileLayout(app);
 
 /* ---------- ドラッグ&ドロップ ---------- */
 
-const wrap = $('stageWrap'), dropHint = $('dropHint');
+const anyDialogOpen = () => !!document.querySelector('dialog[open]');
 let dragDepth = 0;
-const showDrop = (on: boolean) => { dropHint.classList.toggle('hidden', !on); dropHint.classList.toggle('flex', on); };
+const showDrop = (on: boolean) => { ui.dropHint.classList.toggle('hidden', !on); ui.dropHint.classList.toggle('flex', on); };
 window.addEventListener('dragenter', e => { if (e.dataTransfer?.types.includes('Files')) { dragDepth++; showDrop(true); } });
 window.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) showDrop(false); });
 window.addEventListener('dragover', e => e.preventDefault());
@@ -265,26 +146,28 @@ window.addEventListener('drop', e => {
   })();
   else if (e.dataTransfer?.files.length) toast('PNG / JPEG / WebP の画像か、.pukupop ファイルをドロップしてください。', 'warning');
 });
-void wrap;
 
 /* ---------- ステータスバーとタイトル ---------- */
 
 function refreshStatus(): void {
   const d = app.doc;
-  $('sFps').textContent = `${app.fps} fps`;
-  $('sVerts').textContent = `${app.stage.vertexCount.toLocaleString()} 頂点`;
-  $('sZoom').textContent = `ズーム ${Math.round(100 / app.project.camera.zoom)}%`;
-  $('sImage').textContent = d ? `${d.image.width}×${d.image.height}px・ウェイト ${d.layers[0]?.weights.width ?? 0}×${d.layers[0]?.weights.height ?? 0}` : '-';
-  if (!app.exporting) $('sRec').textContent = [app.view.flat && 'ポップOFF', app.paused && '揺れ一時停止中'].filter(Boolean).join('・');
-  $('sSave').textContent = app.autosaveError ? `自動保存に失敗しました(${app.autosaveError})。こまめに保存してください。` : app.dirty ? (app.lastAutosave ? `未保存の変更あり(${app.lastAutosave.toLocaleTimeString()} に自動保存)` : '未保存の変更あり') : app.lastSaved ? `保存済み ${app.lastSaved.toLocaleTimeString()}` : '';
+  if (!ui.sFps.hidden) {
+    ui.sFps.textContent = `${app.fps} fps`;
+    ui.sVerts.textContent = `${app.stage.vertexCount.toLocaleString()} 頂点`;
+  }
+  ui.sZoom.textContent = `ズーム ${Math.round(100 / app.project.camera.zoom)}%`;
+  ui.sImage.textContent = d ? `${d.image.width}×${d.image.height}px・ウェイト ${d.layers[0]?.weights.width ?? 0}×${d.layers[0]?.weights.height ?? 0}` : '-';
+  if (!app.exporting) ui.sRec.textContent = [app.view.flat && 'ポップOFF', app.paused && '揺れ一時停止中'].filter(Boolean).join('・');
+  ui.sSave.textContent = app.autosaveError ? `自動保存に失敗しました(${app.autosaveError})。こまめに保存してください。` : app.dirty ? (app.lastAutosave ? `未保存の変更あり(${app.lastAutosave.toLocaleTimeString()} に自動保存)` : '未保存の変更あり') : app.lastSaved ? `保存済み ${app.lastSaved.toLocaleTimeString()}` : '';
 }
 function refreshTitle(): void {
   const name = app.fileName ?? app.doc?.name ?? '';
-  $('docTitle').textContent = `${app.dirty ? '● ' : ''}${name}`;
+  ui.docTitle.textContent = `${app.dirty ? '● ' : ''}${name}`;
   document.title = `${app.dirty ? '* ' : ''}${name ? name + ' - ' : ''}PukuPop`;
   refreshStatus();
 }
 app.on('status', refreshStatus);
+app.on('fps', refreshStatus); // ズームの表示など、イベントの無い変化もここで拾う(ステータスバーだけを書き直す)
 app.on('view', refreshStatus);
 app.on('file', refreshTitle);
 
@@ -295,7 +178,6 @@ new ResizeObserver(() => { app.stage.resize(); multiView.layout(); }).observe(ca
 
 async function boot(): Promise<void> {
   app.stage.resize();
-  refreshTool(); refreshCommands();
   app.start();
   const saved = checkRestore ? await autosave.load() : undefined;
   if (saved) {

@@ -1,10 +1,14 @@
-/** 「全体をぼかす(ガウス)」ダイアログ。半径を動かすとその場でプレビューし、適用で1手として記録する。 */
+/**
+ * 「全体をぼかす(ガウス)」のパネル。半径を動かすとその場でプレビューし、適用で1手として記録する。
+ * 視点を回して確かめられるよう、ほかの操作を止めないダイアログ(show)にする。プレビュー中に使えない操作は
+ * コマンドの表(ui/actions.ts の duringPreview)と App 側で止める。
+ */
 import type { App } from '../app';
-import { $ } from './dom';
+import { ui } from './ids';
 
 export function bindBlurDialog(app: App): { open: () => void } {
-  const dlg = $<HTMLDialogElement>('blurDialog');
-  const range = $<HTMLInputElement>('blurRadius'), num = $<HTMLInputElement>('blurRadiusN');
+  const dlg = ui.blurDialog;
+  const range = ui.blurRadius, num = ui.blurRadiusN;
   let lastRadius = 16, queued = false, closing = false;
 
   const value = () => Math.max(0, Math.min(200, Math.round(+range.value || 0)));
@@ -27,17 +31,18 @@ export function bindBlurDialog(app: App): { open: () => void } {
     dlg.close();
     closing = false;
   }
-  $('blurApply').addEventListener('click', () => finish(true));
-  $('blurCancel').addEventListener('click', () => finish(false));
-  dlg.addEventListener('cancel', e => { e.preventDefault(); finish(false); }); // Esc はキャンセル扱い
+  ui.blurApply.addEventListener('click', () => finish(true));
+  ui.blurCancel.addEventListener('click', () => finish(false));
+  // Esc はキャンセル扱い。ヘルプなど画面を覆う別のダイアログを Esc で閉じたときは、プレビューを捨てない
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && dlg.open && !document.querySelector('dialog[open]:modal')) { e.preventDefault(); finish(false); } });
 
   return {
     open() {
       const layer = app.activeLayer;
       if (!layer || !app.beginBlurPreview()) return;
-      $('blurTarget').textContent = `選択中のレイヤー「${layer.name}」全体にかけます。`;
+      ui.blurTarget.textContent = `選択中のレイヤー「${layer.name}」全体にかけます。`;
       range.value = num.value = String(lastRadius);
-      dlg.showModal();
+      dlg.show();
       range.focus();
       app.previewBlur(lastRadius);
     },

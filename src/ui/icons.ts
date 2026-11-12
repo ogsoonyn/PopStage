@@ -1,0 +1,27 @@
+/**
+ * 線のアイコン(24×24、線の色は文字の色)。PC の左のツールバーとスマホの下のバーで同じものを使う。
+ * 値は <svg> の中身だけを持ち、icon() で <svg> に包む。
+ */
+export const ICONS = {
+  brush: '<path d="M18 3 9.5 11.5"/><path d="M7 13c-2 0-3 1.5-3 3.5S3 20 3 20s3 .5 5-1 2-4 2-4"/><path d="m9 11 4 4"/><path d="M13 15 21 7l-4-4-8 8"/>',
+  erase: '<path d="m7 21-4-4 10-10 7 7-7 7z"/><path d="M8 10l6 6"/><path d="M14 21h7"/>',
+  smooth: '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/>',
+  inflate: '<path d="M3 18h18"/><path d="M5 18c0-6 3-10 7-10s7 4 7 10"/>',
+  grab: '<path d="M8 13V5a1.5 1.5 0 0 1 3 0v6"/><path d="M11 10V4a1.5 1.5 0 0 1 3 0v6"/><path d="M14 10V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.5A6.5 6.5 0 0 1 4 16l-1-3a1.5 1.5 0 0 1 2.6-1.4L8 14"/>',
+  shake: '<path d="M4 8c2-2 4-2 6 0s4 2 6 0 3-2 4-1"/><path d="M4 14c2-2 4-2 6 0s4 2 6 0 3-2 4-1"/>',
+  view: '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
+  pan: '<path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',
+  // その場で効く操作
+  cleanView: '<path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8z"/><path d="M19 15l.8 1.7L21.5 17.5l-1.7.8L19 20l-.8-1.7-1.7-.8 1.7-.8z"/>',
+  smoothAll: '<path d="M3 8c3-2 6 2 9 0s6-2 9 0"/><path d="M3 13c3-2 6 2 9 0s6-2 9 0"/><path d="M3 18c3-2 6 2 9 0s6-2 9 0"/>',
+  normalize: '<path d="M5 4h14"/><path d="M12 20V8"/><path d="m7 13 5-5 5 5"/>',
+  invert: '<path d="M7 4v16"/><path d="m3 8 4-4 4 4"/><path d="M17 20V4"/><path d="m13 16 4 4 4-4"/>',
+  // キーフレームを今の視点で上書きする(カメラ)
+  keySet: '<path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+} as const;
+
+export type IconName = keyof typeof ICONS;
+
+export function icon(name: IconName, className = ''): string {
+  return `<svg class="${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+}

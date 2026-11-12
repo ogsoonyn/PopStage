@@ -1,18 +1,37 @@
 /**
  * スマホの画面(幅が狭いとき)。3Dビューを全面に出し、ツールは下のバー、設定は下から引き上げるシートにまとめる。
  * 設定の部品(スライダー・レイヤー一覧・膨らませるのパネルなど)は作り直さず、PC の画面から DOM ごとシートへ移す。
+ * 移す部品は index.html で data-m-slot の印を付けたもので、どのタブへどの順に移すかは下の MOBILE_SLOTS で決める
+ * (PC の画面の並びを変えても、印が付いたままなら移る中身は変わらない)。スマホで出さない部品には d-only を付ける。
  * イベントの結び付けはそのまま残るので、PC とスマホで同じ処理が動く。幅が戻ったら元の場所へ戻す。
  * ツールは「つかむ・揺らす・移動・視点」を主にし、膨らみ・塗り・消しゴム・ぼかしは「塗って直す」の中に置く。
  */
 import type { App, Tool } from '../app';
-import { $ } from './dom';
+import { PRESETS, PRESET_ORDER, type PresetName } from '../model/project';
+import { ui } from './ids';
+import { icon } from './icons';
+import { toolDef } from './tools';
 import { setFineLock } from './fine';
 
 /** スマホの配置にする条件。横向きのスマホ(高さが低く、指で触る)も含める */
 export const MOBILE_QUERY = '(max-width: 767px), (max-height: 500px) and (pointer: coarse)';
 
 type SheetState = 'closed' | 'half' | 'full';
-type Tab = 'motion' | 'tool' | 'layer' | 'view' | 'file';
+/** シートのタブ。PC の右パネルのタブ(レイヤー・アニメーション・画像と表示)と同じ分け方にし、ツールとファイルを足す */
+type Tab = 'layer' | 'anim' | 'tool' | 'view' | 'file';
+
+/** シートへ移す部品(data-m-slot の名前)と、移す先のタブ。この順に並べる。prepend はタブの先頭へ入れる */
+export const MOBILE_SLOTS: readonly { slot: string; tab: Tab; prepend?: boolean }[] = [
+  { slot: 'layers', tab: 'layer', prepend: true },
+  { slot: 'layerProps', tab: 'layer' },
+  { slot: 'swing', tab: 'layer' },
+  { slot: 'autoSwing', tab: 'anim' },
+  { slot: 'take', tab: 'anim' },
+  { slot: 'keys', tab: 'anim' },
+  { slot: 'image', tab: 'view' },
+  { slot: 'viewToggles', tab: 'view' },
+  { slot: 'camera', tab: 'view' },
+];
 
 /** 「塗って直す」の中で使うツール。ブラシの設定を出すのは塗りの3つだけ */
 const PAINT_TOOLS: Tool[] = ['inflate', 'brush', 'erase', 'smooth'];
@@ -31,41 +50,37 @@ const TOOL_DESC: Record<Tool, string> = {
 export function bindMobileLayout(app: App): { readonly active: boolean } {
   const root = document.documentElement;
   const mq = window.matchMedia(MOBILE_QUERY);
-  const sheet = $('mSheet'), grip = $('mGrip'), presets = $('mPresets'), panes = $('mPanes');
-  const presetSel = $<HTMLSelectElement>('pPreset'), auto = $<HTMLInputElement>('pAuto');
+  const { mSheet: sheet, mGrip: grip, mPresets: presets, mPanes: panes } = ui;
   const pane = (t: Tab) => panes.querySelector<HTMLElement>(`[data-mpane="${t}"]`)!;
+  // 印の付いた部品は最初に全部取っておく(足りなければ、スマホの幅になったときではなく起動時に分かる)
+  const slotEls = MOBILE_SLOTS.map(s => {
+    const el = document.querySelector(`[data-m-slot="${s.slot}"]`);
+    if (!el) throw new Error(`スマホのシートへ移す部品 [data-m-slot="${s.slot}"] がありません`);
+    return { ...s, el };
+  });
 
   /* ---------- 部品を移す・戻す ---------- */
 
   /** 移したものと元の場所。戻すときは逆順に戻す */
   let moved: { el: Element; parent: Node; next: Node | null }[] = [];
   let desktopTool: Tool | null = null;
-  const move = (el: Element | null | undefined, to: Element, prepend = false) => {
-    if (!el?.parentNode) return;
+  const move = (el: Element, to: Element, prepend = false) => {
+    if (!el.parentNode) return;
     moved.push({ el, parent: el.parentNode, next: el.nextSibling });
     if (prepend) to.prepend(el); else to.append(el);
   };
-  const sectionOf = (id: string) => $(id).closest('section');
 
   function enter(): void {
     root.classList.add('mobile');
-    move(sectionOf('pPop'), pane('motion'));
-    move(sectionOf('pSwing'), pane('motion'));
-    move(sectionOf('pAuto'), pane('motion'));
-    move(sectionOf('takeRec'), pane('motion'));
-    move($('keySection'), pane('motion'));
-    move($('inflateDialog'), pane('tool'));
-    for (const el of document.querySelectorAll('[data-brush-opt]')) move(el, $('mBrushOpts'));
-    move(sectionOf('layerList'), pane('layer'), true);
-    move(sectionOf('vOverlay'), pane('view'));
-    move(sectionOf('pDensity'), pane('view'));
-    move(sectionOf('pFov'), pane('view'));
+    for (const s of slotEls) move(s.el, pane(s.tab), s.prepend);
+    move(ui.inflateDialog, pane('tool'));
+    for (const el of document.querySelectorAll('[data-brush-opt]')) move(el, ui.mBrushOpts);
     // 3面図は縦長の画面では狭すぎるので使わない。塗りのツールのまま来たら、主のツールにする
     if (app.view.multi) app.setViewOption('multi', false);
     desktopTool = app.tool;
     if (PAINT_TOOLS.includes(app.tool)) app.setTool('grab');
     setPaintMode(false);
-    renderPresets(); syncAuto(); syncTitle(); syncTool();
+    syncState(); syncTitle(); syncTool();
     setSheet('closed', false);
   }
   function leave(): void {
@@ -73,7 +88,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     moved = [];
     root.classList.remove('mobile');
     root.style.removeProperty('--m-sheet');
-    setFineLock(false); $('mFine').setAttribute('aria-pressed', 'false');
+    setFineLock(false); ui.mFine.setAttribute('aria-pressed', 'false');
     // スマホの間に塗りから切り替えていたら、PC で使っていたツールに戻す
     if (desktopTool && PAINT_TOOLS.includes(desktopTool) && !PAINT_TOOLS.includes(app.tool)) app.setTool(desktopTool);
     desktopTool = null;
@@ -83,7 +98,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
 
   let state: SheetState = 'closed';
   const heights = () => {
-    const avail = window.innerHeight - $('mTop').offsetHeight - $('mTools').offsetHeight;
+    const avail = window.innerHeight - ui.mTop.offsetHeight - ui.mTools.offsetHeight;
     const peek = grip.offsetHeight + presets.offsetHeight + sheet.querySelector<HTMLElement>('.m-tabs')!.offsetHeight;
     return { closed: peek, half: Math.max(peek, Math.round(avail * 0.48)), full: Math.max(peek, avail - 8) };
   };
@@ -143,46 +158,40 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
   });
   window.addEventListener('resize', () => { if (mq.matches) setSheet(state, false); });
 
-  /* ---------- 揺れのプリセット(右パネルの選択肢をそのまま並べる) ---------- */
+  /* ---------- 揺れのプリセット(右パネルの選択欄と同じ並び。適用は app.setPreset) ---------- */
 
-  function renderPresets(): void {
-    presets.replaceChildren(...[...presetSel.options].filter(o => !o.disabled && !o.hidden).map(o => {
-      const b = document.createElement('button');
-      b.type = 'button'; b.textContent = o.textContent; b.dataset.value = o.value;
-      b.addEventListener('click', () => {
-        if (presetSel.disabled || presetSel.value === o.value) return;
-        presetSel.value = o.value;
-        presetSel.dispatchEvent(new Event('change', { bubbles: true }));
-        syncPresets();
-      });
-      return b;
-    }));
-    syncPresets();
-  }
-  function syncPresets(): void {
-    for (const b of presets.querySelectorAll<HTMLButtonElement>('button')) {
-      b.setAttribute('aria-pressed', String(b.dataset.value === presetSel.value));
-      b.disabled = presetSel.disabled;
-    }
-  }
+  const PRESET_CHOICES: [PresetName, string][] = [...PRESET_ORDER.map(k => [k, PRESETS[k].label] as [PresetName, string]), ['custom', 'カスタム']];
+  presets.replaceChildren(...PRESET_CHOICES.map(([name, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = label; b.dataset.value = name;
+    b.addEventListener('click', () => app.setPreset(name));
+    return b;
+  }));
 
   /* ---------- 上のバー ---------- */
 
-  const syncAuto = () => { const b = $('mAuto'); b.setAttribute('aria-pressed', String(auto.checked)); (b as HTMLButtonElement).disabled = auto.disabled; };
-  $('mAuto').addEventListener('click', () => auto.click());
-  const syncTitle = () => { $('mTitle').textContent = $('docTitle').textContent; };
-  new MutationObserver(syncTitle).observe($('docTitle'), { childList: true, characterData: true, subtree: true });
+  ui.mAuto.addEventListener('click', () => app.setAutoSwing(!app.project.autoSwing.enabled));
+  const syncTitle = () => { ui.mTitle.textContent = ui.docTitle.textContent; };
+  new MutationObserver(syncTitle).observe(ui.docTitle, { childList: true, characterData: true, subtree: true });
 
-  // 右パネルの表示を更新したあとに、こちらも合わせる(panels.ts が先に登録している)
-  for (const ev of ['replace', 'layers', 'layer', 'project', 'document'] as const) app.store.on(ev, () => { syncPresets(); syncAuto(); });
-  app.on('active', () => { syncPresets(); syncAuto(); });
-  app.on('inflate', () => { syncPresets(); syncAuto(); });
+  /** プリセットのボタンと自動揺らしのボタンを、今の状態(モデル)に合わせる */
+  function syncState(): void {
+    const l = app.activeLayer;
+    for (const b of presets.querySelectorAll<HTMLButtonElement>('button')) {
+      b.setAttribute('aria-pressed', String(b.dataset.value === l?.physics.preset));
+      b.disabled = !l;
+    }
+    ui.mAuto.setAttribute('aria-pressed', String(app.project.autoSwing.enabled));
+    ui.mAuto.disabled = !l;
+  }
+  for (const ev of ['replace', 'layers', 'layer', 'project'] as const) app.store.on(ev, syncState);
+  app.on('active', syncState);
 
   /* ---------- 微調整 ---------- */
 
-  $('mFine').addEventListener('click', e => {
-    const b = e.currentTarget as HTMLElement, on = b.getAttribute('aria-pressed') !== 'true';
-    b.setAttribute('aria-pressed', String(on));
+  ui.mFine.addEventListener('click', () => {
+    const on = ui.mFine.getAttribute('aria-pressed') !== 'true';
+    ui.mFine.setAttribute('aria-pressed', String(on));
     setFineLock(on);
   });
 
@@ -191,21 +200,27 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
   let lastMain: Tool = 'grab';
   function setPaintMode(on: boolean): void {
     root.dataset.mset = on ? 'paint' : 'main';
-    $('mModeBar').hidden = !on;
+    ui.mModeBar.hidden = !on;
     if (on && !PAINT_TOOLS.includes(app.tool)) app.setTool('brush');
     if (!on && PAINT_TOOLS.includes(app.tool)) app.setTool(lastMain);
   }
-  $('mPaintMode').addEventListener('click', () => { if (app.previewingInflate) return; setPaintMode(true); setSheet('closed'); });
-  $('mPaintDone').addEventListener('click', () => { if (!app.previewingInflate) setPaintMode(false); });
-  // PC の左のツールボタン(.tool)とは別に結び付ける(同じ data-tool のボタンが2つになるので、クラスは分ける)
-  for (const b of document.querySelectorAll<HTMLButtonElement>('#mTools [data-mtool]')) b.addEventListener('click', () => { if (!app.previewingInflate) app.setTool(b.dataset.mtool as Tool); });
+  ui.mPaintMode.addEventListener('click', () => { if (app.previewing) return; setPaintMode(true); setSheet('closed'); });
+  ui.mPaintDone.addEventListener('click', () => { if (!app.previewing) setPaintMode(false); });
+  // PC の左のツールボタン(.tool)とは別に結び付ける(同じ data-tool のボタンが2つになるので、クラスは分ける)。
+  // アイコンと名前は PC と同じ表(ui/tools.ts・ui/icons.ts)から入れる
+  for (const b of ui.mTools.querySelectorAll<HTMLButtonElement>('[data-mtool]')) {
+    const t = toolDef(b.dataset.mtool as Tool);
+    b.innerHTML = `${icon(t.id)}<span></span>`;
+    b.querySelector('span')!.textContent = t.label;
+  }
+  for (const b of ui.mTools.querySelectorAll<HTMLButtonElement>('[data-mtool]')) b.addEventListener('click', () => { if (!app.previewing) app.setTool(b.dataset.mtool as Tool); });
   function syncTool(): void {
     // 画像を開いたときなどに、塗りのツールへ切り替わることがある。スマホでは塗りは「塗って直す」の中だけなので戻す
     if (mq.matches && root.dataset.mset !== 'paint' && PAINT_TOOLS.includes(app.tool)) { app.setTool(lastMain); return; }
-    for (const b of document.querySelectorAll<HTMLButtonElement>('#mTools [data-mtool]')) b.setAttribute('aria-pressed', String(b.dataset.mtool === app.tool));
+    for (const b of ui.mTools.querySelectorAll<HTMLButtonElement>('[data-mtool]')) b.setAttribute('aria-pressed', String(b.dataset.mtool === app.tool));
     if (!PAINT_TOOLS.includes(app.tool)) lastMain = app.tool;
-    $('mToolDesc').textContent = TOOL_DESC[app.tool];
-    $('mBrushOpts').hidden = !BRUSH_TOOLS.includes(app.tool);
+    ui.mToolDesc.textContent = TOOL_DESC[app.tool];
+    ui.mBrushOpts.hidden = !BRUSH_TOOLS.includes(app.tool);
   }
   app.on('tool', syncTool);
 

@@ -44,13 +44,13 @@
   <div class="dropdown">
     <div tabindex="0" role="button" class="btn btn-ghost btn-sm">ファイル</div>
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
-      <li><button data-cmd="openImage">画像を開く…<kbd class="kbd kbd-xs ml-auto">Ctrl+Shift+O</kbd></button></li>
-      <li><button data-cmd="open">プロジェクトを開く…<kbd class="kbd kbd-xs ml-auto">Ctrl+O</kbd></button></li>
+      <li><button data-cmd="openImage">画像を開く…</button></li>
+      <li><button data-cmd="open">プロジェクトを開く…</button></li>
       <li><button data-cmd="recent">最近開いたファイル…</button></li>
-      <li><button data-cmd="save">保存<kbd class="kbd kbd-xs ml-auto">Ctrl+S</kbd></button></li>
-      <li><button data-cmd="saveAs">名前を付けて保存…<kbd class="kbd kbd-xs ml-auto">Ctrl+Shift+S</kbd></button></li>
+      <li><button data-cmd="save">保存</button></li>
+      <li><button data-cmd="saveAs">名前を付けて保存…</button></li>
       <li class="menu-title pt-2">書き出し</li>
-      <li><button data-cmd="export">動画 / GIF / 連番PNG…<kbd class="kbd kbd-xs ml-auto">Ctrl+E</kbd></button></li>
+      <li><button data-cmd="export">動画 / GIF / 連番PNG…</button></li>
       <li class="menu-title pt-2">その他</li>
       <li><button data-cmd="sample">サンプルを開く</button></li>
     </ul>
@@ -58,8 +58,8 @@
   <div class="dropdown">
     <div tabindex="0" role="button" class="btn btn-ghost btn-sm">編集</div>
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
-      <li><button data-cmd="undo"><span>元に戻す <span data-label="undo" class="opacity-60"></span></span><kbd class="kbd kbd-xs ml-auto">Ctrl+Z</kbd></button></li>
-      <li><button data-cmd="redo"><span>やり直す <span data-label="redo" class="opacity-60"></span></span><kbd class="kbd kbd-xs ml-auto">Ctrl+Shift+Z</kbd></button></li>
+      <li><button data-cmd="undo"><span>元に戻す <span data-label="undo" class="opacity-60"></span></span></button></li>
+      <li><button data-cmd="redo"><span>やり直す <span data-label="redo" class="opacity-60"></span></span></button></li>
       <li class="menu-title pt-2">選択中のレイヤーのウェイト</li>
       <li><button data-cmd="smoothAll">全体をぼかす(ガウス)…</button></li>
       <li><button data-cmd="normalize">正規化(最大を100%に)</button></li>
@@ -71,14 +71,22 @@
   <div class="dropdown">
     <div tabindex="0" role="button" class="btn btn-ghost btn-sm">表示</div>
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
-      <li><button data-cmd="toggleOverlay">ウェイトの重ね表示 <span data-check="overlay" class="ml-auto"></span><kbd class="kbd kbd-xs">W</kbd></button></li>
-      <li><button data-cmd="toggleFade">画像を薄く <span data-check="fade" class="ml-auto"></span><kbd class="kbd kbd-xs">Shift+W</kbd></button></li>
-      <li><button data-cmd="toggleFlat">ポップを一時OFF <span data-check="flat" class="ml-auto"></span><kbd class="kbd kbd-xs">F</kbd></button></li>
-      <li><button data-cmd="togglePause">揺れを一時停止 <span data-check="pause" class="ml-auto"></span><kbd class="kbd kbd-xs">P</kbd></button></li>
-      <li><button data-cmd="toggleMulti">3面図 <span data-check="multi" class="ml-auto"></span><kbd class="kbd kbd-xs">M</kbd></button></li>
-      <li><button data-cmd="toggleGrid">グリッド <span data-check="grid" class="ml-auto"></span><kbd class="kbd kbd-xs">Shift+G</kbd></button></li>
-      <li><button data-cmd="cleanView">編集表示クリア<kbd class="kbd kbd-xs ml-auto">C</kbd></button></li>
-      <li><button data-cmd="resetView">視点リセット(正面)<kbd class="kbd kbd-xs ml-auto">Home</kbd></button></li>
+      <li><button data-cmd="toggleOverlay">ウェイトの重ね表示 <span data-check="overlay" class="ml-auto"></span></button></li>
+      <li><button data-cmd="toggleFade">画像を薄く <span data-check="fade" class="ml-auto"></span></button></li>
+      <li><button data-cmd="toggleFlat">ポップを一時OFF <span data-check="flat" class="ml-auto"></span></button></li>
+      <li><button data-cmd="togglePause">揺れを一時停止 <span data-check="pause" class="ml-auto"></span></button></li>
+      <li><button data-cmd="toggleMulti">3面図 <span data-check="multi" class="ml-auto"></span></button></li>
+      <li><button data-cmd="toggleGrid">グリッド <span data-check="grid" class="ml-auto"></span></button></li>
+      <li><button data-cmd="cleanView">編集表示クリア</button></li>
+      <li><button data-cmd="resetView">視点リセット(正面)</button></li>
+    </ul>
+  </div>
+  <div class="dropdown">
+    <div tabindex="0" role="button" class="btn btn-ghost btn-sm">アニメーション</div>
+    <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
+      <li><button data-cmd="toggleRecording">操作の記録(開始・停止)</button></li>
+      <li><button data-cmd="togglePlay">ループ再生(開始・停止)</button></li>
+      <li><button data-cmd="clearTake">記録を消す</button></li>
     </ul>
   </div>
   <div class="dropdown">
@@ -101,11 +109,11 @@
   <span id="docTitle" class="ml-auto opacity-70 truncate px-2"></span>
 </header>
 
-<!-- ツールオプション -->
+<!-- ツールオプション: 選択中のツールの設定(ブラシ・膨らみ)と操作のヒント。ツールに合わせて中身を入れ替える(ui/toolOptions.ts) -->
 <div class="flex flex-wrap items-center gap-x-5 gap-y-1 px-3 py-1.5 bg-base-100 border-b border-base-300 shrink-0" id="toolOptions">
   <div class="join">
-    <button class="btn btn-xs join-item" data-cmd="undo" title="元に戻す (Ctrl+Z)">↶ 戻す</button>
-    <button class="btn btn-xs join-item" data-cmd="redo" title="やり直す (Ctrl+Shift+Z)">↷ やり直す</button>
+    <button class="btn btn-xs join-item" data-cmd="undo">↶ 戻す</button>
+    <button class="btn btn-xs join-item" data-cmd="redo">↷ やり直す</button>
   </div>
   <label class="flex items-center gap-2" data-brush-opt>サイズ
     <input id="brushSize" type="range" min="4" max="512" value="64" class="range range-xs w-32">
@@ -120,6 +128,16 @@
     <select id="brushPressure" class="select select-xs w-24">
       <option value="strength">強さ</option><option value="size">サイズ</option><option value="none">無効</option>
     </select></label>
+  <!-- 膨らみの既定値(次に範囲を描くときの設定。描いたあとは下のパネルと同じ値を変える)。ui/toolOptions.ts -->
+  <label class="flex items-center gap-2" data-inflate-opt hidden>形
+    <select id="tInflKind" class="select select-xs w-20"><option value="ellipse">楕円</option><option value="rect">矩形</option></select></label>
+  <label class="flex items-center gap-2" data-inflate-opt hidden>断面
+    <select id="tInflProfile" class="select select-xs w-28"><option value="dome">ドーム</option><option value="cushion">クッション</option><option value="cone">直線</option></select></label>
+  <label class="flex items-center gap-2" data-inflate-opt hidden>縁のなだらかさ
+    <input id="tInflSoft" type="range" min="0" max="100" value="100" class="range range-xs w-24">
+    <output id="tInflSoftO" class="w-10 tabular-nums"></output></label>
+  <label class="flex items-center gap-2" data-inflate-opt hidden>重ね方
+    <select id="tInflBlend" class="select select-xs w-32"><option value="max">重ねる(高い方)</option><option value="add">足す</option><option value="replace">置き換える</option></select></label>
   <span id="toolHint" class="opacity-70 hidden md:inline flex-1 min-w-0 truncate"></span>
   <div class="ml-auto flex items-center gap-4 shrink-0" role="group" aria-label="揺れの切り替え">
     <label class="flex items-center gap-2" title="選択中のレイヤーを揺らすか(右のパネルの「揺れ」と同じ)">レイヤーの揺れ <input id="tSwing" type="checkbox" class="toggle toggle-sm"></label>
@@ -130,24 +148,7 @@
 <main class="flex-1 min-h-0 flex">
   <!-- ツールバー -->
   <nav id="toolNav" class="flex flex-col gap-1 p-1.5 bg-base-100 border-r border-base-300 shrink-0 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:thin]" aria-label="ツール">
-    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="brush" aria-keyshortcuts="B" title="ブラシ (B)"><span class="text-base leading-none" aria-hidden="true">🖌</span><span class="text-xs">ブラシ</span><kbd class="tool-key" aria-hidden="true">B</kbd></button>
-    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="erase" aria-keyshortcuts="E" title="消しゴム (E、ブラシ中は Alt)"><span class="text-base leading-none" aria-hidden="true">⌫</span><span class="text-xs">消しゴム</span><kbd class="tool-key" aria-hidden="true">E</kbd></button>
-    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="smooth" aria-keyshortcuts="S" title="ぼかし (S)"><span class="text-base leading-none" aria-hidden="true">◌</span><span class="text-xs">ぼかし</span><kbd class="tool-key" aria-hidden="true">S</kbd></button>
-    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="inflate" aria-keyshortcuts="I" title="膨らませる (I): 範囲をドラッグして、指定した高さと断面で一括して膨らませる"><span class="text-base leading-none" aria-hidden="true">◓</span><span class="text-xs">膨らみ</span><kbd class="tool-key" aria-hidden="true">I</kbd></button>
-    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="grab" aria-keyshortcuts="G" title="つかむ (G)"><span class="text-base leading-none" aria-hidden="true">✋</span><span class="text-xs">つかむ</span><kbd class="tool-key" aria-hidden="true">G</kbd></button>
-    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="shake" aria-keyshortcuts="Y" title="揺らす (Y):カメラを画像に付けたまま振る。画像は動かず、揺れだけが見える"><span class="text-base leading-none" aria-hidden="true">〰</span><span class="text-xs">揺らす</span><kbd class="tool-key" aria-hidden="true">Y</kbd></button>
-    <div class="divider my-0"></div>
-    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="view" aria-keyshortcuts="V" title="視点 (V)"><span class="text-base leading-none" aria-hidden="true">⟲</span><span class="text-xs">視点</span><kbd class="tool-key" aria-hidden="true">V</kbd></button>
-    <button class="tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-tool="pan" aria-keyshortcuts="H" title="移動 (H): 左ドラッグで画像を画面の上で動かす(中ドラッグ・Space+ドラッグと同じ。動かした勢いで揺れる)"><span class="text-base leading-none" aria-hidden="true">✥</span><span class="text-xs">移動</span><kbd class="tool-key" aria-hidden="true">H</kbd></button>
-    <div class="divider my-0"></div>
-    <button class="relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap" data-cmd="cleanView" aria-keyshortcuts="C" title="編集表示クリア (C): 見栄えを確かめるため、編集用の表示をまとめて切る(ウェイトの重ね表示・画像を薄く・ポップを一時OFF・揺れを一時停止・グリッド)。押すたびに切るだけで、元には戻さない"><span class="text-base leading-none" aria-hidden="true">✨</span><span class="text-xs">表示クリア</span><kbd class="tool-key" aria-hidden="true">C</kbd></button>
-    <div class="divider my-0"></div>
-    <div class="nav-group" role="group" aria-labelledby="navLayerLabel">
-      <span id="navLayerLabel" class="nav-group-label" title="選択中のレイヤーに効く操作">レイヤー</span>
-      <button class="btn btn-xs w-[4.5rem] h-auto py-1 flex-col gap-0 whitespace-nowrap" data-cmd="smoothAll" title="選択中のレイヤー全体にガウスぼかしをかける"><span class="nav-icon" aria-hidden="true">≋</span><span>全体ぼかし…</span></button>
-      <button class="btn btn-xs w-[4.5rem] h-auto py-1 flex-col gap-0 whitespace-nowrap" data-cmd="normalize" title="選択中のレイヤーの最大値が100%になるよう全体を拡大"><span class="nav-icon" aria-hidden="true">⤒</span><span>正規化</span></button>
-      <button class="btn btn-xs w-[4.5rem] h-auto py-1 flex-col gap-0 whitespace-nowrap" data-cmd="invert" title="選択中のレイヤーのウェイトを反転"><span class="nav-icon" aria-hidden="true">⇅</span><span>反転</span></button>
-    </div>
+    <!-- ツールと、その場で効く操作のボタンは ui/actions.ts が作る(ツールは ui/tools.ts、アイコンは ui/icons.ts) -->
   </nav>
 
   <!-- 3Dビュー -->
@@ -171,52 +172,47 @@
 
   <!-- レイヤー一覧とプロパティ -->
   <aside class="w-80 shrink-0 bg-base-100 border-l border-base-300 flex flex-col min-h-0">
-    <section class="p-3 border-b border-base-300 flex flex-col gap-2 max-h-[40%] min-h-0">
+    <section class="p-3 border-b border-base-300 flex flex-col gap-2 max-h-[40%] min-h-0" data-m-slot="layers">
       <div class="flex items-center gap-1">
         <h2 class="font-bold mr-auto">レイヤー <span id="layerCount" class="opacity-60 font-normal"></span></h2>
-        <button class="btn btn-xs btn-square" data-cmd="addLayer" title="新規レイヤー">＋</button>
-        <button class="btn btn-xs btn-square" data-cmd="duplicateLayer" title="複製">⧉</button>
-        <button class="btn btn-xs btn-square" data-cmd="layerUp" title="上へ">▲</button>
-        <button class="btn btn-xs btn-square" data-cmd="layerDown" title="下へ">▼</button>
-        <button class="btn btn-xs btn-square" data-cmd="deleteLayer" title="削除">🗑</button>
+        <button class="btn btn-xs btn-square" data-cmd="addLayer" aria-label="新規レイヤー">＋</button>
+        <button class="btn btn-xs btn-square" data-cmd="duplicateLayer" aria-label="複製">⧉</button>
+        <button class="btn btn-xs btn-square" data-cmd="layerUp" aria-label="上へ">▲</button>
+        <button class="btn btn-xs btn-square" data-cmd="layerDown" aria-label="下へ">▼</button>
+        <button class="btn btn-xs btn-square" data-cmd="deleteLayer" aria-label="削除">🗑</button>
       </div>
       <ul id="layerList" class="flex flex-col gap-1 overflow-y-auto min-h-0" role="listbox" aria-label="レイヤー一覧"></ul>
     </section>
 
-    <!-- 右のパネルのタブ。レイヤー一覧はタブの上に固定する -->
+    <!-- 右のパネルのタブ。レイヤー一覧はタブの上に固定する。タブは効く範囲で分ける(選択中のレイヤー / 動き / 画像全体と見え方) -->
     <div id="pTabs" role="tablist" aria-label="設定" class="tabs tabs-border tabs-sm shrink-0 px-2 border-b border-base-300">
-      <button role="tab" class="tab" data-ptab="edit" aria-selected="true">編集</button>
+      <button role="tab" class="tab" data-ptab="layer" aria-selected="true">レイヤー</button>
       <button role="tab" class="tab" data-ptab="anim" aria-selected="false">アニメーション</button>
-      <button role="tab" class="tab" data-ptab="view" aria-selected="false">表示設定</button>
+      <button role="tab" class="tab" data-ptab="view" aria-selected="false">画像と表示</button>
     </div>
+    <!-- 説明は並べず、「?」のボタン(help-btn。data-help に説明の id)で開く。ui/help.ts が結び付ける -->
     <div class="overflow-y-auto flex-1 p-3 min-h-0" id="props">
-      <div class="flex flex-col gap-4" data-ppane="edit">
-      <section class="flex flex-col gap-2">
-        <h2 class="font-bold">レイヤー: <span id="activeLayerName"></span></h2>
-          <div class="prop"><label for="pPop">ポップ量</label><input id="pPop" type="range" min="0" max="1000" class="range range-xs" title="前半は 0〜500px を細かく、後半は 500〜1500px を粗く動かします"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-16 text-right"></div>
-          <div class="prop"><label for="pBlend">重ね方</label>
+      <div class="flex flex-col gap-4" data-ppane="layer">
+        <section class="flex flex-col gap-2" data-m-slot="layerProps">
+          <h2 class="font-bold">レイヤー: <span id="activeLayerName"></span></h2>
+          <div class="prop"><span class="prop-name"><label for="pPop">ポップ量</label><button type="button" class="help-btn" data-help="pPopHelp"></button></span><input id="pPop" type="range" min="0" max="1000" class="range range-xs"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-full text-right"></div>
+          <p id="pPopHelp" class="help-text" hidden>塗った所を持ち上げる高さ(0〜1500px)。スライダーは前半で 0〜500px を細かく、後半で 500〜1500px を粗く動かします。</p>
+          <div class="prop"><span class="prop-name"><label for="pBlend">重ね方</label><button type="button" class="help-btn" data-help="pBlendDesc"></button></span>
             <select id="pBlend" class="select select-xs col-span-2 w-full"></select></div>
-          <p id="pBlendDesc" class="sr-only"></p>
-      </section>
-        <section class="flex flex-col gap-2">
-          <h2 class="font-bold">画像</h2>
-          <div class="prop"><label for="pDensity">メッシュ密度</label><input id="pDensity" type="range" min="16" max="512" step="16" class="range range-xs"><output id="pDensityO"></output></div>
-          <div class="prop"><label for="pOpacity">不透明度</label><input id="pOpacity" type="range" min="0" max="100" class="range range-xs"><output id="pOpacityO"></output></div>
+          <p id="pBlendDesc" class="help-text" hidden>画像を開くと、選んだ重ね方の説明がここに出ます。</p>
         </section>
-      </div>
-
-      <div class="flex flex-col gap-4" data-ppane="anim" hidden>
-      <section class="flex flex-col gap-2">
-        <h2 class="font-bold">揺れ</h2>
-          <label class="flex items-center justify-between">揺れ <input id="pSwing" type="checkbox" class="toggle toggle-sm"></label>
-          <div class="prop"><label for="pPreset">プリセット</label>
+        <section class="flex flex-col gap-2" data-m-slot="swing">
+          <h2 class="font-bold">揺れ</h2>
+          <label class="flex items-center justify-between">このレイヤーを揺らす <input id="pSwing" type="checkbox" class="toggle toggle-sm"></label>
+          <div class="prop d-only"><span class="prop-name"><label for="pPreset">プリセット</label><button type="button" class="help-btn" data-help="pPresetDesc"></button></span>
             <select id="pPreset" class="select select-xs col-span-2 w-full"></select></div>
-          <p id="pPresetDesc" class="sr-only"></p>
+          <p id="pPresetDesc" class="help-text d-only" hidden>画像を開くと、選んだプリセットの説明がここに出ます。</p>
           <details id="physDetails" class="collapse collapse-arrow bg-base-200 rounded-box">
-            <summary class="collapse-title min-h-0 py-2 px-3 text-sm" title="揺らし方・硬さ・質量・おさまりはプリセットの中身(変えるとカスタム)。重さはプリセットに含まない">詳細設定 <span id="physSummary" class="opacity-60 text-xs"></span></summary>
+            <summary class="collapse-title min-h-0 py-2 px-3 text-sm">詳細設定 <span id="physSummary" class="opacity-60 text-xs"></span></summary>
             <div class="collapse-content px-3 flex flex-col gap-2">
-              <div class="prop"><label for="pMotion">揺らし方</label>
+              <div class="prop"><span class="prop-name"><label for="pMotion">揺らし方</label><button type="button" class="help-btn" data-help="pMotionHelp"></button></span>
                 <select id="pMotion" class="select select-xs col-span-2 w-full"></select></div>
+              <p id="pMotionHelp" class="help-text" hidden>揺らし方・硬さ・質量・おさまりはプリセットの中身で、変えるとプリセットは「カスタム」になります。重さはプリセットに含みません。</p>
               <!-- 選んだ揺らし方の固有設定(panels.ts が作る) -->
               <div id="motionParams" class="flex flex-col gap-2 border-l-2 border-primary/40 pl-2 ml-1"></div>
               <div class="divider my-0 text-xs opacity-60">材質</div>
@@ -226,31 +222,39 @@
               <div class="prop"><label for="pWeight">重さ</label><input id="pWeight" type="range" min="0" max="100" class="range range-xs"><output id="pWeightO"></output></div>
             </div>
           </details>
-      </section>
-        <section class="flex flex-col gap-2">
+        </section>
+      </div>
+
+      <div class="flex flex-col gap-4" data-ppane="anim" hidden>
+        <section class="flex flex-col gap-2" data-m-slot="autoSwing">
           <h2 class="font-bold">自動揺らし</h2>
           <label class="flex items-center justify-between">自動で揺らす <input id="pAuto" type="checkbox" class="toggle toggle-sm"></label>
           <div class="prop"><label for="pPeriod">周期</label><input id="pPeriod" type="range" min="3" max="100" class="range range-xs"><output id="pPeriodO"></output></div>
           <div class="prop"><label for="pAutoStr">強さ</label><input id="pAutoStr" type="range" min="0" max="100" class="range range-xs"><output id="pAutoStrO"></output></div>
         </section>
 
-        <section class="flex flex-col gap-2" aria-labelledby="takeTitle">
-          <h2 id="takeTitle" class="font-bold flex items-center gap-2">操作の記録 <span id="takeInfo" class="badge badge-sm badge-ghost font-normal tabular-nums"></span></h2>
+        <section class="flex flex-col gap-2" aria-labelledby="takeTitle" data-m-slot="take">
+          <div class="flex items-center gap-2">
+            <h2 id="takeTitle" class="font-bold">操作の記録</h2><button type="button" class="help-btn" data-help="takeHelp"></button>
+            <span id="takeInfo" class="badge badge-sm badge-ghost font-normal tabular-nums"></span>
+          </div>
+          <p id="takeHelp" class="help-text" hidden>つかむ・揺らす・移動・視点の操作を覚えます(最長 60 秒)。ループ再生中は、画面を触ると止まります。記録はプロジェクトに保存され、書き出しの「記録した操作をループ再生」にも使えます。</p>
           <div class="flex flex-wrap gap-2">
-            <button id="takeRec" class="btn btn-sm" aria-keyshortcuts="R" title="記録 (R): つかむ・揺らす・移動・視点の操作を覚える(最長 60 秒)"><span class="text-error" aria-hidden="true">●</span> <span data-label>記録</span></button>
-            <button id="takePlay" class="btn btn-sm" aria-keyshortcuts="L" title="ループ再生 (L)。画面を触ると止まる"><span aria-hidden="true" data-icon>▶</span> <span data-label>再生</span></button>
-            <button id="takeClear" class="btn btn-sm btn-ghost" title="記録を消す(元に戻せる)">消す</button>
+            <button id="takeRec" class="btn btn-sm" data-cmd="toggleRecording"><span class="text-error" aria-hidden="true">●</span> <span data-label>記録</span></button>
+            <button id="takePlay" class="btn btn-sm" data-cmd="togglePlay"><span aria-hidden="true" data-icon>▶</span> <span data-label>再生</span></button>
+            <button id="takeClear" class="btn btn-sm btn-ghost" data-cmd="clearTake">消す</button>
           </div>
         </section>
 
         <!-- キーフレーム: 視点を順に通ってくり返す動きを作る(作った動きは記録として再生・保存・書き出しする) -->
-        <section id="keySection" class="flex flex-col gap-2" aria-labelledby="keyTitle">
+        <section id="keySection" class="flex flex-col gap-2" aria-labelledby="keyTitle" data-m-slot="keys">
           <div class="flex items-center gap-2">
-            <h2 id="keyTitle" class="font-bold" title="視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す。画像の位置が動くと揺れる">キーフレーム</h2>
+            <h2 id="keyTitle" class="font-bold">キーフレーム</h2><button type="button" class="help-btn" data-help="keyHelp"></button>
             <span id="keyCount" class="text-xs opacity-60 tabular-nums"></span>
             <button id="keyAdd" class="btn btn-xs ml-auto" title="今の視点を末尾に追加">＋ 追加</button>
           </div>
-          <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span></span><span></span><span>次まで</span><span title="なめらか: 止まらず通り抜ける / 弾む: 急に止まって揺れる">通り方</span></div>
+          <p id="keyHelp" class="help-text" hidden>視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す動きを作ります。画像の位置が動くと揺れます。「次まで」は次のフレームまでの秒数です。「通り方」は、なめらか(止まらず通り抜ける)か、弾む(急に止まって揺れる)かを選びます。作った動きは今の記録と入れ替わります(元に戻せます)。</p>
+          <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span>次まで</span><span>通り方</span><span></span><span></span></div>
           <ol id="keyList" class="flex flex-col gap-1" aria-label="キーフレーム一覧"></ol>
           <div class="flex items-center gap-2">
             <button id="keyMake" class="btn btn-sm btn-primary" title="今の記録と入れ替える(元に戻せる)">▶ 作成して再生</button>
@@ -260,20 +264,29 @@
       </div>
 
       <div class="flex flex-col gap-4" data-ppane="view" hidden>
-        <section class="flex flex-col gap-2">
+        <section class="flex flex-col gap-2" data-m-slot="image">
+          <h2 class="font-bold">画像</h2>
+          <div class="prop"><label for="pDensity">メッシュ密度</label><input id="pDensity" type="range" min="16" max="512" step="16" class="range range-xs"><output id="pDensityO"></output></div>
+          <div class="prop"><label for="pOpacity">不透明度</label><input id="pOpacity" type="range" min="0" max="100" class="range range-xs"><output id="pOpacityO"></output></div>
+        </section>
+        <section class="flex flex-col gap-2" data-m-slot="viewToggles">
           <h2 class="font-bold">表示</h2>
           <label class="flex items-center justify-between">ウェイトを重ねて表示 <input id="vOverlay" type="checkbox" class="toggle toggle-sm"></label>
-          <label class="flex items-center justify-between" title="画像を薄くして塗りを見やすくします(書き出しには影響しません)">画像を薄く <input id="vFade" type="checkbox" class="toggle toggle-sm"></label>
-          <label class="flex items-center justify-between" title="ポップと揺れを一時的に消して平らに表示します(書き出しには影響しません)">ポップを一時OFF <input id="vFlat" type="checkbox" class="toggle toggle-sm"></label>
-          <label class="flex items-center justify-between" title="すべてのレイヤーの揺れを一時的に止めます(保存・書き出しには影響しません)">揺れを一時停止 <input id="vPause" type="checkbox" class="toggle toggle-sm"></label>
-          <label class="flex items-center justify-between" title="正面・右・下から見た図と、角度を変えられる図を横に並べます">3面図 <input id="vMulti" type="checkbox" class="toggle toggle-sm"></label>
+          <div class="toggle-row"><span class="prop-name"><label for="vFade">画像を薄く</label><button type="button" class="help-btn" data-help="vFadeHelp"></button></span><input id="vFade" type="checkbox" class="toggle toggle-sm"></div>
+          <p id="vFadeHelp" class="help-text" hidden>画像を薄くして、塗りを見やすくします(書き出しには影響しません)。</p>
+          <div class="toggle-row"><span class="prop-name"><label for="vFlat">ポップを一時OFF</label><button type="button" class="help-btn" data-help="vFlatHelp"></button></span><input id="vFlat" type="checkbox" class="toggle toggle-sm"></div>
+          <p id="vFlatHelp" class="help-text" hidden>ポップと揺れを一時的に消して、平らに表示します(書き出しには影響しません)。</p>
+          <div class="toggle-row"><span class="prop-name"><label for="vPause">揺れを一時停止</label><button type="button" class="help-btn" data-help="vPauseHelp"></button></span><input id="vPause" type="checkbox" class="toggle toggle-sm"></div>
+          <p id="vPauseHelp" class="help-text" hidden>すべてのレイヤーの揺れを一時的に止めます(保存・書き出しには影響しません)。</p>
+          <div class="toggle-row d-only"><span class="prop-name"><label for="vMulti">3面図</label><button type="button" class="help-btn" data-help="vMultiHelp"></button></span><input id="vMulti" type="checkbox" class="toggle toggle-sm"></div>
+          <p id="vMultiHelp" class="help-text d-only" hidden>正面・右・下から見た図と、角度を変えられる図を横に並べます。</p>
           <label class="flex items-center justify-between">グリッド <input id="vGrid" type="checkbox" class="toggle toggle-sm"></label>
         </section>
-        <section class="flex flex-col gap-2">
+        <section class="flex flex-col gap-2" data-m-slot="camera">
           <h2 class="font-bold">カメラと背景</h2>
           <div class="prop"><label for="pFov">画角</label><input id="pFov" type="range" min="10" max="90" class="range range-xs"><output id="pFovO"></output></div>
           <div class="flex items-center gap-2">
-            <span class="w-[5.5rem]">背景</span>
+            <span class="w-[6.25rem]">背景</span>
             <label class="flex items-center gap-1"><input id="pBgTransparent" type="checkbox" class="checkbox checkbox-xs"> 透過</label>
             <input id="pBgColor" type="color" class="w-10 h-6 rounded cursor-pointer ml-auto" value="#20242c">
           </div>
@@ -288,19 +301,19 @@
   <div id="mGrip" role="button" tabindex="0" aria-label="設定を引き上げる・下げる"><i></i></div>
   <div id="mPresets" class="m-chips" role="group" aria-label="揺れのプリセット"></div>
   <div class="m-tabs" role="tablist">
-    <button role="tab" data-mtab="motion" aria-selected="true">揺れ</button>
+    <button role="tab" data-mtab="layer" aria-selected="true">レイヤー</button>
+    <button role="tab" data-mtab="anim" aria-selected="false">アニメ</button>
     <button role="tab" data-mtab="tool" aria-selected="false">ツール</button>
-    <button role="tab" data-mtab="layer" aria-selected="false">レイヤー</button>
     <button role="tab" data-mtab="view" aria-selected="false">表示</button>
     <button role="tab" data-mtab="file" aria-selected="false">ファイル</button>
   </div>
   <div id="mPanes">
-    <div class="m-pane" data-mpane="motion"></div>
+    <div class="m-pane" data-mpane="anim" hidden></div>
     <div class="m-pane" data-mpane="tool" hidden>
       <p id="mToolDesc" class="text-xs opacity-70 leading-relaxed"></p>
       <div id="mBrushOpts" class="flex flex-col gap-2"></div>
     </div>
-    <div class="m-pane" data-mpane="layer" hidden>
+    <div class="m-pane" data-mpane="layer">
       <div class="m-btns">
         <button id="mPaintMode" class="btn btn-sm btn-primary">塗って直す…</button>
         <button class="btn btn-sm" data-cmd="smoothAll">全体ぼかし…</button>
@@ -328,21 +341,23 @@
 <div id="mModeBar" class="m-only" hidden><b>塗って直す</b> 1本指で膨らませる・塗る・消す・ぼかす。終わったら「完了」</div>
 <!-- スマホ: 下のツールバー。「塗って直す」の間だけ塗りのツールに入れ替える -->
 <nav id="mTools" class="m-only" aria-label="ツール">
-  <button class="m-tool" data-mtool="grab" data-mset="main"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5a1.5 1.5 0 0 1 3 0v6"/><path d="M11 10V4a1.5 1.5 0 0 1 3 0v6"/><path d="M14 10V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7h-.5A6.5 6.5 0 0 1 4 16l-1-3a1.5 1.5 0 0 1 2.6-1.4L8 14"/></svg><span>つかむ</span></button>
-  <button class="m-tool" data-mtool="shake" data-mset="main"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8c2-2 4-2 6 0s4 2 6 0 3-2 4-1"/><path d="M4 14c2-2 4-2 6 0s4 2 6 0 3-2 4-1"/></svg><span>揺らす</span></button>
-  <button class="m-tool" data-mtool="pan" data-mset="main"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg><span>移動</span></button>
-  <button class="m-tool" data-mtool="view" data-mset="main"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg><span>視点</span></button>
-  <button class="m-tool" data-mtool="inflate" data-mset="paint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18h18"/><path d="M5 18c0-6 3-10 7-10s7 4 7 10"/></svg><span>膨らみ</span></button>
-  <button class="m-tool" data-mtool="brush" data-mset="paint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 3 9.5 11.5"/><path d="M7 13c-2 0-3 1.5-3 3.5S3 20 3 20s3 .5 5-1 2-4 2-4"/><path d="m9 11 4 4"/><path d="M13 15 21 7l-4-4-8 8"/></svg><span>ブラシ</span></button>
-  <button class="m-tool" data-mtool="erase" data-mset="paint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 21-4-4 10-10 7 7-7 7z"/><path d="M8 10l6 6"/><path d="M14 21h7"/></svg><span>消しゴム</span></button>
-  <button class="m-tool" data-mtool="smooth" data-mset="paint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 3"/></svg><span>ぼかし</span></button>
+  <!-- data-mtool のボタンのアイコンと名前は ui/mobile.ts が ui/tools.ts から入れる -->
+  <button class="m-tool" data-mtool="grab" data-mset="main"></button>
+  <button class="m-tool" data-mtool="shake" data-mset="main"></button>
+  <button class="m-tool" data-mtool="pan" data-mset="main"></button>
+  <button class="m-tool" data-mtool="view" data-mset="main"></button>
+  <button class="m-tool" data-mtool="inflate" data-mset="paint"></button>
+  <button class="m-tool" data-mtool="brush" data-mset="paint"></button>
+  <button class="m-tool" data-mtool="erase" data-mset="paint"></button>
+  <button class="m-tool" data-mtool="smooth" data-mset="paint"></button>
   <button id="mPaintDone" class="m-tool" data-mset="paint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span>完了</span></button>
 </nav>
 
 <!-- ステータスバー -->
 <footer class="flex items-center gap-4 px-3 h-7 bg-base-100 border-t border-base-300 text-xs tabular-nums shrink-0 opacity-90">
-  <span id="sFps">- fps</span>
-  <span id="sVerts">- 頂点</span>
+  <!-- fps と頂点数は開発向けなので、?debug のときだけ出す(main.ts) -->
+  <span id="sFps" hidden>- fps</span>
+  <span id="sVerts" hidden>- 頂点</span>
   <span id="sZoom">-</span>
   <span id="sImage">-</span>
   <span id="sRec" class="ml-auto"></span>
@@ -397,9 +412,9 @@
   </div>
 </dialog>
 
-<!-- 全体をぼかす(ガウス)。3Dビューでプレビューが見えるよう背景を暗くしない -->
-<dialog id="blurDialog" class="modal modal-bottom">
-  <div class="modal-box max-w-xl mx-auto mb-10 shadow-2xl border border-base-300">
+<!-- 全体をぼかす(ガウス)。視点を回して確かめられるよう、膨らませると同じく、ほかの操作を止めないダイアログとして開く(show) -->
+<dialog id="blurDialog" class="float-panel bg-base-100 text-base-content rounded-box shadow-2xl border border-base-300 p-4">
+  <div>
     <h3 class="font-bold text-lg">全体をぼかす(ガウス)</h3>
     <p id="blurTarget" class="text-sm opacity-70 pt-1 pb-3"></p>
     <div class="flex items-center gap-3">
@@ -408,8 +423,8 @@
       <input id="blurRadiusN" type="number" min="0" max="200" class="input input-sm w-20 text-right">
       <span class="shrink-0">px</span>
     </div>
-    <p class="text-xs opacity-60 pt-2">スライダーを動かすと 3D ビューにその場で反映されます。半径は元画像のピクセル単位です。</p>
-    <div class="modal-action mt-3">
+    <p class="text-xs opacity-60 pt-2">スライダーを動かすと 3D ビューにその場で反映されます。半径は元画像のピクセル単位です。右ドラッグで視点を回して確かめられます。</p>
+    <div class="flex justify-end gap-2 mt-3">
       <button id="blurCancel" class="btn btn-sm">キャンセル</button>
       <button id="blurApply" class="btn btn-sm btn-primary">適用</button>
     </div>
@@ -417,7 +432,7 @@
 </dialog>
 
 <!-- 膨らませる。視点を回して確かめられるよう、ほかの操作を止めないダイアログとして開く(show) -->
-<dialog id="inflateDialog" class="bg-base-100 text-base-content rounded-box shadow-2xl border border-base-300 p-4">
+<dialog id="inflateDialog" class="float-panel bg-base-100 text-base-content rounded-box shadow-2xl border border-base-300 p-4">
   <h3 id="inflTitle" class="font-bold text-lg">範囲を膨らませる</h3>
   <p id="inflTarget" class="text-sm opacity-70 pt-1 pb-3"></p>
   <div class="flex flex-col gap-2">
@@ -427,14 +442,16 @@
       <div class="flex items-center gap-1">幅 <input id="inflW" type="number" min="2" max="8192" class="input input-sm w-20 text-right"> × 縦 <input id="inflH" type="number" min="2" max="8192" class="input input-sm w-20 text-right"> px</div></div>
     <div class="prop2"><span>高さ</span>
       <div class="flex items-center gap-2"><input id="inflHeight" type="range" min="0" max="1000" class="range range-sm range-primary flex-1"><input id="inflHeightN" type="number" min="0" max="1500" class="input input-sm w-20 text-right"> px</div></div>
-    <div class="prop2"><span title="0% で縁が切り立った平らな台、100% で中心までずっと傾く">縁のなだらかさ</span>
+    <div class="prop2"><span class="prop-name">縁のなだらかさ<button type="button" class="help-btn" data-help="inflSoftHelp"></button></span>
       <div class="flex items-center gap-2"><input id="inflSoft" type="range" min="0" max="100" class="range range-sm range-primary flex-1"><input id="inflSoftN" type="number" min="0" max="100" class="input input-sm w-20 text-right"> %</div></div>
-    <div class="prop2"><span>断面</span>
+    <p id="inflSoftHelp" class="help-text" hidden>0% で縁が切り立った平らな台に、100% で中心までずっと傾く形になります。</p>
+    <div class="prop2"><span class="prop-name">断面<button type="button" class="help-btn" data-help="inflProfileHelp"></button></span>
       <div class="join">
         <input class="join-item btn btn-sm" type="radio" name="inflProfile" value="dome" aria-label="ドーム" title="断面が円弧。丸く膨らむ">
         <input class="join-item btn btn-sm" type="radio" name="inflProfile" value="cushion" aria-label="クッション" title="縁も頂上もなめらか">
         <input class="join-item btn btn-sm" type="radio" name="inflProfile" value="cone" aria-label="直線" title="まっすぐな斜面(台形・円すい)">
       </div></div>
+    <p id="inflProfileHelp" class="help-text" hidden>ドーム: 断面が円弧で、丸く膨らみます。クッション: 縁も頂上もなめらかです。直線: まっすぐな斜面(台形・円すい)です。</p>
     <div class="prop2"><span>重ね方</span>
       <select id="inflBlend" class="select select-sm w-40"><option value="max">重ねる(高い方)</option><option value="add">足す</option><option value="replace">置き換える</option></select></div>
   </div>
@@ -484,7 +501,7 @@
       <span class="font-bold">2本指タップ</span><span>元に戻す(3本指タップでやり直す)</span>
       <span class="font-bold">微調整</span><span>右上のボタンでオンにしている間は、動きが 1/5 になる</span>
       <span class="font-bold">膨らみ・塗る・消す</span><span>シートの「レイヤー」→「塗って直す」</span>
-      <span class="font-bold">操作の記録</span><span>シートの「揺れ」→「操作の記録」で記録・ループ再生。画面を触ると再生が止まる</span>
+      <span class="font-bold">操作の記録</span><span>シートの「アニメ」→「操作の記録」で記録・ループ再生。画面を触ると再生が止まる</span>
     </div>
     <ol class="d-only list-decimal pl-5 leading-relaxed mb-3">
       <li>画像をウィンドウへドロップする(PNG / JPEG / WebP)。</li>
@@ -498,27 +515,19 @@
       <span>平行移動(揺れる)</span><span>中ドラッグ / Space + 左ドラッグ</span>
       <span>ズーム</span><span>ホイール</span>
       <span>細かく動かす(回転・平行移動・ズーム・つかむ・揺らす・3面図)</span><span>Ctrl(Mac は ⌘)か Shift を押しながら(動きが 1/5)。Space+ドラッグと自由角度では Shift の代わりに Ctrl / ⌘</span>
-      <span>視点リセット(正面に戻す)</span><span>Home</span>
-      <span>ブラシ / 消しゴム / ぼかし / 膨らみ / つかむ / 揺らす / 視点 / 移動</span><span>B / E / S / I / G / Y / V / H</span>
       <span>揺らす(カメラ固定で振る)</span><span>「揺らす」で左ドラッグ</span>
       <span>塗った範囲ごと横にも膨らませる</span><span>揺らし方「ためて膨らむ2」(プリセット「ぷっくり」)</span>
       <span>画像ごと上下に動かす</span><span>揺らし方「ピストン」(プリセット「ずんずん」)</span>
       <span>膨らませる範囲を正円・正方形に</span><span>膨らみで Shift + ドラッグ</span>
       <span>一時的に消しゴム</span><span>ブラシ中に Alt</span>
-      <span>ブラシサイズ</span><span>[ と ]</span>
-      <span>元に戻す / やり直す</span><span>Ctrl+Z / Ctrl+Shift+Z</span>
-      <span>保存 / 開く</span><span>Ctrl+S / Ctrl+O</span>
       <span>最近開いたファイル</span><span>ファイル → 最近開いたファイル…</span>
-      <span>書き出し</span><span>Ctrl+E</span>
-      <span>ウェイト表示 / グリッド</span><span>W / Shift+G</span>
-      <span>表示クリア(編集用の表示をまとめて切る)</span><span>C</span>
-      <span>画像を薄く / ポップを一時OFF</span><span>Shift+W / F</span>
-      <span>揺れを一時停止 / 3面図</span><span>P / M</span>
-      <span>操作の記録(開始・停止)/ ループ再生</span><span>R / L(再生中は画面を触ると止まる)</span>
       <span>3面図の正面・右から・下から</span><span>ドラッグで平行移動 / ホイールでズーム(3つ共通)</span>
       <span>3面図の自由角度</span><span>ドラッグで回転 / 中ドラッグ・Shift+ドラッグで平行移動 / ホイールでズーム</span>
       <span>3面図の視点を戻す</span><span>その図をダブルクリック</span>
     </div>
+    <h4 class="d-only font-bold mt-4 mb-1">キーボード</h4>
+    <!-- ui/actions.ts がコマンドの表から作る -->
+    <div id="helpKeys" class="d-only grid grid-cols-2 gap-x-6 gap-y-1 text-sm"></div>
     <div class="modal-action"><form method="dialog"><button class="btn btn-sm">閉じる</button></form></div>
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
