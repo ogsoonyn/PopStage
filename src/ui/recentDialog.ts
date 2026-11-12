@@ -1,7 +1,8 @@
 /** 最近開いたファイルのダイアログ。縮小画像の一覧から選んで開き直す。 */
 import type { App } from '../app';
 import { recent, type RecentEntry } from '../storage/recent';
-import { $, ask, toast, formatBytes } from './dom';
+import { ask, toast, formatBytes } from './dom';
+import { ui } from './ids';
 
 const KIND_LABEL = { project: 'プロジェクト', image: '画像' } as const;
 const MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', pukupop: 'application/zip', popstage: 'application/zip' };
@@ -15,7 +16,7 @@ function when(t: number): string {
 }
 
 export function bindRecentDialog(app: App): { open: () => Promise<void> } {
-  const dlg = $<HTMLDialogElement>('recentDialog'), list = $('recentList'), empty = $('recentEmpty'), clear = $<HTMLButtonElement>('recentClear');
+  const dlg = ui.recentDialog, list = ui.recentList, empty = ui.recentEmpty, clear = ui.recentClear;
   let urls: string[] = [];
   const revoke = () => { urls.forEach(u => URL.revokeObjectURL(u)); urls = []; };
   dlg.addEventListener('close', revoke);

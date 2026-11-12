@@ -2,10 +2,10 @@
  * アプリ本体。モデル・コマンド・描画・物理・保存・書き出しをつなぐ。
  * 画面の部品(ui/)はここを経由して状態を読み書きする。
  */
-import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultOrthoView, LIMITS, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
+import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultOrthoView, LIMITS, PRESETS, applyPreset, type PresetName, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
 import { History } from './commands/history';
 import type { Rect } from './model/weightmap';
-import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, SetTake, weightOperation, diffTiles } from './commands/commands';
+import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, SetTake, PatchLayer, PatchProject, Batch, weightOperation, diffTiles } from './commands/commands';
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld, PHYSICS_DT } from './physics/world';
 import { MotionRecorder, applySample, type RecordSample } from './physics/recorder';
@@ -825,6 +825,38 @@ export class App extends Emitter<AppEvents> {
     const from = this.activeIndex, to = from + dir;
     if (to < 0 || to >= doc.layers.length) return;
     this.history.execute(new MoveLayer(layer.id, from, to));
+  }
+
+  /* ---------- 揺れの切り替えとプリセット(右パネル・上のツールバー・スマホのどこから変えても、ここを通す) ---------- */
+
+  /** 選択中のレイヤーを揺らすか */
+  setLayerSwing(on: boolean): void {
+    const l = this.activeLayer;
+    if (!l || l.physics.enabled === on) return;
+    this.history.execute(PatchLayer.from(this.store, l.id, { physics: { ...l.physics, enabled: on } }, '揺れの切替'));
+  }
+
+  /** 周期的に自動で揺らすか */
+  setAutoSwing(on: boolean): void {
+    if (this.project.autoSwing.enabled === on) return;
+    this.history.execute(PatchProject.from(this.store, { autoSwing: { ...this.project.autoSwing, enabled: on } }, '自動揺らしの切替'));
+  }
+
+  /** 選択中のレイヤーに揺れのプリセットを当てる。材質と揺らし方を変え、自動揺らしの周期もおすすめの値にする(まとめて1手) */
+  setPreset(name: PresetName): void {
+    const l = this.activeLayer;
+    if (!l || l.physics.preset === name) return;
+    if (name === 'custom') {
+      this.history.execute(PatchLayer.from(this.store, l.id, { physics: { ...l.physics, preset: 'custom' } }, 'プリセット'));
+      return;
+    }
+    const pr = PRESETS[name], label = `プリセット「${pr.label}」`;
+    this.history.execute(new Batch(label, [
+      PatchLayer.from(this.store, l.id, { physics: applyPreset(l.physics, name) }, label),
+      PatchProject.from(this.store, { autoSwing: { ...this.project.autoSwing, period: pr.period } }, label),
+    ]));
+    if (!this.project.autoSwing.enabled) toast('「自動で揺らす」がオフなので、自動では動きません。「つかむ」「揺らす」で揺らすか、自動揺らしをオンにしてください。', 'info', 5000);
+    else if (!l.physics.enabled) toast('このレイヤーは「揺れ」がオフです。', 'info');
   }
 
   /* ---------- 物理と描画のループ ---------- */

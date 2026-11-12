@@ -97,6 +97,16 @@ test('プリセットはシートのボタンで選べる', async ({ page }) => 
   await chip.click();
   await expect(chip).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => (window as any).popstage.activeLayer.physics.preset)).toBe(value);
+  // ボタンの状態はモデルから決める(元に戻すと、前のプリセットのボタンが押された状態に戻る)
+  const prev = await page.evaluate(() => { const a = (window as any).popstage; a.history.undo(); return a.activeLayer.physics.preset; });
+  await expect(chip).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator(`#mPresets button[data-value=${prev}]`)).toHaveAttribute('aria-pressed', 'true');
+  // 上のバーの「自動で揺らす」もモデルを切り替え、表示が付いてくる
+  const auto = () => page.evaluate(() => (window as any).popstage.project.autoSwing.enabled);
+  const before = await auto();
+  await page.locator('#mAuto').click();
+  expect(await auto()).toBe(!before);
+  await expect(page.locator('#mAuto')).toHaveAttribute('aria-pressed', String(!before));
 });
 
 test('2本指で平行移動とピンチズームができ、画像の外をなぞると回転する', async ({ page }) => {

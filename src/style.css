@@ -57,6 +57,7 @@
 /* ---------- スマホ(ui/mobile.ts が html に .mobile を付ける) ---------- */
 .m-only { display: none !important; }
 html.mobile .m-only:not([hidden]) { display: revert !important; }
+/* スマホで出さない部品には d-only を付ける(プリセットの選択欄・3面図など) */
 html.mobile .d-only,
 html.mobile #menubar, html.mobile #toolOptions, html.mobile #toolNav, html.mobile body > main > aside, html.mobile body > footer { display: none !important; }
 html.mobile { --m-top: calc(3rem + env(safe-area-inset-top, 0px)); --m-tools: calc(3.75rem + env(safe-area-inset-bottom, 0px)); --m-sheet: 0px; }
@@ -106,7 +107,6 @@ html.mobile #mSheet { display: flex !important; }
 html.mobile #mPanes .prop { grid-template-columns: 6.5rem 1fr 3.25rem; min-height: 2.5rem; }
 html.mobile #mPanes .range { --range-thumb-size: 1.25rem; height: 1.5rem; }
 html.mobile #mPanes .toggle { --size: 1.5rem; }
-html.mobile #mPanes label:has(#vMulti) { display: none; }
 html.mobile #mPanes [data-brush-opt] { display: grid; grid-template-columns: 6.5rem 1fr 3.25rem; align-items: center; }
 html.mobile #mPanes [data-brush-opt] input[type=range] { width: 100%; }
 html.mobile #mPanes #layerList { max-height: none; }
@@ -130,8 +130,6 @@ html.mobile body > main { padding-bottom: var(--m-tools); }
 html.mobile #toasts { top: calc(var(--m-top) + .5rem); bottom: auto; margin-bottom: 0; }
 html.mobile #mFine { display: inline-flex !important; }
 html.mobile #helpDialog .m-only { display: grid !important; }
-/* プリセットはシートの上のボタンで選ぶので、右パネルの選択欄は隠す */
-html.mobile #mPanes .prop:has(#pPreset) { display: none; }
 html.mobile #mPanes #pPresetDesc { padding-left: 0; margin-top: 0; }
 html.mobile #mPanes section { padding: 0; border: 0; }
 html.mobile #mPanes .btn-xs.btn-square { width: 2.25rem; height: 2.25rem; }
