@@ -13,7 +13,8 @@
  */
 import type { App } from '../app';
 import type { PaintMode } from '../paint/stroke';
-import { fineFactor, wheelFineFactor, wheelDelta, FINE, isFineLocked } from './fine';
+import { fineFactor, wheelFineFactor, wheelDelta, isPinchWheel, FINE, isFineLocked } from './fine';
+import { smoothZoom } from './smoothZoom';
 import { toast } from './dom';
 
 type DragMode = 'orbit' | 'pan' | 'shake' | 'grab' | 'paint' | 'area' | null;
@@ -228,13 +229,19 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   canvas.addEventListener('pointerenter', () => { pointerInside = true; });
   canvas.addEventListener('pointerleave', () => { pointerInside = false; hover = null; last = null; updateCursor(); });
 
+  // ホイールのズームは目標へなめらかに寄せる(ui/smoothZoom.ts)。タッチパッドのピンチは細かく続けて来るので、その場で変える
+  const setZoom = (z: number) => {
+    app.project.camera.zoom = z;
+    app.emit('status', undefined);
+    app.cameraChanged();
+  };
+  const wheelZoom = smoothZoom({ get: () => app.project.camera.zoom, set: setZoom, min: 0.05, max: 10 });
   canvas.addEventListener('wheel', e => {
     app.stopTake();
     e.preventDefault();
-    const cam = app.project.camera;
-    cam.zoom = Math.max(0.05, Math.min(10, cam.zoom * Math.exp(wheelDelta(e) * 0.0012 * wheelFineFactor(e))));
-    app.emit('status', undefined);
-    app.cameraChanged();
+    const d = wheelDelta(e) * 0.0012 * wheelFineFactor(e);
+    if (isPinchWheel(e)) setZoom(Math.max(0.05, Math.min(10, app.project.camera.zoom * Math.exp(d))));
+    else wheelZoom.add(d);
   }, { passive: false });
 
   function startGrab(e: PointerEvent): void {
