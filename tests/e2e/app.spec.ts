@@ -2093,6 +2093,11 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
 
   // 説明は最初は隠れていて、「?」で開閉する。中身は選んだ値に合わせて変わる
   await openTab(page, 'layer');
+  // 読み上げでは「○○の説明」と読み、入力欄からも説明をたどれる
+  await expect(page.locator('button.help-btn[data-help=pPopHelp]')).toHaveAttribute('aria-label', 'ポップ量の説明');
+  await expect(page.locator('#pPop')).toHaveAttribute('aria-describedby', 'pPopHelp');
+  await expect(page.locator('#pBlend')).toHaveAttribute('aria-describedby', 'pBlendDesc');
+  await expect(page.locator('button.help-btn[data-help=inflSoftHelp]')).toHaveAttribute('aria-label', '縁のなだらかさの説明');
   const help = page.locator('button.help-btn[data-help=pBlendDesc]'), desc = page.locator('#pBlendDesc');
   await expect(desc).toBeHidden();
   await expect(help).toHaveAttribute('aria-expanded', 'false');

@@ -49,8 +49,7 @@ bindTakeControls(app);
 {
   const tabs = [...document.querySelectorAll<HTMLButtonElement>('#pTabs [data-ptab]')];
   const select = (t: string) => {
-    if (t === 'edit') t = 'layer'; // 前の版の「編集」タブ
-    if (!tabs.some(b => b.dataset.ptab === t)) t = 'layer';
+    if (!tabs.some(b => b.dataset.ptab === t)) t = 'layer'; // 知らない値(前の版の「編集」タブなど)は「レイヤー」で始める
     for (const b of tabs) { const on = b.dataset.ptab === t; b.setAttribute('aria-selected', String(on)); b.classList.toggle('tab-active', on); }
     for (const p of ui.props.querySelectorAll<HTMLElement>('[data-ppane]')) p.hidden = p.dataset.ppane !== t;
     prefs.set('panelTab', t);

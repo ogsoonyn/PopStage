@@ -117,7 +117,7 @@ export function bindPanels(app: App): { refresh: () => void } {
       const labelEl = document.createElement('label');
       labelEl.textContent = d.label; labelEl.htmlFor = `mp-${d.key}`;
       // 補足があれば「?」で開けるようにする(説明は行の下に出す)
-      const help = d.hint ? createHelp(`mp-${d.key}-help`, d.hint) : null;
+      const help = d.hint ? createHelp(`mp-${d.key}-help`, d.label, d.hint) : null;
       const name = help ? Object.assign(document.createElement('span'), { className: 'prop-name' }) : labelEl;
       if (help) name.append(labelEl, help.button);
       if (d.options) {
@@ -125,12 +125,14 @@ export function bindPanels(app: App): { refresh: () => void } {
         sel.id = `mp-${d.key}`; sel.className = 'select select-xs col-span-2 w-full'; sel.dataset.param = key;
         sel.append(...d.options.map(([v, text]) => new Option(text, String(v))));
         sel.addEventListener('change', () => exec('layer', label, paramPatch(key, +sel.value)));
+        if (help) sel.setAttribute('aria-describedby', help.text.id);
         row.append(name, sel);
       } else {
         const input = document.createElement('input'), out = document.createElement('output');
         input.id = `mp-${d.key}`; input.type = 'range'; input.className = 'range range-xs'; input.dataset.param = key;
         input.min = String(d.min); input.max = String(d.max); input.step = String(d.step);
         bindRange(input, out, { target: 'layer', keys: ['physics'], label, toPatch: v => paramPatch(key, v), fmt: v => fmtParam(d, v) });
+        if (help) input.setAttribute('aria-describedby', help.text.id);
         row.append(name, input, out);
       }
       paramBox.append(row);

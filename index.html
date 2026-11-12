@@ -188,15 +188,15 @@
           <div class="prop"><span class="prop-name"><label for="pPop">ポップ量</label><button type="button" class="help-btn" data-help="pPopHelp"></button></span><input id="pPop" type="range" min="0" max="1000" class="range range-xs"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-full text-right"></div>
           <p id="pPopHelp" class="help-text" hidden>塗った所を持ち上げる高さ(0〜1500px)。スライダーは前半で 0〜500px を細かく、後半で 500〜1500px を粗く動かします。</p>
           <div class="prop"><span class="prop-name"><label for="pBlend">重ね方</label><button type="button" class="help-btn" data-help="pBlendDesc"></button></span>
-            <select id="pBlend" class="select select-xs col-span-2 w-full" aria-describedby="pBlendDesc"></select></div>
-          <p id="pBlendDesc" class="help-text" hidden></p>
+            <select id="pBlend" class="select select-xs col-span-2 w-full"></select></div>
+          <p id="pBlendDesc" class="help-text" hidden>画像を開くと、選んだ重ね方の説明がここに出ます。</p>
         </section>
         <section class="flex flex-col gap-2" data-m-slot="swing">
           <h2 class="font-bold">揺れ</h2>
           <label class="flex items-center justify-between">このレイヤーを揺らす <input id="pSwing" type="checkbox" class="toggle toggle-sm"></label>
           <div class="prop d-only"><span class="prop-name"><label for="pPreset">プリセット</label><button type="button" class="help-btn" data-help="pPresetDesc"></button></span>
-            <select id="pPreset" class="select select-xs col-span-2 w-full" aria-describedby="pPresetDesc"></select></div>
-          <p id="pPresetDesc" class="help-text d-only" hidden></p>
+            <select id="pPreset" class="select select-xs col-span-2 w-full"></select></div>
+          <p id="pPresetDesc" class="help-text d-only" hidden>画像を開くと、選んだプリセットの説明がここに出ます。</p>
           <details id="physDetails" class="collapse collapse-arrow bg-base-200 rounded-box">
             <summary class="collapse-title min-h-0 py-2 px-3 text-sm">詳細設定 <span id="physSummary" class="opacity-60 text-xs"></span></summary>
             <div class="collapse-content px-3 flex flex-col gap-2">
