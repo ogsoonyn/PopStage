@@ -5,3 +5,10 @@ test-results/
 playwright-report/
 *.log
 .DS_Store
+
+# エージェントの作業用(ワークツリー・手元の設定・別ポートの Vite と Playwright の設定とキャッシュ)
+.claude/worktrees/
+.claude/settings.local.json
+vite.*.config.ts
+playwright.*.config.ts
+.vite-*/
