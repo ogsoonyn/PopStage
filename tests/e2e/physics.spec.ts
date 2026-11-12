@@ -97,7 +97,7 @@ test('プリセットで材質・揺らし方・周期が変わり、1手で元�
   });
   const before = await state();
   expect(before).toMatchObject({ preset: 'puru', motion: 'jiggle' });
-  await expect(page.locator('#pPreset option')).toHaveCount(14); // 13 種類 + カスタム
+  await expect(page.locator('#pPreset option')).toHaveCount(16); // 15 種類 + カスタム
 
   await page.selectOption('#pPreset', 'bain');
   expect(await state()).toEqual({ preset: 'bain', motion: 'jump', hardness: 0.25, period: 1.8 });
