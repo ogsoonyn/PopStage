@@ -9,24 +9,27 @@
 import type { App, Tool } from '../app';
 import { PRESETS, PRESET_ORDER, type PresetName } from '../model/project';
 import { ui } from './ids';
+import { icon } from './icons';
+import { toolDef } from './tools';
 import { setFineLock } from './fine';
 
 /** スマホの配置にする条件。横向きのスマホ(高さが低く、指で触る)も含める */
 export const MOBILE_QUERY = '(max-width: 767px), (max-height: 500px) and (pointer: coarse)';
 
 type SheetState = 'closed' | 'half' | 'full';
-type Tab = 'motion' | 'tool' | 'layer' | 'view' | 'file';
+/** シートのタブ。PC の右パネルのタブ(レイヤー・アニメーション・画像と表示)と同じ分け方にし、ツールとファイルを足す */
+type Tab = 'layer' | 'anim' | 'tool' | 'view' | 'file';
 
 /** シートへ移す部品(data-m-slot の名前)と、移す先のタブ。この順に並べる。prepend はタブの先頭へ入れる */
 export const MOBILE_SLOTS: readonly { slot: string; tab: Tab; prepend?: boolean }[] = [
-  { slot: 'layerProps', tab: 'motion' },
-  { slot: 'swing', tab: 'motion' },
-  { slot: 'autoSwing', tab: 'motion' },
-  { slot: 'take', tab: 'motion' },
-  { slot: 'keys', tab: 'motion' },
   { slot: 'layers', tab: 'layer', prepend: true },
-  { slot: 'viewToggles', tab: 'view' },
+  { slot: 'layerProps', tab: 'layer' },
+  { slot: 'swing', tab: 'layer' },
+  { slot: 'autoSwing', tab: 'anim' },
+  { slot: 'take', tab: 'anim' },
+  { slot: 'keys', tab: 'anim' },
   { slot: 'image', tab: 'view' },
+  { slot: 'viewToggles', tab: 'view' },
   { slot: 'camera', tab: 'view' },
 ];
 
@@ -203,7 +206,13 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
   }
   ui.mPaintMode.addEventListener('click', () => { if (app.previewingInflate) return; setPaintMode(true); setSheet('closed'); });
   ui.mPaintDone.addEventListener('click', () => { if (!app.previewingInflate) setPaintMode(false); });
-  // PC の左のツールボタン(.tool)とは別に結び付ける(同じ data-tool のボタンが2つになるので、クラスは分ける)
+  // PC の左のツールボタン(.tool)とは別に結び付ける(同じ data-tool のボタンが2つになるので、クラスは分ける)。
+  // アイコンと名前は PC と同じ表(ui/tools.ts・ui/icons.ts)から入れる
+  for (const b of ui.mTools.querySelectorAll<HTMLButtonElement>('[data-mtool]')) {
+    const t = toolDef(b.dataset.mtool as Tool);
+    b.innerHTML = `${icon(t.id)}<span></span>`;
+    b.querySelector('span')!.textContent = t.label;
+  }
   for (const b of ui.mTools.querySelectorAll<HTMLButtonElement>('[data-mtool]')) b.addEventListener('click', () => { if (!app.previewingInflate) app.setTool(b.dataset.mtool as Tool); });
   function syncTool(): void {
     // 画像を開いたときなどに、塗りのツールへ切り替わることがある。スマホでは塗りは「塗って直す」の中だけなので戻す

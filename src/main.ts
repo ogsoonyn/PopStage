@@ -12,6 +12,7 @@ import { bindRecentDialog } from './ui/recentDialog';
 import { bindMobileLayout } from './ui/mobile';
 import { bindTakeControls } from './ui/take';
 import { isTool } from './ui/tools';
+import { bindHelp } from './ui/help';
 import { FILE_EXTENSION, LEGACY_FILE_EXTENSION } from './storage/popstage';
 import { ask, toast, retryWithClick } from './ui/dom';
 import { autosave } from './storage/autosave';
@@ -20,6 +21,7 @@ import { isImageFile, isProjectFile } from './ui/imageio';
 
 // 画面の要素をまとめて取る(index.html と ui/ids.ts の一覧が合わなければ、ここで止まる)
 initUI();
+bindHelp();
 const canvas = ui.view;
 let app: App;
 try {
@@ -43,17 +45,17 @@ const multiView = bindMultiView(app, canvas);
 bindPanels(app);
 bindTakeControls(app);
 
-/* ---------- 右のパネルのタブ(編集・アニメーション・表示設定)。選んだタブはブラウザに覚える ---------- */
+/* ---------- 右のパネルのタブ(レイヤー・アニメーション・画像と表示)。選んだタブはブラウザに覚える ---------- */
 {
   const tabs = [...document.querySelectorAll<HTMLButtonElement>('#pTabs [data-ptab]')];
   const select = (t: string) => {
-    if (!tabs.some(b => b.dataset.ptab === t)) t = 'edit';
+    if (!tabs.some(b => b.dataset.ptab === t)) t = 'layer'; // 知らない値(前の版の「編集」タブなど)は「レイヤー」で始める
     for (const b of tabs) { const on = b.dataset.ptab === t; b.setAttribute('aria-selected', String(on)); b.classList.toggle('tab-active', on); }
     for (const p of ui.props.querySelectorAll<HTMLElement>('[data-ppane]')) p.hidden = p.dataset.ppane !== t;
     prefs.set('panelTab', t);
   };
   for (const b of tabs) b.addEventListener('click', () => select(b.dataset.ptab!));
-  select(prefs.get<string>('panelTab') ?? 'edit');
+  select(prefs.get<string>('panelTab') ?? 'layer');
 }
 
 /* ---------- 設定をブラウザに覚える(ファイルには書かない) ---------- */

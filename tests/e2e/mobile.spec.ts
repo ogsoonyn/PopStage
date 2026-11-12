@@ -73,15 +73,17 @@ test('「移動」では1本指で画像を動かし、画像の上でも外で�
 test('シートを開くと3Dビューはシートの上に縮み、シートの中身は下のバーに隠れない', async ({ page }) => {
   await boot(page);
   const closed = (await page.locator('#view').boundingBox())!.height;
-  await page.locator('[data-mtab="motion"]').click();
+  await page.locator('[data-mtab="layer"]').click();
   await page.waitForTimeout(400);
   await expect(page.locator('#mSheet #pPop')).toBeVisible();
   expect((await page.locator('#view').boundingBox())!.height).toBeLessThan(closed - 100);
   const sheet = (await page.locator('#mSheet').boundingBox())!, bar = (await page.locator('#mTools').boundingBox())!;
   expect(sheet.y + sheet.height).toBeLessThanOrEqual(bar.y + 1);
-  // いちばん下まで送ると、最後の項目がシートの中に見える
+  // 「アニメ」タブには自動揺らし・記録・キーフレームが入る。いちばん下まで送ると、最後の項目がシートの中に見える
+  await page.locator('[data-mtab="anim"]').click();
+  await expect(page.locator('#mSheet #pAuto')).toBeVisible();
   await page.locator('#mPanes').evaluate(el => { el.scrollTop = el.scrollHeight; });
-  const last = (await page.locator('#pAutoStr').boundingBox())!;
+  const last = (await page.locator('#keyMake').boundingBox())!;
   expect(last.y + last.height).toBeLessThanOrEqual(bar.y);
   // つまみを押すたびに 半分 → 全部 → 閉じる
   await page.locator('#mGrip').click(); await page.waitForTimeout(400);
@@ -202,4 +204,21 @@ test('幅を広げると PC の配置に戻る', async ({ page }) => {
   expect(await page.locator('#pPop').evaluate(el => !!el.closest('aside'))).toBe(true);
   expect(await page.locator('#layerList').evaluate(el => !!el.closest('aside'))).toBe(true);
   expect(await page.locator('#inflateDialog').evaluate(el => el.parentElement === document.body)).toBe(true);
+});
+
+test("シートのタブは PC の右パネルと同じ分け方で、下のバーのアイコンは PC と同じ表から作る", async ({ page }) => {
+  await boot(page);
+  // 「レイヤー」: レイヤー一覧・ポップ量・揺れ(選択中のレイヤーの設定)
+  await page.locator('[data-mtab="layer"]').click();
+  for (const id of ["#layerList", "#pPop", "#pBlend", "#pSwing"]) await expect(page.locator(`#mPanes ${id}`)).toBeVisible();
+  // 「アニメ」: 自動揺らし・記録・キーフレーム
+  await page.locator('[data-mtab="anim"]').click();
+  for (const id of ["#pAuto", "#takeRec", "#keyAdd"]) await expect(page.locator(`#mPanes ${id}`)).toBeVisible();
+  // 「表示」: メッシュ密度・表示の切り替え・画角
+  await page.locator('[data-mtab="view"]').click();
+  for (const id of ["#pDensity", "#vGrid", "#pFov"]) await expect(page.locator(`#mPanes ${id}`)).toBeVisible();
+  await expect(page.locator("#mPanes #vMulti")).toBeHidden();
+  // 下のバー
+  await expect(page.locator("#mTools [data-mtool=grab] svg")).toHaveCount(1);
+  await expect(page.locator("#mTools [data-mtool=grab] span")).toHaveText("つかむ");
 });

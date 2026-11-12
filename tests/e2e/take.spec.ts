@@ -122,11 +122,14 @@ test('書き出し: 記録した操作をループ再生すると、1周ぶん�
   // 2周ぶん書き出して、1周目の初めと2周目の初めがほぼ同じ絵になるか確かめる
   const r = await app(page, async a => {
     const L = a.takeLength, res = await a.exportMedia({ format: 'png', width: 64, height: 48, fps: 30, duration: 2 * L, background: '#ffffff', motion: 'loop' }, () => {}, new AbortController().signal);
-    return { frames: res.frames, bytes: [...new Uint8Array(await res.blob.arrayBuffer())] };
+    // 中身は base64 の文字列で受け取る(数の配列で受け取ると、要素ごとに変換するので大きいと遅い)
+    const b64: string = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(',')[1]); fr.readAsDataURL(res.blob); });
+    return { frames: res.frames, b64 };
   });
+  const bytes = Uint8Array.from(atob(r.b64), c => c.charCodeAt(0));
   const per = Math.round(len * 30);
   expect(r.frames).toBe(per * 2);
-  const files = unzipSync(new Uint8Array(r.bytes));
+  const files = unzipSync(bytes);
   const names = Object.keys(files).filter(n => n.endsWith('.png')).sort();
   expect(names.length).toBe(per * 2);
   // PNG のバイト列がほぼ同じ(同じ視点・同じ揺れ)
