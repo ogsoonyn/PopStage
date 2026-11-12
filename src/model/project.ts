@@ -12,7 +12,7 @@ export interface Vec3 { x: number; y: number; z: number }
  * 揺らし方。自動揺らしのとき、塗った部分を支える土台(アンカー)をどう動かすか。
  * 塗った部分はバネで土台に繋がっていて、遅れて付いてくる(physics/motion.ts)。
  * ピストンだけは土台ではなく画像全体を動かし、塗った部分はその動きに慣性で遅れて付いてくる。
- * ためて膨らむ2 は手前への動きに加えて、塗った範囲を中心から外へ広げる(縮める)。ふわっと膨らむ・一瞬膨らむは、上下・手前への動きに加えて外へ広げる。
+ * ためて膨らむ2・ふわっと膨らむ・一瞬膨らむは、土台の動きに加えて、塗った範囲を中心から外へ広げる(physics/motion.ts の SPREAD_MOTIONS)。
  */
 export type MotionPattern = 'charge' | 'charge2' | 'jiggle' | 'jump' | 'bounce' | 'piston' | 'shiver' | 'float' | 'sway' | 'shake' | 'circle' | 'heartbeat' | 'stretch' | 'puff' | 'pulse' | 'none';
 

@@ -4,9 +4,9 @@
  *
  * - 単位は「画像の長辺 = 2」の正規化座標。y が上、z が手前。
  * - どのパターンも周期 T で元に戻る(T の整数倍の長さで書き出せばループする)。
- * - 振れ幅は strength(0〜1)に比例する。「ためて膨らむ」「一瞬膨らむ」の手前への動きはポップ量にも比例する(pop は正規化座標)。
+ * - 振れ幅は strength(0〜1)に比例する。「ためて膨らむ」「ためて膨らむ2」「一瞬膨らむ」の手前への動きはポップ量にも比例する(pop は正規化座標)。
  * - 揺らし方ごとの固有設定は params(キーは「揺らし方.項目」)。未設定は MOTION_PARAMS の既定値。
- * - ためて膨らむ2・ふわっと膨らむ・一瞬膨らむは、土台の動き(motionAnchor)に加えて、塗った範囲の広がりの土台を motionSpread で返す。
+ * - 塗った範囲を広げる揺らし方(SPREAD_MOTIONS)は、土台の動き(motionAnchor)に加えて、塗った範囲の広がりの土台を motionSpread で返す。
  * - ピストンだけは土台を動かさず(motionAnchor は 0)、画像全体の位置を pistonOffset で返す。
  *   塗った部分はその加速度を慣性力として受けて、遅れて付いてくる(world.ts)。
  */
@@ -145,6 +145,9 @@ export function pistonReach(strength: number, params?: Record<string, number>): 
   return Math.max(0, PISTON_STROKE * strength * motionParam(params, 'piston', 'height'));
 }
 
+/** 塗った範囲を広げる揺らし方。ほかの揺らし方では motionSpread はいつも 0 */
+export const SPREAD_MOTIONS: ReadonlySet<MotionPattern> = new Set<MotionPattern>(['charge2', 'puff', 'pulse']);
+
 /**
  * 塗った範囲の広がりの土台(中心からの距離に対する割合。0 で元の大きさ、0.1 で 1 割外へ)。周期 T で元に戻る。
  * - ためて膨らむ2: 手前への動きと同じ時刻に、ためている間は内へ縮め、離した瞬間に外へ押し広げる。
@@ -153,7 +156,7 @@ export function pistonReach(strength: number, params?: Record<string, number>): 
  * ほかの揺らし方は 0(広げない)。
  */
 export function motionSpread(pattern: MotionPattern, t: number, period: number, strength: number, params?: Record<string, number>): number {
-  if ((pattern !== 'charge2' && pattern !== 'puff' && pattern !== 'pulse') || strength <= 0) return 0;
+  if (!SPREAD_MOTIONS.has(pattern) || strength <= 0) return 0;
   const T = Math.max(0.05, period), u = (((t % T) + T) % T) / T;
   const P = (key: string) => motionParam(params, pattern, key), a = P('spread') * 2 * strength;
   if (pattern === 'puff') return a * puffRise(u, P('time'));
