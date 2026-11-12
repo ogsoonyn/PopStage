@@ -285,6 +285,8 @@
         <section class="flex flex-col gap-2" data-m-slot="viewToggles">
           <h2 class="font-bold">表示</h2>
           <label class="flex items-center justify-between">ウェイトを重ねて表示 <input id="vOverlay" type="checkbox" class="toggle toggle-sm"></label>
+          <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlay">塗るときは自動でON</label><button type="button" class="help-btn" data-help="vAutoOverlayHelp"></button></span><input id="vAutoOverlay" type="checkbox" class="toggle toggle-sm"></div>
+          <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。ほかのツールに移っても自動ではOFFにしません。</p>
           <div class="toggle-row"><span class="prop-name"><label for="vFade">画像を薄く</label><button type="button" class="help-btn" data-help="vFadeHelp"></button></span><input id="vFade" type="checkbox" class="toggle toggle-sm"></div>
           <p id="vFadeHelp" class="help-text" hidden>画像を薄くして、塗りを見やすくします(書き出しには影響しません)。</p>
           <div class="toggle-row"><span class="prop-name"><label for="vFlat">ポップを一時OFF</label><button type="button" class="help-btn" data-help="vFlatHelp"></button></span><input id="vFlat" type="checkbox" class="toggle toggle-sm"></div>

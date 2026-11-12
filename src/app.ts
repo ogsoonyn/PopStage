@@ -25,6 +25,8 @@ import { createSampleDocument } from './ui/sample';
 import { ask, saveFile, setBusy, toast } from './ui/dom';
 
 export type Tool = 'brush' | 'erase' | 'smooth' | 'inflate' | 'grab' | 'shake' | 'view' | 'pan';
+/** ウェイトを塗るツール */
+export const PAINT_TOOLS: readonly Tool[] = ['brush', 'erase', 'smooth', 'inflate'];
 export type PressureMode = 'strength' | 'size' | 'none';
 /** 操作の記録の状態。記録中・ループ再生中・どちらでもない */
 export type TakeState = 'idle' | 'recording' | 'playing';
@@ -108,6 +110,8 @@ export class App extends Emitter<AppEvents> {
   /** 3面図の正面・右から・下からの拡大率と平行移動(3つで共有。画面だけの設定で保存しない) */
   multiOrtho: OrthoView = defaultOrthoView();
   paused = false;
+  /** 塗るツール(ブラシ・消しゴム・ぼかし・膨らみ)や「全体をぼかす」を使い始めたら、重ね表示を自動で入れる。ブラウザに覚える設定 */
+  autoOverlay = true;
   /**
    * 「揺らす」ツールで画像を振った量(ワールド座標)。カメラは画像に付いて動くので画面上の位置は
    * 変わらないが、物理には平行移動と同じ動きとして伝える。画面だけの値で保存しない
@@ -263,7 +267,19 @@ export class App extends Emitter<AppEvents> {
 
   /* ---------- 状態の切り替え ---------- */
 
-  setTool(t: Tool): void { this.tool = t; this.emit('tool', t); }
+  /** auto を false にすると、塗るツールでも重ね表示を自動で入れない(起動時に前回のツールを戻すとき) */
+  setTool(t: Tool, auto = true): void {
+    this.tool = t;
+    if (auto && PAINT_TOOLS.includes(t)) this.autoShowOverlay();
+    this.emit('tool', t);
+  }
+
+  setAutoOverlay(on: boolean): void { this.autoOverlay = on; this.emit('view', undefined); }
+
+  /** 塗りが見えるよう重ね表示を入れる。塗るツールから離れても切らない */
+  private autoShowOverlay(): void {
+    if (this.autoOverlay && !this.view.overlay) this.setViewOption('overlay', true);
+  }
 
   setActiveLayer(id: string | null): void {
     this.activeLayerId = id;
@@ -626,6 +642,7 @@ export class App extends Emitter<AppEvents> {
   beginBlurPreview(): boolean {
     const layer = this.activeLayer; if (!layer || this.blurPreview) return false;
     this.blurPreview = { layerId: layer.id, original: layer.weights.data.slice() };
+    this.autoShowOverlay();
     this.emit('blur', 'begin');
     return true;
   }

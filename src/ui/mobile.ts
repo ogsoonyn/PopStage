@@ -6,7 +6,7 @@
  * イベントの結び付けはそのまま残るので、PC とスマホで同じ処理が動く。幅が戻ったら元の場所へ戻す。
  * ツールは「つかむ・揺らす・移動・視点」を主にし、膨らみ・塗り・消しゴム・ぼかしは「塗って直す」の中に置く。
  */
-import type { App, Tool } from '../app';
+import { PAINT_TOOLS, type App, type Tool } from '../app';
 import { PRESETS, PRESET_ORDER, type PresetName } from '../model/project';
 import { ui } from './ids';
 import { icon } from './icons';
@@ -35,7 +35,6 @@ export const MOBILE_SLOTS: readonly { slot: string; tab: Tab; prepend?: boolean 
 ];
 
 /** 「塗って直す」の中で使うツール。ブラシの設定を出すのは塗りの3つだけ */
-const PAINT_TOOLS: Tool[] = ['inflate', 'brush', 'erase', 'smooth'];
 const BRUSH_TOOLS: Tool[] = ['brush', 'erase', 'smooth'];
 const TOOL_DESC: Record<Tool, string> = {
   inflate: '画像の上をドラッグして範囲を描くと、ここで高さや断面を決めて適用できます。2本目の指を置くと描くのをやめます。',
@@ -91,7 +90,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     root.style.removeProperty('--m-sheet');
     setFineLock(false); ui.mFine.setAttribute('aria-pressed', 'false');
     // スマホの間に塗りから切り替えていたら、PC で使っていたツールに戻す
-    if (desktopTool && PAINT_TOOLS.includes(desktopTool) && !PAINT_TOOLS.includes(app.tool)) app.setTool(desktopTool);
+    if (desktopTool && PAINT_TOOLS.includes(desktopTool) && !PAINT_TOOLS.includes(app.tool)) app.setTool(desktopTool, false);
     desktopTool = null;
   }
 

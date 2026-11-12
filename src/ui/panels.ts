@@ -182,6 +182,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   const viewToggles = [[ui.vOverlay, 'overlay'], [ui.vFade, 'fade'], [ui.vMulti, 'multi'], [ui.vFlat, 'flat'], [ui.vGrid, 'grid']] as const;
   for (const [el, key] of viewToggles) el.addEventListener('change', () => app.setViewOption(key, el.checked));
   ui.vPause.addEventListener('change', () => app.setPaused(ui.vPause.checked));
+  ui.vAutoOverlay.addEventListener('change', () => app.setAutoOverlay(ui.vAutoOverlay.checked));
 
   /* ---------- ツールオプション ---------- */
 
@@ -356,6 +357,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     setRange(ui.pAutoStr, ui.pAutoStrO, Math.round(p.autoSwing.strength * 100), pct(p.autoSwing.strength * 100));
     for (const [el, key] of viewToggles) el.checked = app.view[key];
     ui.vPause.checked = app.paused;
+    ui.vAutoOverlay.checked = app.autoOverlay;
   }
 
   let queued = false;
