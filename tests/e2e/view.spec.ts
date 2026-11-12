@@ -27,7 +27,7 @@ test('画像を薄く・ポップを一時OFF: 画面だけが変わり、書き
   await page.keyboard.press('Shift+W');
   await page.waitForTimeout(100);
   expect(await page.locator('#vFade').isChecked()).toBe(true);
-  expect(await page.locator('#vOverlay').isChecked()).toBe(true);
+  expect(await page.locator('#vOverlaySel').isChecked()).toBe(true);
   expect((await stage.screenshot()).equals(shotFlat)).toBe(false);
   expect(await frame()).toBe(frame0);
 

@@ -61,15 +61,15 @@ function defineActions(app: App, d: ActionDeps) {
     // 編集
     undo: { label: '元に戻す', keys: ['Ctrl+Z'], run: () => app.history.undo(), enabled: () => app.history.canUndo && !app.stroking },
     redo: { label: 'やり直す', keys: ['Ctrl+Shift+Z', 'Ctrl+Y'], run: () => app.history.redo(), enabled: () => app.history.canRedo && !app.stroking },
-    smoothAll: { label: '全体をぼかす(ガウス)', desc: '選択中のレイヤー全体にガウスぼかしをかける', run: d.openBlur, enabled: layer },
-    normalize: { label: '正規化', desc: '選択中のレイヤーの最大値が100%になるよう全体を拡大', run: () => app.weightOp('正規化', wm => wm.normalize()), enabled: layer },
-    invert: { label: '反転', desc: '選択中のレイヤーのウェイトを反転', run: () => app.weightOp('反転', wm => wm.invert()), enabled: layer },
+    smoothAll: { label: '全体をぼかす(ガウス)', desc: '選んでいるレイヤー全体にガウスぼかしをかける', run: d.openBlur, enabled: layer },
+    normalize: { label: '正規化', desc: '選んでいるレイヤーの最大値が100%になるよう全体を拡大', run: () => app.weightOp('正規化', wm => wm.normalize()), enabled: layer },
+    invert: { label: '反転', desc: '選んでいるレイヤーのウェイトを反転', run: () => app.weightOp('反転', wm => wm.invert()), enabled: layer },
     fromAlpha: { label: 'アルファから生成', run: () => app.fromAlpha(), enabled: layer },
     clearWeights: { label: '全消去', run: () => app.weightOp('全消去', wm => wm.clear()), enabled: layer },
     brushSmaller: { label: 'ブラシを小さく', keys: ['['], run: brushStep(-1), duringPreview: true, helpRow: 'ブラシサイズ(小さく / 大きく)' },
     brushLarger: { label: 'ブラシを大きく', keys: [']'], run: brushStep(1), duringPreview: true, helpRow: 'ブラシサイズ(小さく / 大きく)' },
     // 表示
-    toggleOverlay: { label: 'ウェイトの重ね表示', keys: ['W'], run: () => app.setViewOption('overlay', !app.view.overlay), duringPreview: true },
+    toggleOverlay: { label: 'ウェイトの重ね表示', keys: ['W'], desc: '押すたびに OFF → 選択中 → 全レイヤー', run: () => app.cycleOverlay(), duringPreview: true },
     toggleFade: { label: '画像を薄く', keys: ['Shift+W'], run: () => app.setViewOption('fade', !app.view.fade), duringPreview: true },
     toggleFlat: { label: 'ポップを一時OFF', keys: ['F'], run: () => app.setViewOption('flat', !app.view.flat), duringPreview: true },
     togglePause: { label: '揺れを一時停止', keys: ['P'], run: () => app.setPaused(!app.paused), duringPreview: true },
@@ -94,8 +94,10 @@ function defineActions(app: App, d: ActionDeps) {
     addLayer: { label: '新規レイヤー', run: () => app.addLayer(), enabled: () => !!app.doc },
     duplicateLayer: { label: '複製', run: () => app.duplicateLayer(), enabled: layer },
     deleteLayer: { label: '削除', run: () => app.deleteLayer(), enabled: () => (app.doc?.layers.length ?? 0) > 1 },
-    layerUp: { label: '上へ', run: () => app.moveLayer(1), enabled: () => app.activeIndex >= 0 && app.activeIndex < (app.doc?.layers.length ?? 0) - 1 },
-    layerDown: { label: '下へ', run: () => app.moveLayer(-1), enabled: () => app.activeIndex > 0 },
+    // 並べ替えは1枚ずつ(複数を選んでいるときは使えない)
+    layerUp: { label: '上へ', run: () => app.moveLayer(1), enabled: () => !app.multiSelected && app.activeIndex >= 0 && app.activeIndex < (app.doc?.layers.length ?? 0) - 1 },
+    layerDown: { label: '下へ', run: () => app.moveLayer(-1), enabled: () => !app.multiSelected && app.activeIndex > 0 },
+    selectAllLayers: { label: 'すべてのレイヤーを選ぶ', keys: ['Ctrl+A'], run: () => app.selectAllLayers(), enabled: () => (app.doc?.layers.length ?? 0) > 1 },
     // お気に入り
     addFavorite: {
       label: 'お気に入りに残す', keys: ['K'], desc: '今の揺れと動きの組み合わせを残す(画像とウェイトは残さない)',
@@ -132,7 +134,7 @@ const NAV_ACTIONS: readonly { label: string; title: string; items: readonly { cm
     ],
   },
   {
-    label: 'レイヤー', title: '選択中のレイヤーに効く操作',
+    label: 'レイヤー', title: '選んでいるレイヤーに効く操作',
     items: [{ cmd: 'smoothAll', icon: 'smoothAll', text: '全体ぼかし…' }, { cmd: 'normalize', icon: 'normalize', text: '正規化' }, { cmd: 'invert', icon: 'invert', text: '反転' }],
   },
   // 揺らしながら試している最中に、いい動きをすぐ残せるように
@@ -214,6 +216,8 @@ export function bindActions(app: App, deps: ActionDeps): void {
       b.dataset.cmd = it.cmd; // 結び付け・キーの表記・ツールチップは、下の data-cmd の処理で付ける
       if (it.check) b.dataset.pressed = it.check;
       if (it.name) b.setAttribute('aria-label', it.name);
+      // 重ね表示が全レイヤーのときの印(押すたびに OFF → 選択中 → 全レイヤー)
+      if (it.check === 'overlay') b.append(Object.assign(document.createElement('span'), { className: 'nav-badge', textContent: '全', hidden: true }));
       box.append(b);
     }
     navItems.push(box);
@@ -285,6 +289,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   const undoLabel = document.querySelector('[data-label=undo]')!, redoLabel = document.querySelector('[data-label=redo]')!;
   const checks = [...document.querySelectorAll<HTMLElement>('[data-check]')];
   const pressables = [...ui.toolNav.querySelectorAll<HTMLElement>('[data-pressed]')];
+  const overlayBadges = [...ui.toolNav.querySelectorAll<HTMLElement>('[data-pressed=overlay] .nav-badge')];
   /** 'status' でも呼ぶ(0.5 秒ごと)ので、変わったときだけ書く */
   const setText = (el: Element, text: string) => { if (el.textContent !== text) el.textContent = text; };
   function refresh(): void {
@@ -292,7 +297,10 @@ export function bindActions(app: App, deps: ActionDeps): void {
     setText(undoLabel, app.history.undoLabel ? `(${app.history.undoLabel})` : '');
     setText(redoLabel, app.history.redoLabel ? `(${app.history.redoLabel})` : '');
     const on: Record<ViewCheck, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused };
-    for (const el of checks) setText(el, on[el.dataset.check as ViewCheck] ? '✓' : '');
+    // 重ね表示は3つの状態なので、メニューには今の状態を書き、左のツールバーには全レイヤーのときだけ印を付ける
+    const mode = app.overlayMode;
+    for (const el of checks) setText(el, el.dataset.check === 'overlay' ? (mode === 'off' ? '' : mode === 'all' ? '全レイヤー' : '選択中') : on[el.dataset.check as ViewCheck] ? '✓' : '');
+    for (const el of overlayBadges) el.hidden = mode !== 'all';
     for (const el of pressables) {
       const v = String(on[el.dataset.pressed as ViewCheck]);
       if (el.getAttribute('aria-pressed') !== v) el.setAttribute('aria-pressed', v);

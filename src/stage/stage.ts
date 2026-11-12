@@ -3,12 +3,13 @@
  * 単位は元画像の 1 ピクセル = 1、画像の中心が原点。
  */
 import * as THREE from 'three';
-import type { CameraState, Document, Layer, OrthoView, Vec3 } from '../model/project';
+import { LAYER_COLORS, type CameraState, type Document, type Layer, type OrthoView, type Vec3 } from '../model/project';
 import type { Rect } from '../model/weightmap';
 import { vertexShader, fragmentShader, MAX_LAYERS } from './shaders';
 
 export interface ViewOptions {
-  overlay: boolean; grid: boolean;
+  /** overlayAll: 重ね表示を全レイヤーにする(overlay が入のときだけ意味を持つ) */
+  overlay: boolean; overlayAll: boolean; grid: boolean;
   /** 画像を薄くして塗りを見やすくする */
   fade: boolean;
   /** ポップ(持ち上げと揺れ)を一時的に消して平らに表示する */
@@ -88,7 +89,7 @@ export class Stage {
       uSwing: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector3()) },
       uSpread: { value: new Array(MAX_LAYERS).fill(0) },
       uCenter: { value: Array.from({ length: MAX_LAYERS }, () => new THREE.Vector2()) },
-      uActive: { value: -1 }, uOverlay: { value: 1 }, uGrid: { value: 0 },
+      uShow: { value: new Array(MAX_LAYERS).fill(0) }, uColor: { value: LAYER_COLORS.map(rgbVector) }, uOverlay: { value: 1 }, uGrid: { value: 0 },
       uBrushOn: { value: 0 }, uBrush: { value: new THREE.Vector3() }, uOpacity: { value: 1 },
       uFade: { value: 0 }, uFlat: { value: 0 },
       uGridN: { value: this.gridN },
@@ -237,12 +238,14 @@ export class Stage {
 
   /* ---------- 表示 ---------- */
 
-  setView(o: ViewOptions, activeIndex: number): void {
+  /** show: レイヤーごとの重ね表示の濃さ(0 で重ねない。一覧の下から順) */
+  setView(o: ViewOptions, show: readonly number[]): void {
     this.uniforms.uOverlay.value = o.overlay ? 1 : 0;
     this.uniforms.uGrid.value = o.grid ? 1 : 0;
     this.uniforms.uFade.value = o.fade ? 1 : 0;
     this.uniforms.uFlat.value = o.flat ? 1 : 0;
-    this.uniforms.uActive.value = activeIndex;
+    const s = this.uniforms.uShow.value as number[];
+    for (let i = 0; i < MAX_LAYERS; i++) s[i] = show[i] ?? 0;
   }
 
   setBrush(p: { x: number; y: number } | null, radius: number): void {
@@ -513,4 +516,10 @@ export class Stage {
     this.mapTex?.dispose(); this.weightTex?.dispose(); this.exportTarget?.dispose();
     this.mesh?.geometry.dispose(); this.material.dispose(); this.renderer.dispose();
   }
+}
+
+/** '#rrggbb' を 0〜1 の vec3 にする(色空間の変換はしない。シェーダの中の色と同じ扱い) */
+function rgbVector(hex: string): THREE.Vector3 {
+  const n = parseInt(hex.slice(1), 16);
+  return new THREE.Vector3(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 }

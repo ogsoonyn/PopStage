@@ -50,7 +50,9 @@ export const fragmentShader = /* glsl */ `
   precision highp sampler2DArray;
   uniform sampler2D uMap;
   uniform sampler2DArray uW;
-  uniform int uActive;
+  uniform int uLayerCount;
+  uniform float uShow[${MAX_LAYERS}];
+  uniform vec3 uColor[${MAX_LAYERS}];
   uniform float uOverlay, uGrid, uBrushOn, uOpacity, uFade;
   uniform vec2 uGridN;
   uniform vec3 uBrush;
@@ -69,12 +71,17 @@ export const fragmentShader = /* glsl */ `
       c.a *= 0.25;
     }
 
-    // 選択中レイヤーのウェイトを半透明の色で重ねる(画像を薄くしているときは濃く)
-    if (uActive >= 0 && uOverlay > 0.5) {
-      float w = texture(uW, vec3(wuv, float(uActive))).r;
+    // ウェイトをレイヤーごとの色で、一覧の下から順に半透明で重ねる(画像を薄くしているときは濃く)。
+    // uShow は重ねる濃さの倍率で、0 のレイヤーは重ねない(選択中だけ / 全レイヤーで選んだもの以外を薄く、は呼び出し側が決める)
+    if (uOverlay > 0.5) {
       float k = uFade > 0.5 ? 0.9 : 0.5;
-      c.rgb = mix(c.rgb, vec3(1.0, 0.2, 0.5), clamp(w * k / max(max(c.a, w * k), 1e-4), 0.0, 1.0));
-      c.a = max(c.a, w * k);
+      for (int i = 0; i < ${MAX_LAYERS}; i++) {
+        if (i >= uLayerCount) break;
+        if (uShow[i] <= 0.0) continue;
+        float a = texture(uW, vec3(wuv, float(i))).r * k * uShow[i];
+        c.rgb = mix(c.rgb, uColor[i], clamp(a / max(max(c.a, a), 1e-4), 0.0, 1.0));
+        c.a = max(c.a, a);
+      }
     }
 
     // グリッド(メッシュの分割線)

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { WeightMap, weightSizeFor, TILE } from '../../src/model/weightmap';
-import { Store, createDocument, createProject, createLayer, LIMITS } from '../../src/model/project';
+import { Store, createDocument, createProject, createLayer, LIMITS, scalePops, layerColor, LAYER_COLORS } from '../../src/model/project';
 import { History } from '../../src/commands/history';
 import { PatchLayer, InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from '../../src/commands/commands';
 import { Stroke, falloff } from '../../src/paint/stroke';
@@ -193,5 +193,27 @@ describe('ウェイトの編集とタイル差分', () => {
     expect(falloff(0, 0)).toBe(1);
     expect(falloff(1, 0)).toBe(0);
     expect(falloff(0.5, 0)).toBeCloseTo(0.5);
+  });
+});
+
+describe('複数のレイヤーのポップ量', () => {
+  it('一番高いレイヤーを目標の値にし、ほかは同じ比率で伸び縮みする', () => {
+    expect(scalePops([100, 200, 50], 400)).toEqual([200, 400, 100]);
+    expect(scalePops([100, 300], 150)).toEqual([50, 150]);
+  });
+  it('0 のレイヤーは 0 のまま。全部 0 のときだけ揃える', () => {
+    expect(scalePops([0, 120], 240)).toEqual([0, 240]);
+    expect(scalePops([0, 0], 80)).toEqual([80, 80]);
+  });
+  it('1枚だけなら、その値になる', () => {
+    expect(scalePops([300], 1500)).toEqual([1500]);
+  });
+});
+
+describe('重ね表示の色', () => {
+  it('一覧の下から順に決まり、8色を超えたら初めに戻る。先頭は前の重ね表示の色', () => {
+    expect(layerColor(0)).toBe('#ff3380');
+    expect(layerColor(LAYER_COLORS.length)).toBe(layerColor(0));
+    expect(new Set(LAYER_COLORS).size).toBe(LIMITS.maxLayers);
   });
 });

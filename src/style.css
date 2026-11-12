@@ -179,3 +179,14 @@ html.mobile #helpDialog .m-only { display: grid !important; }
 html.mobile .help-btn { width: 1.5rem; height: 1.5rem; font-size: 12px; }
 html.mobile #mPanes section { padding: 0; border: 0; }
 html.mobile #mPanes .btn-xs.btn-square { width: 2.25rem; height: 2.25rem; }
+
+/* レイヤー一覧: 複数選んでいるときは、最後に押したレイヤー(塗りの先)の左に太い線を付ける */
+#layerList li.is-primary { box-shadow: inset 4px 0 0 var(--color-primary); }
+#layerList li { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.layer-color { width: .5rem; height: .5rem; border-radius: 999px; flex-shrink: 0; }
+.blend-ico { flex-shrink: 0; }
+/* 選んだレイヤーで値が揃っていない */
+output.is-mixed { font-size: .7rem; opacity: .8; }
+/* 左のツールバーの「ウェイト」: 全レイヤー表示の印 */
+.nav-badge { position: absolute; top: 2px; right: 4px; font-size: .6rem; line-height: 1; padding: 1px 3px; border-radius: 4px; background: var(--color-secondary); color: var(--color-secondary-content); }
+.nav-badge[hidden] { display: none; }

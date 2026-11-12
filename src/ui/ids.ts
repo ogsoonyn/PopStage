@@ -16,6 +16,7 @@ export const UI_IDS = {
   toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', takeBadge: 'button', mFine: 'button', busy: 'div',
   // レイヤー一覧
   layerCount: 'span', layerList: 'ul',
+  layerSelBar: 'div', layerSelText: 'span', layerSelAll: 'button', layerSelOne: 'button', layerSelDone: 'button',
   // 右パネル
   props: 'div', activeLayerName: 'span',
   pPop: 'input', pPopN: 'input', pBlend: 'select', pBlendDesc: 'p',
@@ -26,7 +27,7 @@ export const UI_IDS = {
   takeInfo: 'span', takeRec: 'button', takePlay: 'button', takeClear: 'button',
   keyCount: 'span', keyAdd: 'button', keyList: 'ol', keyMake: 'button', keyTotal: 'span',
   favCount: 'span', favAdd: 'button', favEmpty: 'p', favList: 'ol',
-  vOverlay: 'input', vAutoOverlay: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
+  vOverlayOff: 'input', vOverlaySel: 'input', vOverlayAll: 'input', vAutoOverlay: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
   pFov: 'input', pFovO: 'output', pBgTransparent: 'input', pBgColor: 'input',
   // スマホのシート・下のバー
   mSheet: 'section', mGrip: 'div', mPresets: 'div', mPanes: 'div', mToolDesc: 'p', mBrushOpts: 'div', mInflOpts: 'div', mPaintMode: 'button',

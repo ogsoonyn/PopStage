@@ -60,7 +60,7 @@
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
       <li><button data-cmd="undo"><span>元に戻す <span data-label="undo" class="opacity-60"></span></span></button></li>
       <li><button data-cmd="redo"><span>やり直す <span data-label="redo" class="opacity-60"></span></span></button></li>
-      <li class="menu-title pt-2">選択中のレイヤーのウェイト</li>
+      <li class="menu-title pt-2">選んでいるレイヤーのウェイト</li>
       <li><button data-cmd="smoothAll">全体をぼかす(ガウス)…</button></li>
       <li><button data-cmd="normalize">正規化(最大を100%に)</button></li>
       <li><button data-cmd="invert">反転</button></li>
@@ -71,7 +71,7 @@
   <div class="dropdown">
     <div tabindex="0" role="button" class="btn btn-ghost btn-sm">表示</div>
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
-      <li><button data-cmd="toggleOverlay">ウェイトの重ね表示 <span data-check="overlay" class="ml-auto"></span></button></li>
+      <li><button data-cmd="toggleOverlay">ウェイトの重ね表示(切り替え) <span data-check="overlay" class="ml-auto"></span></button></li>
       <li><button data-cmd="toggleFade">画像を薄く <span data-check="fade" class="ml-auto"></span></button></li>
       <li><button data-cmd="toggleFlat">ポップを一時OFF <span data-check="flat" class="ml-auto"></span></button></li>
       <li><button data-cmd="togglePause">揺れを一時停止 <span data-check="pause" class="ml-auto"></span></button></li>
@@ -98,6 +98,7 @@
       <li><button data-cmd="deleteLayer">削除</button></li>
       <li><button data-cmd="layerUp">上へ</button></li>
       <li><button data-cmd="layerDown">下へ</button></li>
+      <li><button data-cmd="selectAllLayers">すべて選ぶ</button></li>
     </ul>
   </div>
   <div class="dropdown">
@@ -185,7 +186,14 @@
         <button class="btn btn-xs btn-square" data-cmd="layerDown" aria-label="下へ">▼</button>
         <button class="btn btn-xs btn-square" data-cmd="deleteLayer" aria-label="削除">🗑</button>
       </div>
-      <ul id="layerList" class="flex flex-col gap-1 overflow-y-auto min-h-0" role="listbox" aria-label="レイヤー一覧"></ul>
+      <!-- 複数のレイヤーを選んでいるとき(スマホでは長押しの選択モードのときも)だけ出る -->
+      <div id="layerSelBar" class="flex items-center gap-1 text-xs bg-base-200 rounded px-2 py-0.5" hidden>
+        <span id="layerSelText" class="mr-auto tabular-nums"></span>
+        <button id="layerSelAll" type="button" class="btn btn-ghost btn-xs" title="すべてのレイヤーを選ぶ (Ctrl+A)">全部</button>
+        <button id="layerSelOne" type="button" class="btn btn-ghost btn-xs" title="最後に押したレイヤーだけにする (Esc)">1枚に戻す</button>
+        <button id="layerSelDone" type="button" class="btn btn-primary btn-xs" hidden>完了</button>
+      </div>
+      <ul id="layerList" class="flex flex-col gap-1 overflow-y-auto min-h-0" role="listbox" aria-multiselectable="true" aria-label="レイヤー一覧"></ul>
     </section>
 
     <!-- 右のパネルのタブ。レイヤー一覧はタブの上に固定する。タブは効く範囲で分ける(選択中のレイヤー / 動き / 画像全体と見え方) -->
@@ -200,7 +208,7 @@
         <section class="flex flex-col gap-2" data-m-slot="layerProps">
           <h2 class="font-bold">レイヤー: <span id="activeLayerName"></span></h2>
           <div class="prop"><span class="prop-name"><label for="pPop">ポップ量</label><button type="button" class="help-btn" data-help="pPopHelp"></button></span><input id="pPop" type="range" min="0" max="1000" class="range range-xs"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-full text-right"></div>
-          <p id="pPopHelp" class="help-text" hidden>塗った所を持ち上げる高さ(0〜1500px)。スライダーは前半で 0〜500px を細かく、後半で 500〜1500px を粗く動かします。</p>
+          <p id="pPopHelp" class="help-text" hidden>塗った所を持ち上げる高さ(0〜1500px)。スライダーは前半で 0〜500px を細かく、後半で 500〜1500px を粗く動かします。複数のレイヤーを選んでいるときは、一番高いレイヤーの値を出し、ほかのレイヤーは同じ比率で伸び縮みします(0px のレイヤーは 0px のまま)。</p>
           <div class="prop"><span class="prop-name"><label for="pBlend">重ね方</label><button type="button" class="help-btn" data-help="pBlendDesc"></button></span>
             <select id="pBlend" class="select select-xs col-span-2 w-full"></select></div>
           <p id="pBlendDesc" class="help-text" hidden>画像を開くと、選んだ重ね方の説明がここに出ます。</p>
@@ -287,7 +295,13 @@
         </section>
         <section class="flex flex-col gap-2" data-m-slot="viewToggles">
           <h2 class="font-bold">表示</h2>
-          <label class="flex items-center justify-between">ウェイトを重ねて表示 <input id="vOverlay" type="checkbox" class="toggle toggle-sm"></label>
+          <div class="toggle-row"><span class="prop-name"><span id="vOverlayLabel">ウェイトの重ね表示</span><button type="button" class="help-btn" data-help="vOverlayHelp"></button></span>
+            <div class="join" role="radiogroup" aria-labelledby="vOverlayLabel">
+              <input id="vOverlayOff" type="radio" name="vOverlay" class="join-item btn btn-xs" aria-label="OFF">
+              <input id="vOverlaySel" type="radio" name="vOverlay" class="join-item btn btn-xs" aria-label="選択中">
+              <input id="vOverlayAll" type="radio" name="vOverlay" class="join-item btn btn-xs" aria-label="全レイヤー">
+            </div></div>
+          <p id="vOverlayHelp" class="help-text" hidden>塗った所を色で重ねます。「選択中」は選んでいるレイヤーだけ、「全レイヤー」は表示中のレイヤー全部を、一覧の色の印と同じ色で重ねます(選んだレイヤーは濃く、ほかは薄く)。W キーと左のツールバーの「ウェイト」は、押すたびに OFF → 選択中 → 全レイヤーと切り替えます。</p>
           <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlay">塗るときは自動でON</label><button type="button" class="help-btn" data-help="vAutoOverlayHelp"></button></span><input id="vAutoOverlay" type="checkbox" class="toggle toggle-sm"></div>
           <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。ほかのツールに移っても自動ではOFFにしません。</p>
           <div class="toggle-row"><span class="prop-name"><label for="vFade">画像を薄く</label><button type="button" class="help-btn" data-help="vFadeHelp"></button></span><input id="vFade" type="checkbox" class="toggle toggle-sm"></div>

@@ -142,6 +142,23 @@ export const BLENDS: Record<BlendMode, { label: string; short: string; desc: str
 
 export const BLEND_ORDER = Object.keys(BLENDS) as BlendMode[];
 
+/**
+ * ウェイトの重ね表示で、レイヤーごとに塗る色(一覧の下から順。一覧の色の印も同じ)。
+ * 先頭は1枚だけ重ねていたころの色。ファイルには保存せず、並びで決める
+ */
+export const LAYER_COLORS = ['#ff3380', '#ff8a00', '#e0b800', '#22b573', '#00a9cc', '#3d6bff', '#9b59ff', '#a0673f'] as const;
+export const layerColor = (index: number): string => LAYER_COLORS[((index % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length];
+
+/**
+ * 複数のレイヤーのポップ量を、比率を保ったまま伸び縮みさせる。基準は一番高いレイヤーで、それが target になる。
+ * 0 のレイヤーは 0 のまま。全部 0 のときだけ、全部を target に揃える。target は呼び出し側で上限に収めておく
+ */
+export function scalePops(start: readonly number[], target: number): number[] {
+  const top = Math.max(0, ...start);
+  if (top === 0) return start.map(() => target);
+  return start.map(p => Math.round(p * target / top));
+}
+
 export interface Layer {
   id: string;
   name: string;
