@@ -18,6 +18,15 @@
 .key-row { display: grid; grid-template-columns: 1.75rem 4.75rem 1fr 1.75rem 1.5rem; align-items: center; gap: .375rem; }
 .key-row .key-set svg { width: 1rem; height: 1rem; }
 .key-head { padding: 0 .125rem; }
+/* お気に入りの行: 今の状態と同じ印・名前と中身・適用・今の状態で上書き・削除 */
+.fav-row { display: grid; grid-template-columns: .75rem minmax(0, 1fr) auto 1.75rem 1.5rem; align-items: center; gap: .375rem; }
+.fav-row .fav-mark { color: var(--color-primary); font-size: .625rem; visibility: hidden; }
+/* visibility: hidden の間は読み上げにも出ない */
+.fav-row[aria-current="true"] .fav-mark { visibility: visible; }
+/* 件数が増えても、下の自動揺らし・記録を押し出しすぎない */
+#favList { max-height: 16rem; overflow-y: auto; }
+html.mobile #favList { max-height: 10rem; }
+.fav-row .fav-set svg { width: 1rem; height: 1rem; }
 .key-row .key-no { font-variant-numeric: tabular-nums; padding: 0; }
 .prop2 { display: grid; grid-template-columns: 6.5rem 1fr; align-items: center; gap: .5rem; }
 

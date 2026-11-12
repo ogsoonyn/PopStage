@@ -1,6 +1,6 @@
 /** 変更操作の一覧。どれも Store の低レベル操作だけを使う。 */
 import type { Command } from './history';
-import type { Store, Layer, Document, Project } from '../model/project';
+import type { Store, Layer, Document, Project, Favorite } from '../model/project';
 import { WeightMap, TILE, type Rect } from '../model/weightmap';
 import type { Take } from '../physics/take';
 
@@ -65,6 +65,19 @@ export class SetTake implements Command {
   }
   apply(store: Store): void { store.patchProject({ take: this.after }); }
   revert(store: Store): void { store.patchProject({ take: this.before }); }
+}
+
+/**
+ * お気に入りの一覧の差し替え(残す・名前を変える・上書きする・消す)。お気に入りは作ったあと書き換えないので、
+ * 一覧の配列だけを作り直し、中身はコピーせずに持つ(記録を持っていても重くならない)。
+ */
+export class SetFavorites implements Command {
+  readonly bytes: number;
+  constructor(readonly label: string, private before: readonly Favorite[], private after: readonly Favorite[]) {
+    this.bytes = OBJ_BYTES * (before.length + after.length + 1);
+  }
+  apply(store: Store): void { store.patchProject({ favorites: [...this.after] }); }
+  revert(store: Store): void { store.patchProject({ favorites: [...this.before] }); }
 }
 
 /**

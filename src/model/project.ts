@@ -195,7 +195,31 @@ export interface Project {
   autoSwing: AutoSwing;
   /** 操作の記録(ループ再生・書き出し用)。無ければ null */
   take: Take | null;
+  /** お気に入り(揺れと動きの組み合わせ。model/favorites.ts) */
+  favorites: Favorite[];
   documents: Document[];
+}
+
+/** お気に入りに入れるレイヤーの設定。id で今のレイヤーと突き合わせる */
+export interface FavoriteLayer { id: string; pop: number; blend: BlendMode; physics: PhysicsParams }
+
+/**
+ * お気に入り。いい揺れや動きを見つけたときに、その組み合わせだけを残す(画像とウェイトは入れない)。
+ * 作ったあとは書き換えない(名前を変える・上書きするときは作り直す)ので、アンドゥの記録でもコピーせずに持てる。
+ */
+export interface Favorite {
+  readonly id: string;
+  readonly name: string;
+  /** 残した日時(ISO 8601) */
+  readonly createdAt: string;
+  readonly layers: readonly FavoriteLayer[];
+  readonly autoSwing: AutoSwing;
+  /** 視点と画角 */
+  readonly camera: CameraState;
+  /** そのときの操作の記録(キーフレームを含む)。記録は書き換えないので、今の記録と同じものを指していてよい */
+  readonly take: Take | null;
+  /** 残したときにループ再生していたか(適用したら再生を始める) */
+  readonly playing: boolean;
 }
 
 export const LIMITS = {
@@ -204,6 +228,8 @@ export const LIMITS = {
   density: { min: 16, max: 512, def: 128 },
   fov: { min: 10, max: 90, def: 40 },
   period: { min: 0.3, max: 10, def: 1.2 },
+  /** お気に入りの数 */
+  favorites: 30,
 } as const;
 
 export interface Preset {
@@ -313,6 +339,7 @@ export function createProject(doc?: Document): Project {
     fps: 60,
     autoSwing: { enabled: true, period: LIMITS.period.def, strength: 0.5 },
     take: null,
+    favorites: [],
     documents: doc ? [doc] : [],
   };
 }

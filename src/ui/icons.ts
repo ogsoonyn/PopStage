@@ -22,6 +22,10 @@ export const ICONS = {
   invert: '<path d="M7 4v16"/><path d="m3 8 4-4 4 4"/><path d="M17 20V4"/><path d="m13 16 4 4 4-4"/>',
   // キーフレームを今の視点で上書きする(カメラ)
   keySet: '<path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  // お気に入りに残す(星)
+  favorite: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
+  // お気に入りを今の状態で上書きする(下向きの矢印を受け皿へ)
+  favSet: '<path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M5 20h14"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

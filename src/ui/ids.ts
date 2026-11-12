@@ -25,6 +25,7 @@ export const UI_IDS = {
   pAuto: 'input', pPeriod: 'input', pPeriodO: 'output', pAutoStr: 'input', pAutoStrO: 'output',
   takeInfo: 'span', takeRec: 'button', takePlay: 'button', takeClear: 'button',
   keyCount: 'span', keyAdd: 'button', keyList: 'ol', keyMake: 'button', keyTotal: 'span',
+  favCount: 'span', favAdd: 'button', favEmpty: 'p', favList: 'ol',
   vOverlay: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
   pFov: 'input', pFovO: 'output', pBgTransparent: 'input', pBgColor: 'input',
   // スマホのシート・下のバー
