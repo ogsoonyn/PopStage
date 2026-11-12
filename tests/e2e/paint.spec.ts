@@ -342,7 +342,8 @@ test('重ね方「最大」: 重なった膨らみは高い方だけになり、
   // パネルの重ね方の選択と、一覧の印も変わる
   await page.evaluate(() => { const a = (window as any).popstage; a.setActiveLayer(a.doc.layers[1].id); });
   await expect(page.locator('#pBlend')).toHaveValue('max');
-  await expect(page.locator('#layerList li').first()).toContainText('最大');
+  // 一覧には重ね方をアイコンで出す
+  await expect(page.locator('#layerList li').first().locator('.layer-info')).toHaveAttribute('data-blend', 'max');
   // パネルから加算へ戻すと、元の厚みに戻る
   await page.locator('#pBlend').selectOption('add');
   expect(await depth()).toBe(add);
@@ -372,9 +373,9 @@ test('全体をぼかす: プレビュー中も視点は回せる。塗る・ツ
   await page.keyboard.press('Control+z');
   expect(await app(a => a.previewingBlur)).toBe(true);
   // 表示の切り替えは効く
-  const overlay = await app(a => a.view.overlay);
+  const mode = await app(a => a.overlayMode);
   await page.keyboard.press('w');
-  expect(await app(a => a.view.overlay)).toBe(!overlay);
+  expect(await app(a => a.overlayMode)).not.toBe(mode);
   // 半径のスライダーの上の Home はスライダーに任せる(視点リセットにしない)
   const yaw1 = await app(a => a.project.camera.yaw);
   await page.locator('#blurRadius').focus();
