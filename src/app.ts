@@ -269,9 +269,11 @@ export class App extends Emitter<AppEvents> {
 
   /** auto を false にすると、塗るツールでも重ね表示を自動で入れない(起動時に前回のツールを戻すとき) */
   setTool(t: Tool, auto = true): void {
+    const changed = t !== this.tool;
     this.tool = t;
-    if (auto && PAINT_TOOLS.includes(t)) this.autoShowOverlay();
     this.emit('tool', t);
+    // 選び直しでは入れない(手で切った重ね表示を戻さない)。受け手が別のツールに戻したときも入れない(スマホで画像を開いたとき)
+    if (auto && changed && this.tool === t && PAINT_TOOLS.includes(t)) this.autoShowOverlay();
   }
 
   setAutoOverlay(on: boolean): void { this.autoOverlay = on; this.emit('view', undefined); }

@@ -315,6 +315,8 @@ test('塗るツールを選ぶと重ね表示を自動でONにする。設定で
   await page.keyboard.press('b');
   await page.keyboard.press('w');
   expect(await overlay()).toBe(false);
+  await page.keyboard.press('b'); // 選び直しでは入れない
+  expect(await overlay()).toBe(false);
   // 「全体をぼかす」を開いてもONになる
   await page.evaluate(() => (document.querySelector('[data-cmd=smoothAll]') as HTMLButtonElement).click());
   await expect(page.locator('#blurDialog')).toBeVisible();
