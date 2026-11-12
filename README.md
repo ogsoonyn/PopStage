@@ -11,7 +11,7 @@
 
 ### 作る
 
-- **塗って持ち上げる**: ブラシで塗った所が、その場で持ち上がります。筆圧に対応し、レイヤーは8枚まで使えます。
+- **塗って持ち上げる**: ブラシで塗った所が、その場で持ち上がります。筆圧に対応し、レイヤーは8枚まで使えます。揺れはレイヤーごとに付くので、別々に揺らしたい所はレイヤーを分けて塗ります。
 - **範囲を膨らませる**: 楕円や矩形をドラッグして、高さ・断面・角度を決めて一度に膨らませます。
 - **まとめて変える**: 複数のレイヤーを選ぶと、ポップ量や揺れを一度に変えられます。
 
@@ -76,81 +76,24 @@
 
 ## 既知の制限
 
-- 透過画像を横から見ると、画像の縁が引き伸ばされて見えます。
-- 揺れはレイヤー単位で計算しています。頂点ごとに異なる揺れ方はしません。
-- ウェイトは 8 ビットで持つので、ポップ量を非常に大きくすると段差が見えることがあります。
+- 透過画像の輪郭ぎりぎりまで塗ると(「アルファから生成」でもそうなります)、横から見たときに輪郭の色が縦に引き伸ばされて見えます。輪郭の外の透明な所まで少しはみ出して塗るか、メッシュ密度を上げると目立たなくなります。
 
-## 開発
+## ビルド
 
 Node.js 20.19 以降(または 22.12 以降)が必要です。
 
 ```sh
 npm install
-npm run dev        # 開発サーバーを起動する
-npm run build      # 型チェックのあと dist/ へ静的ファイルを出力する
-npm run preview    # ビルド結果を確認する
-npm test           # 単体テスト(Vitest)
-npm run e2e        # E2E テスト(Playwright)
+npm run dev       # 開発サーバーを起動する
+npm run build     # dist/ へ静的ファイルを出力する
+npm run preview   # ビルド結果を確認する
 ```
 
-### 構成
+`dist/` の中身は、そのまま任意の静的ホスティングに置いて動かせます。
 
-| ディレクトリ | 役割 |
-| --- | --- |
-| `src/model` | ドキュメントモデル(Project / Document / Layer)、ウェイトマップ、変更通知 |
-| `src/commands` | 変更操作とアンドゥ(100手 / 256MB まで。塗りは 64px タイルの差分で持つ) |
-| `src/paint` | ストローク処理(補間、ブラシ・消しゴム・ぼかし、筆圧)、範囲を膨らませる処理 |
-| `src/physics` | 揺れの計算(レイヤーごとのバネ・ダンパ、固定 120Hz)、揺らし方のパターン、操作の記録 |
-| `src/stage` | three.js の描画。ウェイトをテクスチャ配列にまとめ、頂点シェーダで持ち上げる |
-| `src/storage` | `.pukupop`(旧 `.popstage`)の読み書き、IndexedDB への自動保存 |
-| `src/export` | フレーム単位の書き出し |
-| `src/ui` | 画面の部品(入力、パネル、ダイアログ、3面図) |
-| `src/app.ts` | 各モジュールをつなぐ本体 |
+## 使っている主なライブラリ
 
-`model` / `commands` / `paint` / `physics` / `storage` は DOM と three.js を参照しないので、ブラウザ無しで単体テストできます。
-
-### 画面まわりの定義
-
-次の表のファイルを1か所の元にして、ほかはそこから作ります。部品を足したり名前を変えたりするときは、まずここを直してください。
-
-| 何を | どこに |
-| --- | --- |
-| 画面の要素の id と種類(起動時にまとめて取り、合わなければ止まる。`index.html` との突き合わせは単体テスト) | `src/ui/ids.ts` |
-| コマンド(名前・ショートカット・使える条件)。メニューのキー表記・ツールチップ・ヘルプのキー一覧・キーの処理はここから作る | `src/ui/actions.ts` |
-| 左のツールバーのツール(名前・キー・ヒント)。スマホの下のバーもアイコンと名前はここから | `src/ui/tools.ts` |
-| 左のツールバーの、その場で効く操作のまとまり | `src/ui/actions.ts` の `NAV_ACTIONS` |
-| アイコン(PC とスマホで共通) | `src/ui/icons.ts` |
-| 項目の説明(「?」で開く。`data-help` に説明の id) | `src/ui/help.ts` |
-| スマホのシートへ移す部品(`index.html` の `data-m-slot` と、移す先のタブ) | `src/ui/mobile.ts` の `MOBILE_SLOTS` |
-
-### テスト
-
-- **単体テスト**(`tests/unit`): ウェイトマップ、アンドゥ、ストローク、物理、ファイルの読み書きなど、ブラウザの要らない処理を確かめます。
-- **E2E テスト**(`tests/e2e`): 実際のブラウザで、機能ごとにファイルを分けて確かめます。共通の道具は `tests/e2e/helpers.ts` にあります。
-
-E2E テストはインストール済みの Google Chrome を使い(`channel: 'chrome'`)、描画は SwiftShader で行うので GPU が無くても動きます。見た目の比較に使う基準画像は OS ごとに別のファイルです。使っている OS 用のものが無いときは、初回に `npx playwright test --update-snapshots` で作ってください。
-
-### 公開
-
-`main` へ push すると、GitHub Actions(`.github/workflows/deploy-pages.yml`)がテストとビルドを行い、GitHub Pages へ公開します。初回だけ、リポジトリの Settings → Pages で Source を「GitHub Actions」にしてください。
-
-ビルド結果は相対パスで参照し合うので、`dist/` の中身をそのまま任意の静的ホスティングに置いても動きます。
-
-### アイコンと service worker
-
-- アプリアイコンは `scripts/icon-art.mjs` の SVG から作ります。絵を変えたら `node scripts/make-icons.mjs` で `public/icons/` を作り直してください。
-- service worker は `public/sw.js` です。本番ビルドのときだけ登録します(`?e2e` 付きのときも登録しません)。
-
-### 使っている主なライブラリ
-
-| 用途 | ライブラリ |
-| --- | --- |
-| 描画 | [three.js](https://threejs.org/) |
-| 画面 | [Tailwind CSS](https://tailwindcss.com/)、[daisyUI](https://daisyui.com/) |
-| 動画の書き出し | [Mediabunny](https://mediabunny.dev/)(WebCodecs) |
-| GIF の書き出し | [gifenc](https://github.com/mattdesl/gifenc) |
-| ZIP | [fflate](https://github.com/101arrowz/fflate) |
-| ビルド・テスト | [Vite](https://vite.dev/)、[Vitest](https://vitest.dev/)、[Playwright](https://playwright.dev/) |
+[three.js](https://threejs.org/)、[Tailwind CSS](https://tailwindcss.com/)、[daisyUI](https://daisyui.com/)、[Mediabunny](https://mediabunny.dev/)、[gifenc](https://github.com/mattdesl/gifenc)、[fflate](https://github.com/101arrowz/fflate)、[Vite](https://vite.dev/)
 
 ## ライセンス
 
