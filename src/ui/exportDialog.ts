@@ -2,18 +2,19 @@
 import type { App } from '../app';
 import { availableFormats, canEncodeAt, estimateExportBytes, EXPORT_MEMORY_WARN, FORMAT_INFO, even, type ExportFormat } from '../export/encoders';
 import type { ExportSettings } from '../export/exporter';
-import { $, ask, saveFile, toast, formatBytes } from './dom';
+import { ask, saveFile, toast, formatBytes } from './dom';
+import { ui } from './ids';
 import { persistControls } from '../storage/prefs';
 import { takeSeconds } from '../physics/take';
 
 const FORMATS: ExportFormat[] = ['mp4', 'webm', 'webm-alpha', 'png', 'gif'];
 
 export function bindExportDialog(app: App): { open: () => void } {
-  const dlg = $<HTMLDialogElement>('exportDialog');
-  const fmt = $<HTMLSelectElement>('exFormat'), W = $<HTMLInputElement>('exW'), H = $<HTMLInputElement>('exH');
-  const dur = $<HTMLInputElement>('exDur'), loop = $<HTMLInputElement>('exLoop');
-  const bgColor = $<HTMLInputElement>('exBgColor'), progress = $<HTMLProgressElement>('exProgress');
-  const status = $('exStatus'), note = $('exNote'), start = $<HTMLButtonElement>('exStart'), cancel = $<HTMLButtonElement>('exCancel');
+  const dlg = ui.exportDialog;
+  const fmt = ui.exFormat, W = ui.exW, H = ui.exH;
+  const dur = ui.exDur, loop = ui.exLoop;
+  const bgColor = ui.exBgColor, progress = ui.exProgress;
+  const status = ui.exStatus, note = ui.exNote, start = ui.exStart, cancel = ui.exCancel;
   let available: Record<ExportFormat, boolean> | null = null;
   let running: AbortController | null = null;
   let initialized = false;
@@ -33,14 +34,14 @@ export function bindExportDialog(app: App): { open: () => void } {
     const f = fmt.value as ExportFormat, info = FORMAT_INFO[f];
     const alphaRadio = document.querySelector<HTMLInputElement>('input[name=exBg][value=alpha]')!;
     alphaRadio.disabled = !info.alpha;
-    $('exBgAlphaLabel').classList.toggle('opacity-40', !info.alpha);
+    ui.exBgAlphaLabel.classList.toggle('opacity-40', !info.alpha);
     if (!info.alpha && alphaRadio.checked) setRadio('exBg', 'color');
     const T = app.project.autoSwing.period;
     const rec = app.recorder.seconds;
-    $('exRecLen').textContent = rec > 0.5 ? `(直近 ${rec.toFixed(1)} 秒を記録中)` : '(記録がありません)';
+    ui.exRecLen.textContent = rec > 0.5 ? `(直近 ${rec.toFixed(1)} 秒を記録中)` : '(記録がありません)';
     document.querySelector<HTMLInputElement>('input[name=exMotion][value=replay]')!.disabled = rec < 0.5;
     const L = takeSeconds(app.project.take);
-    $('exTakeLen').textContent = L > 0 ? `(1周 ${L.toFixed(1)} 秒)` : '(記録がありません)';
+    ui.exTakeLen.textContent = L > 0 ? `(1周 ${L.toFixed(1)} 秒)` : '(記録がありません)';
     const loopRadio = document.querySelector<HTMLInputElement>('input[name=exMotion][value=loop]')!;
     loopRadio.disabled = L <= 0;
     if (loopRadio.disabled && loopRadio.checked) setRadio('exMotion', 'auto');
@@ -79,7 +80,7 @@ export function bindExportDialog(app: App): { open: () => void } {
   fmt.addEventListener('change', update);
   loop.addEventListener('change', update);
   document.querySelectorAll('input[name=exMotion], input[name=exBg]').forEach(r => r.addEventListener('change', update));
-  $<HTMLSelectElement>('exSizePreset').addEventListener('change', e => {
+  ui.exSizePreset.addEventListener('change', e => {
     const v = (e.target as HTMLSelectElement).value;
     if (!v) return;
     const [w, h] = v === 'view' ? viewSize() : v.split('x').map(Number);
@@ -113,7 +114,7 @@ export function bindExportDialog(app: App): { open: () => void } {
     progress.classList.toggle('hidden', !on);
     dlg.querySelectorAll<HTMLInputElement | HTMLSelectElement>('#exportForm input, #exportForm select').forEach(el => { el.disabled = on; });
     if (!on) update();
-    $('sRec').textContent = on ? '● 書き出し中' : '';
+    ui.sRec.textContent = on ? '● 書き出し中' : '';
   }
 
   /** 書き出してよいかを確かめる(確認の待ち中に2回目のクリックや「閉じる」が通らないよう、呼ぶ側でボタンを止めておく) */

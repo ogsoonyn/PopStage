@@ -1,12 +1,8 @@
 /** DOM まわりの小さな道具。 */
-export function $<T extends HTMLElement = HTMLElement>(id: string): T {
-  const el = document.getElementById(id);
-  if (!el) throw new Error(`#${id} not found`);
-  return el as T;
-}
+import { ui } from './ids';
 
 export function toast(message: string, kind: 'info' | 'success' | 'error' | 'warning' = 'info', ms = 3500): void {
-  const box = $('toasts');
+  const box = ui.toasts;
   const el = document.createElement('div');
   el.className = `alert alert-${kind} py-2 px-3 text-sm shadow`;
   el.setAttribute('role', kind === 'error' ? 'alert' : 'status');
@@ -19,17 +15,17 @@ interface AskOptions { title: string; body?: string; yes?: string; no?: string |
 
 /** 確認・数値入力用のモーダル。ブラウザ標準の confirm/prompt は使わない。 */
 export function ask(o: AskOptions): Promise<{ ok: boolean; value?: number }> {
-  const dlg = $<HTMLDialogElement>('askDialog');
-  $('askTitle').textContent = o.title;
-  $('askBody').textContent = o.body ?? '';
-  const yes = $<HTMLButtonElement>('askYes'), no = $<HTMLButtonElement>('askNo');
+  const dlg = ui.askDialog;
+  ui.askTitle.textContent = o.title;
+  ui.askBody.textContent = o.body ?? '';
+  const yes = ui.askYes, no = ui.askNo;
   yes.textContent = o.yes ?? 'OK';
   no.textContent = o.no ?? 'キャンセル';
   no.classList.toggle('hidden', o.no === null);
-  const wrap = $('askInputWrap'), input = $<HTMLInputElement>('askInput');
+  const wrap = ui.askInputWrap, input = ui.askInput;
   wrap.classList.toggle('hidden', !o.input);
   if (o.input) {
-    $('askInputLabel').textContent = o.input.label;
+    ui.askInputLabel.textContent = o.input.label;
     Object.assign(input, { value: String(o.input.value), min: String(o.input.min), max: String(o.input.max), step: String(o.input.step ?? 1) });
   }
   return new Promise(resolve => {
@@ -70,7 +66,7 @@ export async function retryWithClick<T>(open: () => Promise<T>, label: string): 
 }
 
 export function setBusy(on: boolean): void {
-  const el = $('busy');
+  const el = ui.busy;
   el.classList.toggle('hidden', !on);
   el.classList.toggle('flex', on);
 }

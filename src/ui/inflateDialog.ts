@@ -6,14 +6,14 @@ import type { App, InflateArea, InflateSettings } from '../app';
 import type { InflateProfile, InflateBlend } from '../paint/inflate';
 import { LIMITS } from '../model/project';
 import { popToSlider, sliderToPop } from './popSlider';
-import { $ } from './dom';
+import { ui } from './ids';
 
 export function bindInflateDialog(app: App): void {
-  const dlg = $<HTMLDialogElement>('inflateDialog');
-  const kind = $<HTMLSelectElement>('inflKind'), w = $<HTMLInputElement>('inflW'), h = $<HTMLInputElement>('inflH');
-  const height = $<HTMLInputElement>('inflHeight'), heightN = $<HTMLInputElement>('inflHeightN');
-  const soft = $<HTMLInputElement>('inflSoft'), softN = $<HTMLInputElement>('inflSoftN');
-  const blend = $<HTMLSelectElement>('inflBlend');
+  const dlg = ui.inflateDialog;
+  const kind = ui.inflKind, w = ui.inflW, h = ui.inflH;
+  const height = ui.inflHeight, heightN = ui.inflHeightN;
+  const soft = ui.inflSoft, softN = ui.inflSoftN;
+  const blend = ui.inflBlend;
   const profiles = [...document.querySelectorAll<HTMLInputElement>('input[name=inflProfile]')];
   let queued: { settings?: Partial<InflateSettings>; area?: Partial<InflateArea> } = {}, scheduled = false;
 
@@ -44,8 +44,8 @@ export function bindInflateDialog(app: App): void {
     if (scheduled || queued.settings || queued.area) flush(); // まだ反映していない入力があれば、先に反映してから確定する
     app.endInflate(apply);
   }
-  $('inflApply').addEventListener('click', () => finish(true));
-  $('inflCancel').addEventListener('click', () => finish(false));
+  ui.inflApply.addEventListener('click', () => finish(true));
+  ui.inflCancel.addEventListener('click', () => finish(false));
   // ヘルプなど別のダイアログを Esc で閉じたときは、プレビューを捨てない
   window.addEventListener('keydown', e => { if (e.key === 'Escape' && dlg.open && !document.querySelector('dialog[open]:modal')) { e.preventDefault(); finish(false); } });
 
@@ -55,7 +55,7 @@ export function bindInflateDialog(app: App): void {
   function fill(): void {
     const s = app.inflateState; if (!s) return;
     const layer = app.store.findLayer(s.layerId)?.layer, st = s.settings;
-    $('inflTarget').textContent = `レイヤー「${layer?.name ?? ''}」に重ねます。ドラッグし直すと範囲を描き直せます。`;
+    ui.inflTarget.textContent = `レイヤー「${layer?.name ?? ''}」に重ねます。ドラッグし直すと範囲を描き直せます。`;
     set(kind, st.shape);
     set(w, String(Math.round(s.area.w))); set(h, String(Math.round(s.area.h)));
     set(height, String(popToSlider(st.height))); set(heightN, String(st.height));
@@ -63,7 +63,7 @@ export function bindInflateDialog(app: App): void {
     set(blend, st.blend);
     for (const r of profiles) r.checked = r.value === st.profile;
     // 高さ = ウェイト × ポップ量。このレイヤーのポップ量を超えるときは、新しいレイヤーに作ることを知らせる
-    const note = $('inflNote'), pop = s.sourcePop;
+    const note = ui.inflNote, pop = s.sourcePop;
     note.textContent = s.newLayer
       ? `高さがこのレイヤーのポップ量(${pop}px)を超えるので、新しいレイヤー「${s.newLayer.name}」(ポップ量 ${s.newLayer.pop}px)に作ります。このレイヤーは変わりません。`
       : s.limited

@@ -9,11 +9,11 @@
 import type { App } from '../app';
 import { defaultMultiCamera, defaultOrthoView } from '../model/project';
 import type { SubViewKind, ViewRect } from '../stage/stage';
-import { $ } from './dom';
+import { ui } from './ids';
 import { fineFactor, wheelFineFactor, wheelDelta } from './fine';
 
 export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: () => void } {
-  const panel = $('multiView');
+  const panel = ui.multiView;
   const cells = [...panel.querySelectorAll<HTMLElement>('.mv-cell')];
 
   function layout(): void {

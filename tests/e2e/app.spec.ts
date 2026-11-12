@@ -2027,3 +2027,50 @@ test('重ね方「最大」: 重なった膨らみは高い方だけになり、
   await page.locator('#pBlend').selectOption('add');
   expect(await depth()).toBe(add);
 });
+
+test('コマンドの表から、メニューのキー表記・ボタンのツールチップ・ヘルプのキー一覧を作る。記録・再生はメニューからも使える', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  // メニューのキー表記(表の最初のキー)と aria-keyshortcuts
+  await expect(page.locator('#menubar button[data-cmd=undo] kbd')).toHaveText('Ctrl+Z');
+  await expect(page.locator('#menubar button[data-cmd=redo]')).toHaveAttribute('aria-keyshortcuts', 'Control+Shift+Z Control+Y');
+  await expect(page.locator('#menubar button[data-cmd=toggleGrid] kbd')).toHaveText('Shift+G');
+  await expect(page.locator('#menubar button[data-cmd=toggleRecording] kbd')).toHaveText('R');
+  // ボタンのツールチップ(名前・キー・説明)
+  await expect(page.locator('#toolOptions button[data-cmd=undo]')).toHaveAttribute('title', '元に戻す (Ctrl+Z)');
+  await expect(page.locator('#takeRec')).toHaveAttribute('title', /^操作の記録 \(R\): /);
+  await expect(page.locator('.tool[data-tool=erase]')).toHaveAttribute('title', '消しゴム (E、ブラシ中は Alt)');
+  // ヘルプのキー一覧
+  const keys = page.locator('#helpKeys');
+  await expect(keys).toContainText('やり直す');
+  await expect(keys).toContainText('Ctrl+Shift+Z / Ctrl+Y');
+  await expect(keys).toContainText('B / E / S / I / G / Y / V / H');
+  await expect(keys).not.toContainText('Ctrl+Shift+Alt+P'); // デバッグ用は出さない
+
+  // アニメーションのメニューから記録を始めて止め、再生する。記録中は再生と消すを押せない
+  await app(a => a.setPaused(false));
+  const menu = page.locator('#menubar .dropdown', { hasText: 'アニメーション' });
+  await menu.locator('[role=button]').click();
+  await expect(menu.locator('button[data-cmd=togglePlay]')).toBeDisabled();
+  await menu.locator('button[data-cmd=toggleRecording]').click();
+  expect(await app(a => a.takeState)).toBe('recording');
+  await expect(page.locator('#takePlay')).toBeDisabled();
+  await expect(page.locator('#takeClear')).toBeDisabled();
+  await dragOnStage(page, [0.5, 0.5], [0.6, 0.55], 'right');
+  await page.waitForTimeout(1100);
+  await page.locator('#takeBadge').click();
+  await expect.poll(() => app(a => !!a.project.take)).toBe(true);
+  await menu.locator('[role=button]').click();
+  await menu.locator('button[data-cmd=togglePlay]').click();
+  expect(await app(a => a.takeState)).toBe('playing');
+  await page.locator('#takeBadge').click();
+  expect(await app(a => a.takeState)).toBe('idle');
+  // メニューの外のボタンは、キーボードで押してもフォーカスを残す(続けて押せる)
+  await openTab(page, 'anim');
+  await page.locator('#takeRec').focus();
+  await page.keyboard.press('Enter');
+  expect(await app(a => a.takeState)).toBe('recording');
+  await expect(page.locator('#takeRec')).toBeFocused();
+  await page.keyboard.press('Enter');
+  expect(await app(a => a.takeState)).toBe('idle');
+});

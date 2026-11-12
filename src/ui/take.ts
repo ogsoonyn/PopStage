@@ -1,25 +1,22 @@
 /**
  * 操作の記録・ループ再生とキーフレームの部品(右のパネルの「アニメーション」。スマホではシートの「揺れ」タブへ移す)と、
  * 3Dビューの左上の印。説明は文章で並べず、状態は短いラベル、詳しいことはツールチップに置く。
+ * 記録・再生・消すのボタンはコマンド(data-cmd。押したときの処理・使えるか・ツールチップは ui/actions.ts)で、ここは表示だけを変える。
  */
 import type { App } from '../app';
-import { $ } from './dom';
+import { ui } from './ids';
 import { KEY_SECONDS, MAX_KEYS, TAKE_MIN_SECONDS, takeSeconds, type KeyMode } from '../physics/take';
 
 const sec = (v: number) => `${v.toFixed(1)}秒`;
 
 export function bindTakeControls(app: App): void {
-  const rec = $<HTMLButtonElement>('takeRec'), play = $<HTMLButtonElement>('takePlay'), clear = $<HTMLButtonElement>('takeClear');
-  const info = $('takeInfo'), badge = $<HTMLButtonElement>('takeBadge');
+  const { takeRec: rec, takePlay: play, takeInfo: info, takeBadge: badge } = ui;
   const label = (b: HTMLElement) => b.querySelector<HTMLElement>('[data-label]')!;
 
-  rec.addEventListener('click', () => app.toggleRecording());
-  play.addEventListener('click', () => app.togglePlay());
-  clear.addEventListener('click', () => app.clearTake());
   badge.addEventListener('click', () => { if (app.takeState === 'recording') app.stopRecording(); else app.stopTake(); });
 
   /* ---------- キーフレーム ---------- */
-  const list = $<HTMLOListElement>('keyList'), add = $<HTMLButtonElement>('keyAdd'), make = $<HTMLButtonElement>('keyMake');
+  const { keyList: list, keyAdd: add, keyMake: make } = ui;
   add.addEventListener('click', () => app.addKey());
   make.addEventListener('click', () => app.makeKeyTake());
   // 行の中のボタン・入力はまとめて受ける(行は作り直すことがある)
@@ -68,19 +65,16 @@ export function bindTakeControls(app: App): void {
       if (document.activeElement !== s && +s.value !== k.seconds) s.value = k.seconds.toFixed(1);
       if (m.value !== k.mode) m.value = k.mode;
     });
-    $('keyCount').textContent = `${keys.length}/${MAX_KEYS}`;
+    ui.keyCount.textContent = `${keys.length}/${MAX_KEYS}`;
     add.disabled = keys.length >= MAX_KEYS || !app.doc;
     const total = keys.reduce((a, k) => a + k.seconds, 0);
     make.disabled = keys.length < 2 || total < TAKE_MIN_SECONDS - 1e-9 || !app.doc || app.exporting || app.takeState === 'recording';
-    $('keyTotal').textContent = keys.length < 2 ? '2つ以上' : total < TAKE_MIN_SECONDS - 1e-9 ? `1周 ${TAKE_MIN_SECONDS}秒以上` : `1周 ${sec(total)}`;
+    ui.keyTotal.textContent = keys.length < 2 ? '2つ以上' : total < TAKE_MIN_SECONDS - 1e-9 ? `1周 ${TAKE_MIN_SECONDS}秒以上` : `1周 ${sec(total)}`;
   }
 
   let shown = '';
   function refresh(): void {
     const s = app.takeState, has = !!app.project.take, len = app.takeLength;
-    rec.disabled = !app.doc || app.exporting;
-    play.disabled = !has || s === 'recording' || app.exporting;
-    clear.disabled = !has || s === 'recording';
     label(rec).textContent = s === 'recording' ? '停止' : '記録';
     rec.setAttribute('aria-pressed', String(s === 'recording'));
     play.querySelector('[data-icon]')!.textContent = s === 'playing' ? '■' : '▶';
