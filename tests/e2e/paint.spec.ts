@@ -338,6 +338,12 @@ test('全体をぼかす: プレビュー中も視点は回せる。塗る・ツ
   const overlay = await app(a => a.view.overlay);
   await page.keyboard.press('w');
   expect(await app(a => a.view.overlay)).toBe(!overlay);
+  // 半径のスライダーの上の Home はスライダーに任せる(視点リセットにしない)
+  const yaw1 = await app(a => a.project.camera.yaw);
+  await page.locator('#blurRadius').focus();
+  await page.keyboard.press('Home');
+  await expect(page.locator('#blurRadius')).toHaveValue('0');
+  expect(await app(a => a.project.camera.yaw)).toBe(yaw1);
   // Esc でキャンセルし、元に戻る
   await page.keyboard.press('Escape');
   await expect(page.locator('#blurDialog')).toHaveJSProperty('open', false);

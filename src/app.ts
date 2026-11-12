@@ -687,6 +687,7 @@ export class App extends Emitter<AppEvents> {
   /** 範囲を描き始める(ドラッグの最初の動きで呼ぶ) */
   beginInflateArea(area: InflateArea): boolean {
     const layer = this.activeLayer, doc = this.doc;
+    if (this.previewingBlur) { toast('「全体をぼかす」を適用するかキャンセルしてから膨らませてください。', 'warning'); return false; }
     if (!layer || !doc || this.busy) return false;
     if (!layer.visible) { toast('非表示のレイヤーには塗れません。', 'warning'); return false; }
     const st = this.inflateSettings;
@@ -868,7 +869,9 @@ export class App extends Emitter<AppEvents> {
       return;
     }
     const pr = PRESETS[name], label = `プリセット「${pr.label}」`;
-    const others = this.doc?.layers.some(o => o.id !== l.id && o.visible && o.physics.enabled) ?? false;
+    // ほかに揺れているレイヤー(表示中・揺れがオン・塗ってある)があるか。膨らませるのプレビューで仮に入れたレイヤーは数えない
+    const temp = this.inflateSession?.newLayer?.id;
+    const others = this.doc?.layers.some(o => o.id !== l.id && o.id !== temp && o.visible && o.physics.enabled && o.weights.data.some(v => v > 0)) ?? false;
     const changePeriod = !others && this.project.autoSwing.period !== pr.period;
     this.history.execute(new Batch(label, [
       PatchLayer.from(this.store, l.id, { physics: applyPreset(l.physics, name) }, label),

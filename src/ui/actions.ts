@@ -124,6 +124,9 @@ export function keyString(e: KeyboardEvent): string {
   return [(e.ctrlKey || e.metaKey) && 'Ctrl', e.shiftKey && 'Shift', e.altKey && 'Alt', k].filter(Boolean).join('+');
 }
 
+/** スライダーにフォーカスがあるときは、スライダーを動かすキーをショートカットに使わない */
+const SLIDER_KEYS = new Set(['Home', 'End', 'PageUp', 'PageDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
+
 const ariaKeys = (keys: string[]) => keys.map(k => k.replace(/\bCtrl\b/g, 'Control')).join(' ');
 
 const TOOL_BTN = 'tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0.5 whitespace-nowrap';
@@ -241,6 +244,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   window.addEventListener('keydown', e => {
     // 膨らませるのパネルを開いている間も、表示の切り替えなどは効かせる(できない操作は enabled で止める)
     if (isTyping(e) || modalOpen()) return;
+    if (e.target instanceof HTMLInputElement && e.target.type === 'range' && SLIDER_KEYS.has(e.key)) return;
     const name = byKey.get(keyString(e));
     if (!name) return;
     e.preventDefault();

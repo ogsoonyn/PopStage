@@ -500,18 +500,22 @@ test('プリセットで自動揺らしの周期を変えるのは、揺れて�
   // 揺れているレイヤーが1枚: 周期もおすすめの値(ばいんばいん 1.8 秒)になる
   await page.locator('#pPreset').selectOption('bain');
   expect(await app(a => a.project.autoSwing.period)).toBe(1.8);
-  // もう1枚、揺れるレイヤーを足すと、周期は変えずに知らせる
-  await app(a => a.addLayer());
+  // 何も塗っていないレイヤーは、揺れているとは数えない
+  await app(a => { a.addLayer(); a.setActiveLayer(a.doc.layers[0].id); });
   await page.locator('#pPreset').selectOption('zun');
-  expect(await app(a => [a.activeLayer.physics.preset, a.project.autoSwing.period])).toEqual(['zun', 1.8]);
+  expect(await app(a => a.project.autoSwing.period)).toBe(1.2);
+  // 塗ってあるレイヤー(複製)がもう1枚揺れていると、周期は変えずに知らせる
+  await app(a => a.duplicateLayer());
+  await page.locator('#pPreset').selectOption('bain');
+  expect(await app(a => [a.activeLayer.physics.preset, a.project.autoSwing.period])).toEqual(['bain', 1.2]);
   await expect(page.locator('#toasts')).toContainText('周期は変えていません');
   // ほかのレイヤーの揺れを切ると、また周期も変える
   await app(a => { const o = a.doc.layers[0]; a.store.patchLayer(o.id, { physics: { ...o.physics, enabled: false } }); });
-  await page.locator('#pPreset').selectOption('bain');
   await page.locator('#pPreset').selectOption('zun');
   expect(await app(a => a.project.autoSwing.period)).toBe(1.2);
+  await page.locator('#pPreset').selectOption('bain');
+  expect(await app(a => a.project.autoSwing.period)).toBe(1.8);
 });
-
 test('fps・頂点数は ?debug のときだけ出す。キーフレームの上書きは行の末尾のアイコン。メニューは矢印キーでたどれる', async ({ page }) => {
   await boot(page);
   await expect(page.locator('#sFps')).toBeHidden();
@@ -544,4 +548,33 @@ test('fps・頂点数は ?debug のときだけ出す。キーフレームの上
   await page.keyboard.press('Home');
   expect(await page.evaluate(() => (window as any).popstage.project.camera.yaw)).toBe(yaw);
   await expect(file.locator('[role=menuitem]').first()).toBeFocused();
+});
+
+test('膨らみの既定値は覚える。プレビュー中に変えてキャンセルした値は覚えず、適用した値は覚える', async ({ page }) => {
+  await boot(page);
+  const profile = () => page.evaluate(() => (window as any).popstage.inflateSettings.profile);
+  await page.locator('#view').focus();
+  await page.keyboard.press('i');
+  await page.locator('#tInflProfile').selectOption('cushion');
+  await page.waitForTimeout(400); // 書き込みは間引いている
+  await page.reload();
+  await page.waitForFunction(() => (window as any).popstage?.doc);
+  expect(await profile()).toBe('cushion');
+  // プレビュー中に変えてキャンセル: 覚えない
+  await page.locator('#view').focus();
+  await page.keyboard.press('i');
+  await dragOnStage(page, [0.4, 0.4], [0.6, 0.6]);
+  await page.locator('input[name=inflProfile][value=cone]').check();
+  await page.locator('#inflCancel').click();
+  expect(await profile()).toBe('cushion');
+  await expect(page.locator('#tInflProfile')).toHaveValue('cushion');
+  // プレビュー中に変えて適用: 覚える
+  await page.locator('#view').focus();
+  await dragOnStage(page, [0.4, 0.4], [0.6, 0.6]);
+  await page.locator('input[name=inflProfile][value=cone]').check();
+  await page.locator('#inflApply').click();
+  await page.waitForTimeout(400);
+  await page.reload();
+  await page.waitForFunction(() => (window as any).popstage?.doc);
+  expect(await profile()).toBe('cone');
 });
