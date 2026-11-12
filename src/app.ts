@@ -25,6 +25,8 @@ import { createSampleDocument } from './ui/sample';
 import { ask, saveFile, setBusy, toast } from './ui/dom';
 
 export type Tool = 'brush' | 'erase' | 'smooth' | 'inflate' | 'grab' | 'shake' | 'view' | 'pan';
+/** ウェイトを塗るツール */
+export const PAINT_TOOLS: readonly Tool[] = ['brush', 'erase', 'smooth', 'inflate'];
 export type PressureMode = 'strength' | 'size' | 'none';
 /** 操作の記録の状態。記録中・ループ再生中・どちらでもない */
 export type TakeState = 'idle' | 'recording' | 'playing';
@@ -38,9 +40,13 @@ export interface InflateSettings {
   /** 頂上の高さ(元画像のピクセル)。null はレイヤーのポップ量と同じ */
   height: number | null;
   softness: number; // 0〜1
+  /** 形の傾き(度、-90〜90)。正で時計回り */
+  angle: number;
   profile: InflateProfile;
   blend: InflateBlend;
 }
+/** 形の傾きの範囲(度) */
+export const INFLATE_ANGLE = { min: -90, max: 90 };
 export interface InflateState {
   /** 範囲を描いたレイヤー */
   readonly layerId: string;
@@ -92,6 +98,11 @@ export interface PerfProbe {
 const PROJECT_TYPES: FilePickerAcceptType[] = [{ description: 'PukuPop プロジェクト', accept: { 'application/zip': [FILE_EXTENSION] } }];
 const AUTOSAVE_DELAY = 2000;
 
+export type OverlayMode = 'off' | 'selected' | 'all';
+
+/** 全レイヤー表示で、選んでいないレイヤーを重ねる濃さ(選んだレイヤーを 1 として) */
+const OVERLAY_DIM = 0.4;
+
 export class App extends Emitter<AppEvents> {
   readonly store = new Store();
   readonly history = new History(this.store);
@@ -101,13 +112,20 @@ export class App extends Emitter<AppEvents> {
 
   tool: Tool = 'brush';
   activeLayerId: string | null = null;
-  view: ViewOptions = { overlay: true, grid: false, fade: false, flat: false, multi: false };
+  /**
+   * 選んでいるレイヤー(一覧で Ctrl / Shift で足したもの)。activeLayerId はその中の「最後に押したレイヤー」で、塗りや膨らみの先になる。
+   * 画面だけの状態で、アンドゥにも保存にも入れない
+   */
+  selectedLayerIds = new Set<string>();
+  view: ViewOptions = { overlay: true, overlayAll: false, grid: false, fade: false, flat: false, multi: false };
   /** 3面図の「自由角度」の視点。project.multiCamera に置き、ファイルにも保存する */
   get multiCam(): CameraState { return this.project.multiCamera; }
   set multiCam(c: CameraState) { this.project.multiCamera = c; }
   /** 3面図の正面・右から・下からの拡大率と平行移動(3つで共有。画面だけの設定で保存しない) */
   multiOrtho: OrthoView = defaultOrthoView();
   paused = false;
+  /** 塗るツール(ブラシ・消しゴム・ぼかし・膨らみ)や「全体をぼかす」を使い始めたら、重ね表示を自動で入れる。ブラウザに覚える設定 */
+  autoOverlay = true;
   /**
    * 「揺らす」ツールで画像を振った量(ワールド座標)。カメラは画像に付いて動くので画面上の位置は
    * 変わらないが、物理には平行移動と同じ動きとして伝える。画面だけの値で保存しない
@@ -115,7 +133,7 @@ export class App extends Emitter<AppEvents> {
   shake: Vec3 = { x: 0, y: 0, z: 0 };
   brush: BrushOptions = { size: 64, strength: 0.3, hardness: 0, pressure: 'strength' };
   /** 前回の「膨らませる」の設定(次に範囲を描いたときの初期値) */
-  inflateSettings: InflateSettings = { shape: 'ellipse', height: null, softness: 1, profile: 'dome', blend: 'max' };
+  inflateSettings: InflateSettings = { shape: 'ellipse', height: null, softness: 1, angle: 0, profile: 'dome', blend: 'max' };
   imageCanvas: HTMLCanvasElement | null = null;
   /** 表示用の画像の一辺の上限 */
   private get displaySize(): number { return Math.min(4096, this.stage.maxTextureSize); }
@@ -130,7 +148,7 @@ export class App extends Emitter<AppEvents> {
    * 塗り・膨らませる範囲のドラッグ中は止めて(held)、当たり判定がずれないようにする。設定の切り替えで飛ぶ分は fix でならす
    */
   private base = { shown: { x: 0, y: 0, z: 0 }, live: { x: 0, y: 0, z: 0 }, fix: { x: 0, y: 0, z: 0 }, key: '', held: null as Vec3 | null };
-  /** レイヤーごとのウェイトの重心(元画像のピクセル、ためて膨らむ2 の広がりの中心)。ウェイトが変わったら捨てる */
+  /** レイヤーごとのウェイトの重心(元画像のピクセル、塗った範囲の広がりの中心)。ウェイトが変わったら捨てる */
   private centers = new Map<string, { x: number; y: number }>();
   /** まだ GPU へ送っていない、レイヤーごとの変わった矩形 */
   private pendingUploads = new Map<string, Rect>();
@@ -176,6 +194,11 @@ export class App extends Emitter<AppEvents> {
   get project(): Project { return this.store.project; }
   get activeLayer(): Layer | undefined { return this.activeLayerId ? this.store.findLayer(this.activeLayerId)?.layer : undefined; }
   get activeIndex(): number { return this.activeLayerId ? this.store.findLayer(this.activeLayerId)?.index ?? -1 : -1; }
+  /** 選んでいるレイヤー(一覧の下から順)。レイヤータブの変更や、ウェイトの一括処理の対象 */
+  get selectedLayers(): Layer[] { return this.doc?.layers.filter(l => this.selectedLayerIds.has(l.id)) ?? []; }
+  get multiSelected(): boolean { return this.selectedLayerIds.size > 1; }
+  /** ウェイトの重ね表示: OFF / 選んでいるレイヤー / 全レイヤー */
+  get overlayMode(): OverlayMode { return !this.view.overlay ? 'off' : this.view.overlayAll ? 'all' : 'selected'; }
   get imageLong(): number { const d = this.doc; return d ? Math.max(d.image.width, d.image.height) : 1; }
 
   /* ---------- Store → Stage ---------- */
@@ -191,6 +214,7 @@ export class App extends Emitter<AppEvents> {
     s.on('layer', ({ layerId, keys }) => {
       const f = s.findLayer(layerId); if (!f) return;
       if (keys.includes('pop') || keys.includes('visible') || keys.includes('blend')) this.stage.setLayerParams(f.index, f.layer);
+      if (keys.includes('visible') && this.view.overlayAll) this.syncView(); // 全レイヤー表示では、隠したレイヤーを重ねない
     });
     s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); this.syncKeyDraft(true); });
     s.on('layers', () => {
@@ -204,7 +228,13 @@ export class App extends Emitter<AppEvents> {
       this.perf?.event({ t, d: performance.now() - t, kind: 'layers', detail: 'レイヤー構成の変更(ウェイトの全面転送)' });
       this.pendingUploads.clear(); // 全レイヤーを送り直したので、溜めていた分は要らない
       if (!this.activeLayerId || !s.findLayer(this.activeLayerId)) this.setActiveLayer(doc.layers[0]?.id ?? null);
-      else this.syncView();
+      else {
+        // 消えたレイヤーを選択から外す(アンドゥで足し直したレイヤーは選び直さない)
+        const before = this.selectedLayerIds.size;
+        for (const id of [...this.selectedLayerIds]) if (!s.findLayer(id)) this.selectedLayerIds.delete(id);
+        this.syncView();
+        if (this.selectedLayerIds.size !== before) this.emit('active', this.activeLayerId);
+      }
     });
     s.on('weights', ({ layerId, rect }) => {
       this.pngCache.delete(layerId);
@@ -257,30 +287,88 @@ export class App extends Emitter<AppEvents> {
   }
 
   syncView(): void {
-    this.stage.setView(this.view, this.activeIndex);
+    const layers = this.doc?.layers ?? [], mode = this.overlayMode, all = this.selectedLayerIds.size >= layers.length;
+    // 選択中: 選んだレイヤーだけ(隠していても塗れるので出す)。全レイヤー: 表示中のものを全部出し、選んだもの以外を薄くする
+    const show = layers.map(l => {
+      const sel = this.selectedLayerIds.has(l.id);
+      if (mode === 'selected') return sel ? 1 : 0;
+      if (mode === 'all') return !l.visible ? 0 : sel || all ? 1 : OVERLAY_DIM;
+      return 0;
+    });
+    this.stage.setView(this.view, show);
     this.emit('view', undefined);
   }
 
   /* ---------- 状態の切り替え ---------- */
 
-  setTool(t: Tool): void { this.tool = t; this.emit('tool', t); }
+  /** auto を false にすると、塗るツールでも重ね表示を自動で入れない(起動時に前回のツールを戻すとき) */
+  setTool(t: Tool, auto = true): void {
+    const changed = t !== this.tool;
+    this.tool = t;
+    this.emit('tool', t);
+    // 選び直しでは入れない(手で切った重ね表示を戻さない)。受け手が別のツールに戻したときも入れない(スマホで画像を開いたとき)
+    if (auto && changed && this.tool === t && PAINT_TOOLS.includes(t)) this.autoShowOverlay();
+  }
 
+  setAutoOverlay(on: boolean): void { this.autoOverlay = on; this.emit('view', undefined); }
+
+  /** 塗りが見えるよう重ね表示を入れる。塗るツールから離れても切らない */
+  private autoShowOverlay(): void {
+    if (this.autoOverlay && !this.view.overlay) this.setOverlayMode('selected');
+  }
+
+  /** そのレイヤーだけを選ぶ */
   setActiveLayer(id: string | null): void {
     this.activeLayerId = id;
+    this.selectedLayerIds = new Set(id ? [id] : []);
     this.syncView();
     this.emit('active', id);
+  }
+
+  /**
+   * 複数のレイヤーを選ぶ。primary は最後に押したレイヤー(塗りの先)で、ids に入っていなければ足す。
+   * 無いレイヤーの id は無視する
+   */
+  selectLayers(ids: Iterable<string>, primary: string): void {
+    if (!this.store.findLayer(primary)) return;
+    const set = new Set([...ids].filter(id => this.store.findLayer(id)));
+    set.add(primary);
+    this.activeLayerId = primary;
+    this.selectedLayerIds = set;
+    this.syncView();
+    this.emit('active', primary);
+  }
+
+  /** 全レイヤーを選ぶ(最後に押したレイヤーはそのまま) */
+  selectAllLayers(): void {
+    const doc = this.doc; if (!doc || !this.activeLayerId) return;
+    this.selectLayers(doc.layers.map(l => l.id), this.activeLayerId);
+  }
+
+  setOverlayMode(mode: OverlayMode): void {
+    this.view.overlay = mode !== 'off';
+    this.view.overlayAll = mode === 'all';
+    this.syncView();
+  }
+
+  /** W キーと左のツールバーのボタン: OFF → 選択中 → 全レイヤー → OFF */
+  cycleOverlay(): void {
+    const next: Record<OverlayMode, OverlayMode> = { off: 'selected', selected: 'all', all: 'off' };
+    this.setOverlayMode(next[this.overlayMode]);
   }
 
   setViewOption(key: keyof ViewOptions, on: boolean): void {
     this.view[key] = on;
     // 画像を薄くするのは塗りを見るためなので、重ね表示も合わせて入れる
     if (key === 'fade' && on) this.view.overlay = true;
+    // 重ね表示を切ったら、次に入れたときは「選択中」から
+    if (!this.view.overlay) this.view.overlayAll = false;
     this.syncView();
   }
 
   /** 見栄えの確認用に、編集のための表示(重ね表示・画像を薄く・ポップ一時OFF・揺れ一時停止・グリッド)をまとめて切る */
   clearEditView(): void {
-    Object.assign(this.view, { overlay: false, fade: false, flat: false, grid: false });
+    Object.assign(this.view, { overlay: false, overlayAll: false, fade: false, flat: false, grid: false });
     this.syncView();
     if (this.paused) this.setPaused(false);
   }
@@ -612,20 +700,23 @@ export class App extends Emitter<AppEvents> {
 
   /* ---------- ウェイトの一括処理 ---------- */
 
+  /** 選んでいるレイヤーそれぞれにかける。複数のときもまとめて1手 */
   weightOp(label: string, op: (wm: Layer['weights']) => void): void {
-    const layer = this.activeLayer; if (!layer) return;
-    const cmd = weightOperation(this.store, layer.id, label, op);
-    if (cmd) this.history.push(cmd);
-    else toast('変化はありませんでした。');
+    const layers = this.selectedLayers; if (!layers.length) return;
+    const cmds = layers.map(l => weightOperation(this.store, l.id, label, op)).filter((c): c is WeightEdit => !!c);
+    if (!cmds.length) { toast('変化はありませんでした。'); return; }
+    this.history.push(cmds.length === 1 && layers.length === 1 ? cmds[0] : new Batch(countLabel(label, layers.length), cmds));
   }
 
   /* 全体をぼかす(ガウス): プレビューしながら半径を決め、適用で1手として記録する */
 
-  private blurPreview: { layerId: string; original: Uint8Array } | null = null;
+  /** ぼかしているレイヤー(選んでいるレイヤー全部)と、それぞれの元のウェイト */
+  private blurPreview: { layers: { layerId: string; original: Uint8Array }[] } | null = null;
 
   beginBlurPreview(): boolean {
-    const layer = this.activeLayer; if (!layer || this.blurPreview) return false;
-    this.blurPreview = { layerId: layer.id, original: layer.weights.data.slice() };
+    const layers = this.selectedLayers; if (!layers.length || this.blurPreview) return false;
+    this.blurPreview = { layers: layers.map(l => ({ layerId: l.id, original: l.weights.data.slice() })) };
+    this.autoShowOverlay();
     this.emit('blur', 'begin');
     return true;
   }
@@ -633,11 +724,13 @@ export class App extends Emitter<AppEvents> {
   /** radius は元画像のピクセル単位。0 で元に戻した状態を表示する。 */
   previewBlur(radius: number): void {
     const p = this.blurPreview, doc = this.doc; if (!p || !doc) return;
-    const layer = this.store.findLayer(p.layerId)?.layer; if (!layer) return;
-    const wm = layer.weights;
-    wm.data.set(p.original);
-    if (radius > 0) wm.gaussianBlur(radius * (wm.width / doc.image.width));
-    this.store.weightsChanged(p.layerId, wm.fullRect, false);
+    for (const e of p.layers) {
+      const layer = this.store.findLayer(e.layerId)?.layer; if (!layer) continue;
+      const wm = layer.weights;
+      wm.data.set(e.original);
+      if (radius > 0) wm.gaussianBlur(radius * (wm.width / doc.image.width));
+      this.store.weightsChanged(e.layerId, wm.fullRect, false);
+    }
   }
 
   endBlurPreview(apply: boolean, radius: number): void {
@@ -647,16 +740,17 @@ export class App extends Emitter<AppEvents> {
   }
 
   private finishBlur(p: NonNullable<App['blurPreview']>, apply: boolean, radius: number): void {
-    const layer = this.store.findLayer(p.layerId)?.layer; if (!layer) return;
-    const wm = layer.weights;
-    if (!apply) {
-      wm.data.set(p.original);
-      this.store.weightsChanged(p.layerId, wm.fullRect, false);
-      return;
+    const label = `全体をぼかす(半径 ${radius}px)`, cmds: WeightEdit[] = [];
+    for (const e of p.layers) {
+      const layer = this.store.findLayer(e.layerId)?.layer; if (!layer) continue;
+      const wm = layer.weights;
+      if (!apply) { wm.data.set(e.original); this.store.weightsChanged(e.layerId, wm.fullRect, false); continue; }
+      const tiles = diffTiles(e.original, wm);
+      if (tiles.length) cmds.push(new WeightEdit(label, e.layerId, tiles));
     }
-    const tiles = diffTiles(p.original, wm);
-    if (!tiles.length) { toast('変化はありませんでした。'); return; }
-    this.history.push(new WeightEdit(`全体をぼかす(半径 ${radius}px)`, p.layerId, tiles));
+    if (!apply) return;
+    if (!cmds.length) { toast('変化はありませんでした。'); return; }
+    this.history.push(p.layers.length === 1 ? cmds[0] : new Batch(countLabel(label, p.layers.length), cmds));
     this.store.emit('change', undefined);
   }
 
@@ -758,6 +852,7 @@ export class App extends Emitter<AppEvents> {
     const level = target.pop > 0 ? Math.min(1, st.height / target.pop) : 0;
     inflateShape(wm, base, {
       kind: st.shape, cx: (a.x / doc.image.width + 0.5) * wm.width, cy: (0.5 - a.y / doc.image.height) * wm.height, rx: a.w / 2 * kx, ry: a.h / 2 * ky,
+      angle: st.angle * Math.PI / 180,
     }, { level, softness: st.softness, profile: st.profile, blend: st.blend });
     this.store.weightsChanged(target.id, wm.fullRect, false);
   }
@@ -775,7 +870,7 @@ export class App extends Emitter<AppEvents> {
     this.inflateSession = null;
     const st = s.settings;
     this.inflateSettings = { ...st }; // 次に描くときも同じ設定で始める
-    const shape = `${st.shape === 'ellipse' ? '楕円' : '矩形'} ${Math.round(s.area.w)}×${Math.round(s.area.h)}px`;
+    const shape = `${st.shape === 'ellipse' ? '楕円' : '矩形'} ${Math.round(s.area.w)}×${Math.round(s.area.h)}px${st.angle ? `・${st.angle}°` : ''}`;
     if (newLayer && !newLayer.weights.data.some(v => v > 0)) {
       // 範囲がすべて画像の外などで何も膨らまなかったときは、空のレイヤーを残さない
       this.inflateSession = s;
@@ -819,20 +914,34 @@ export class App extends Emitter<AppEvents> {
     this.setActiveLayer(layer.id);
   }
 
+  /** 選んでいるレイヤーを、それぞれのすぐ上に複製する。複製したものを選ぶ */
   duplicateLayer(): void {
-    const doc = this.doc, src = this.activeLayer; if (!doc || !src) return;
-    if (doc.layers.length >= LIMITS.maxLayers) { toast(`レイヤーは最大 ${LIMITS.maxLayers} 枚です。`, 'warning'); return; }
-    const layer = cloneLayer(src, `${src.name} のコピー`);
-    this.history.execute(new InsertLayer('レイヤーを複製', doc.id, layer, this.activeIndex + 1));
-    this.setActiveLayer(layer.id);
+    const doc = this.doc, src = this.selectedLayers; if (!doc || !src.length) return;
+    if (doc.layers.length + src.length > LIMITS.maxLayers) { toast(`レイヤーは最大 ${LIMITS.maxLayers} 枚です。`, 'warning'); return; }
+    const cmds: Command[] = [], ids: string[] = [];
+    let primary = '';
+    // 上から順に入れると、下のレイヤーの位置がずれない
+    for (const l of [...src].reverse()) {
+      const copy = cloneLayer(l, `${l.name} のコピー`);
+      cmds.push(new InsertLayer('レイヤーを複製', doc.id, copy, doc.layers.indexOf(l) + 1));
+      ids.push(copy.id);
+      if (l.id === this.activeLayerId) primary = copy.id;
+    }
+    this.history.execute(cmds.length === 1 ? cmds[0] : new Batch(countLabel('レイヤーを複製', cmds.length), cmds));
+    this.selectLayers(ids, primary || ids[0]);
   }
 
+  /** 選んでいるレイヤーを消す。1枚は残す */
   deleteLayer(): void {
-    const doc = this.doc, layer = this.activeLayer; if (!doc || !layer) return;
-    if (doc.layers.length <= 1) { toast('最後のレイヤーは削除できません。', 'warning'); return; }
-    const i = this.activeIndex;
-    this.history.execute(new RemoveLayer(this.store, layer.id));
-    this.setActiveLayer(doc.layers[Math.min(i, doc.layers.length - 1)].id);
+    const doc = this.doc, layers = this.selectedLayers; if (!doc || !layers.length) return;
+    if (doc.layers.length - layers.length < 1) { toast(doc.layers.length <= 1 ? '最後のレイヤーは削除できません。' : 'すべてのレイヤーは削除できません。1枚は残してください。', 'warning'); return; }
+    // 消したあとは、最後に押したレイヤーのすぐ上に残るレイヤー(無ければいちばん上)を選ぶ
+    const i = this.activeIndex, rest = doc.layers.filter(l => !this.selectedLayerIds.has(l.id));
+    const next = rest.find(l => doc.layers.indexOf(l) > i) ?? rest[rest.length - 1];
+    const cmds = layers.map(l => new RemoveLayer(this.store, l.id));
+    // 上から消すと、残りのレイヤーの位置がずれない(元に戻すときは下から入れ直す)
+    this.history.execute(cmds.length === 1 ? cmds[0] : new Batch(countLabel('レイヤーを削除', cmds.length), cmds.reverse()));
+    this.setActiveLayer(next.id);
   }
 
   /** 一覧の上を手前(配列の後ろ)として並べ替える。dir: +1 で上へ */
@@ -847,9 +956,10 @@ export class App extends Emitter<AppEvents> {
 
   /** 選択中のレイヤーを揺らすか */
   setLayerSwing(on: boolean): void {
-    const l = this.activeLayer;
-    if (!l || l.physics.enabled === on) return;
-    this.history.execute(PatchLayer.from(this.store, l.id, { physics: { ...l.physics, enabled: on } }, '揺れの切替'));
+    const ls = this.selectedLayers.filter(l => l.physics.enabled !== on);
+    if (!ls.length) return;
+    const label = countLabel('揺れの切替', this.selectedLayerIds.size);
+    this.history.execute(batchOf(label, ls.map(l => PatchLayer.from(this.store, l.id, { physics: { ...l.physics, enabled: on } }, label))));
   }
 
   /** 周期的に自動で揺らすか */
@@ -864,25 +974,27 @@ export class App extends Emitter<AppEvents> {
    * (ほかのレイヤーの揺れ方まで変えないように)。変えるときはまとめて1手
    */
   setPreset(name: PresetName): void {
-    const l = this.activeLayer;
-    if (!l || l.physics.preset === name) return;
+    const ls = this.selectedLayers.filter(l => l.physics.preset !== name), n = this.selectedLayerIds.size;
+    if (!ls.length) return;
     if (name === 'custom') {
-      this.history.execute(PatchLayer.from(this.store, l.id, { physics: { ...l.physics, preset: 'custom' } }, 'プリセット'));
+      const label = countLabel('プリセット', n);
+      this.history.execute(batchOf(label, ls.map(l => PatchLayer.from(this.store, l.id, { physics: { ...l.physics, preset: 'custom' } }, label))));
       return;
     }
-    const pr = PRESETS[name], label = `プリセット「${pr.label}」`;
-    // ほかに揺れているレイヤー(表示中・揺れがオン・塗ってある)があるか。膨らませるのプレビューで仮に入れたレイヤーは数えない
+    const pr = PRESETS[name], label = countLabel(`プリセット「${pr.label}」`, n);
+    // 選んでいないレイヤーで揺れているもの(表示中・揺れがオン・塗ってある)があるか。膨らませるのプレビューで仮に入れたレイヤーは数えない
     const temp = this.inflateSession?.newLayer?.id;
-    const others = this.doc?.layers.some(o => o.id !== l.id && o.id !== temp && o.visible && o.physics.enabled && o.weights.data.some(v => v > 0)) ?? false;
+    const others = this.doc?.layers.some(o => !this.selectedLayerIds.has(o.id) && o.id !== temp && o.visible && o.physics.enabled && o.weights.data.some(v => v > 0)) ?? false;
     const changePeriod = !others && this.project.autoSwing.period !== pr.period;
     this.history.execute(new Batch(label, [
-      PatchLayer.from(this.store, l.id, { physics: applyPreset(l.physics, name) }, label),
+      ...ls.map(l => PatchLayer.from(this.store, l.id, { physics: applyPreset(l.physics, name) }, label)),
       ...(changePeriod ? [PatchProject.from(this.store, { autoSwing: { ...this.project.autoSwing, period: pr.period } }, label)] : []),
     ]));
+    const self = n > 1 ? '選んだレイヤー' : 'このレイヤー';
     if (others && this.project.autoSwing.period !== pr.period) {
       toast(`ほかにも揺れているレイヤーがあるので、自動揺らしの周期は変えていません(このプリセットのおすすめは ${pr.period.toFixed(1)} 秒。「アニメーション」タブで変えられます)。`, 'info', 6000);
     } else if (!this.project.autoSwing.enabled) toast('「自動で揺らす」がオフなので、自動では動きません。「つかむ」「揺らす」で揺らすか、自動揺らしをオンにしてください。', 'info', 5000);
-    else if (!l.physics.enabled) toast('このレイヤーは「揺れ」がオフです。', 'info');
+    else if (this.selectedLayers.every(l => !l.physics.enabled)) toast(`${self}は「揺れ」がオフです。`, 'info');
   }
 
   /* ---------- お気に入り(揺れと動きの組み合わせ。右パネル・メニュー・左のツールバー・キーのどこからも、ここを通す) ---------- */
@@ -961,7 +1073,7 @@ export class App extends Emitter<AppEvents> {
     doc.layers.forEach((l, i) => {
       const s = world.displacement(l.id), on = l.visible && l.physics.enabled;
       this.stage.setSwing(i, { x: s.x * k, y: s.y * k, z: s.z * k }, on);
-      // 塗った範囲の広がり(ためて膨らむ2)。重心はウェイトが変わったときだけ求め直す
+      // 塗った範囲の広がり(ためて膨らむ2 など、physics/motion.ts の SPREAD_MOTIONS)。重心はウェイトが変わったときだけ求め直す
       const r = world.spread(l.id);
       this.stage.setSpread(i, r ? this.layerCenter(doc, l) : { x: 0, y: 0 }, r, on);
     });
@@ -1263,3 +1375,9 @@ function unionRect(a: Rect, b: Rect): Rect {
   const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
   return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
 }
+
+/** 複数のレイヤーにまとめてかけた操作の名前(履歴とアンドゥのメニューに出す) */
+export function countLabel(label: string, n: number): string { return n > 1 ? `${label}(${n}枚)` : label; }
+
+/** 1つならそのまま、複数なら1手にまとめる */
+function batchOf(label: string, cmds: Command[]): Command { return cmds.length === 1 ? cmds[0] : new Batch(label, cmds); }

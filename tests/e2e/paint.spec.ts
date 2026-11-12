@@ -138,6 +138,43 @@ test('膨らませる: 範囲をドラッグし、高さを数値で決めて適
   expect(await app(a => a.history.undoLabel)).toMatch(/^膨らませる/);
 });
 
+test('膨らませる: 角度で形を傾けられ、傾けたままドラッグすると始点と終点が傾いた形の対角になる', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  await app(a => { a.weightOp('全消去', (wm: any) => wm.clear()); a.resetView(); }); // 正面から見て、画面の横を画像の横にそろえる
+  await page.keyboard.press('i');
+  // 上のオプション欄で、描く前に角度を決める(次に描くときの設定としてブラウザに覚える)
+  const opt = page.locator('#tInflAngle');
+  await expect(opt).toBeVisible();
+  await opt.fill('45');
+  await expect(page.locator('#tInflAngleO')).toHaveText('45°');
+  expect(await app(a => a.inflateSettings.angle)).toBe(45);
+
+  // 画面で真横にドラッグすると、45° 傾いた正方形の対角になる(幅と縦がほぼ同じ)
+  await dragOnStage(page, [0.4, 0.5], [0.6, 0.5]);
+  await expect(page.locator('#inflateDialog')).toHaveJSProperty('open', true);
+  const area = await app(a => a.inflateState.area);
+  expect(Math.abs(area.w - area.h)).toBeLessThanOrEqual(2);
+  await expect(page.locator('#inflAngleN')).toHaveValue('45');
+
+  // パネルで角度を変えるとその場で形が変わる。中心と大きさは変わらない(正方形の楕円は円で回しても同じなので、横長にしてから)
+  await page.locator('#inflW').fill(String(area.w * 2));
+  await expect.poll(() => app(a => a.inflateState.area.w)).toBe(area.w * 2);
+  // ウェイトの並びまで見る(回しても合計はほぼ同じなので)
+  const shapeKey = () => app(a => { const d: Uint8Array = a.activeLayer.weights.data; let k = 0; for (let i = 0; i < d.length; i++) k += d[i] * (i % 997); return k; });
+  const key0 = await shapeKey();
+  await page.locator('#inflAngleN').fill('-30');
+  await expect.poll(() => app(a => a.inflateState.settings.angle)).toBe(-30);
+  await expect.poll(shapeKey).not.toBe(key0);
+  expect(await app(a => a.inflateState.area)).toEqual({ ...area, w: area.w * 2 });
+  await expect(opt).toHaveValue('-30');
+
+  await page.locator('#inflApply').click();
+  expect(await app(a => a.history.undoLabel)).toMatch(/^膨らませる\(楕円 \d+×\d+px・-30°・高さ \d+px\)$/);
+  // 適用した角度が次に描くときの設定になる
+  expect(await app(a => a.inflateSettings.angle)).toBe(-30);
+});
+
 test('膨らませる: 高さがポップ量を超えると新しいレイヤーに作り、元のレイヤーには触れない。1手で戻せる', async ({ page }) => {
   await boot(page);
   const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
@@ -305,7 +342,8 @@ test('重ね方「最大」: 重なった膨らみは高い方だけになり、
   // パネルの重ね方の選択と、一覧の印も変わる
   await page.evaluate(() => { const a = (window as any).popstage; a.setActiveLayer(a.doc.layers[1].id); });
   await expect(page.locator('#pBlend')).toHaveValue('max');
-  await expect(page.locator('#layerList li').first()).toContainText('最大');
+  // 一覧には重ね方をアイコンで出す
+  await expect(page.locator('#layerList li').first().locator('.layer-info')).toHaveAttribute('data-blend', 'max');
   // パネルから加算へ戻すと、元の厚みに戻る
   await page.locator('#pBlend').selectOption('add');
   expect(await depth()).toBe(add);
@@ -335,9 +373,9 @@ test('全体をぼかす: プレビュー中も視点は回せる。塗る・ツ
   await page.keyboard.press('Control+z');
   expect(await app(a => a.previewingBlur)).toBe(true);
   // 表示の切り替えは効く
-  const overlay = await app(a => a.view.overlay);
+  const mode = await app(a => a.overlayMode);
   await page.keyboard.press('w');
-  expect(await app(a => a.view.overlay)).toBe(!overlay);
+  expect(await app(a => a.overlayMode)).not.toBe(mode);
   // 半径のスライダーの上の Home はスライダーに任せる(視点リセットにしない)
   const yaw1 = await app(a => a.project.camera.yaw);
   await page.locator('#blurRadius').focus();

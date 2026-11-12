@@ -58,6 +58,21 @@ export const watchSwingX = (page: Page, ms: number) => page.evaluate(ms => new P
   tick();
 }), ms);
 
+/**
+ * ホイールのズームが目標に着くまで待って、値を返す。寄せている間は毎フレーム値が変わるので、
+ * 2フレーム進めても変わらなければ着いたとみなす(時間で待つと、描画が遅いときに途中の値を拾う)
+ */
+export async function settled(page: Page, read: () => Promise<number>): Promise<number> {
+  let prev = await read();
+  for (let i = 0; i < 100; i++) {
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const v = await read();
+    if (v === prev) return v;
+    prev = v;
+  }
+  throw new Error('値が止まらない');
+}
+
 /** 自動保存(IndexedDB)を直接読み書きする */
 export const autosaveOp = (page: Page, op: 'get' | 'put' | 'clear', entry?: { name: string; bytes: number[] }) => page.evaluate(async ([op, entry]) => {
   const db: IDBDatabase = await new Promise((res, rej) => {

@@ -10,12 +10,13 @@ export const UI_IDS = {
   docTitle: 'span',
   brushSize: 'input', brushSizeO: 'output', brushStrength: 'input', brushStrengthO: 'output',
   brushHardness: 'input', brushHardnessO: 'output', brushPressure: 'select', toolHint: 'span',
-  tInflKind: 'select', tInflProfile: 'select', tInflSoft: 'input', tInflSoftO: 'output', tInflBlend: 'select',
+  tInflKind: 'select', tInflProfile: 'select', tInflSoft: 'input', tInflSoftO: 'output', tInflAngle: 'input', tInflAngleO: 'output', tInflBlend: 'select',
   tSwing: 'input', tAuto: 'input',
   // ツールバー・3Dビュー
   toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', takeBadge: 'button', mFine: 'button', busy: 'div',
   // レイヤー一覧
   layerCount: 'span', layerList: 'ul',
+  layerSelBar: 'div', layerSelText: 'span', layerSelAll: 'button', layerSelOne: 'button', layerSelDone: 'button',
   // 右パネル
   props: 'div', activeLayerName: 'span',
   pPop: 'input', pPopN: 'input', pBlend: 'select', pBlendDesc: 'p',
@@ -26,10 +27,10 @@ export const UI_IDS = {
   takeInfo: 'span', takeRec: 'button', takePlay: 'button', takeClear: 'button',
   keyCount: 'span', keyAdd: 'button', keyList: 'ol', keyMake: 'button', keyTotal: 'span',
   favCount: 'span', favAdd: 'button', favEmpty: 'p', favList: 'ol',
-  vOverlay: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
+  vOverlayOff: 'input', vOverlaySel: 'input', vOverlayAll: 'input', vAutoOverlay: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
   pFov: 'input', pFovO: 'output', pBgTransparent: 'input', pBgColor: 'input',
   // スマホのシート・下のバー
-  mSheet: 'section', mGrip: 'div', mPresets: 'div', mPanes: 'div', mToolDesc: 'p', mBrushOpts: 'div', mPaintMode: 'button',
+  mSheet: 'section', mGrip: 'div', mPresets: 'div', mPanes: 'div', mToolDesc: 'p', mBrushOpts: 'div', mInflOpts: 'div', mPaintMode: 'button',
   mModeBar: 'div', mTools: 'nav', mPaintDone: 'button',
   // ステータスバー
   sFps: 'span', sVerts: 'span', sZoom: 'span', sImage: 'span', sRec: 'span', sSave: 'span',
@@ -42,7 +43,7 @@ export const UI_IDS = {
   blurDialog: 'dialog', blurTarget: 'p', blurRadius: 'input', blurRadiusN: 'input', blurCancel: 'button', blurApply: 'button',
   // 膨らませる
   inflateDialog: 'dialog', inflTarget: 'p', inflKind: 'select', inflW: 'input', inflH: 'input', inflHeight: 'input', inflHeightN: 'input',
-  inflSoft: 'input', inflSoftN: 'input', inflBlend: 'select', inflNote: 'p', inflCancel: 'button', inflApply: 'button',
+  inflSoft: 'input', inflSoftN: 'input', inflAngle: 'input', inflAngleN: 'input', inflBlend: 'select', inflNote: 'p', inflCancel: 'button', inflApply: 'button',
   // 確認・数値入力
   askDialog: 'dialog', askTitle: 'h3', askBody: 'p', askInputWrap: 'div', askInputLabel: 'span', askInput: 'input', askNo: 'button', askYes: 'button',
   // 最近開いたファイル・ヘルプ・このアプリについて

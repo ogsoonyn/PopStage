@@ -6,7 +6,7 @@
  * イベントの結び付けはそのまま残るので、PC とスマホで同じ処理が動く。幅が戻ったら元の場所へ戻す。
  * ツールは「つかむ・揺らす・移動・視点」を主にし、膨らみ・塗り・消しゴム・ぼかしは「塗って直す」の中に置く。
  */
-import type { App, Tool } from '../app';
+import { PAINT_TOOLS, type App, type Tool } from '../app';
 import { PRESETS, PRESET_ORDER, type PresetName } from '../model/project';
 import { ui } from './ids';
 import { icon } from './icons';
@@ -35,7 +35,6 @@ export const MOBILE_SLOTS: readonly { slot: string; tab: Tab; prepend?: boolean 
 ];
 
 /** 「塗って直す」の中で使うツール。ブラシの設定を出すのは塗りの3つだけ */
-const PAINT_TOOLS: Tool[] = ['inflate', 'brush', 'erase', 'smooth'];
 const BRUSH_TOOLS: Tool[] = ['brush', 'erase', 'smooth'];
 const TOOL_DESC: Record<Tool, string> = {
   inflate: '画像の上をドラッグして範囲を描くと、ここで高さや断面を決めて適用できます。2本目の指を置くと描くのをやめます。',
@@ -76,6 +75,8 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     for (const s of slotEls) move(s.el, pane(s.tab), s.prepend);
     move(ui.inflateDialog, pane('tool'));
     for (const el of document.querySelectorAll('[data-brush-opt]')) move(el, ui.mBrushOpts);
+    // 膨らみの、次に描くときの設定(特に角度はドラッグの向きを変えるので、描く前に見えるようにする)
+    for (const el of document.querySelectorAll('[data-inflate-opt]')) move(el, ui.mInflOpts);
     // 3面図は縦長の画面では狭すぎるので使わない。塗りのツールのまま来たら、主のツールにする
     if (app.view.multi) app.setViewOption('multi', false);
     desktopTool = app.tool;
@@ -91,7 +92,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     root.style.removeProperty('--m-sheet');
     setFineLock(false); ui.mFine.setAttribute('aria-pressed', 'false');
     // スマホの間に塗りから切り替えていたら、PC で使っていたツールに戻す
-    if (desktopTool && PAINT_TOOLS.includes(desktopTool) && !PAINT_TOOLS.includes(app.tool)) app.setTool(desktopTool);
+    if (desktopTool && PAINT_TOOLS.includes(desktopTool) && !PAINT_TOOLS.includes(app.tool)) app.setTool(desktopTool, false);
     desktopTool = null;
   }
 
@@ -177,9 +178,10 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
 
   /** プリセットのボタンと自動揺らしのボタンを、今の状態(モデル)に合わせる */
   function syncState(): void {
-    const l = app.activeLayer;
+    const l = app.activeLayer, ls = app.selectedLayers;
     for (const b of presets.querySelectorAll<HTMLButtonElement>('button')) {
-      b.setAttribute('aria-pressed', String(b.dataset.value === l?.physics.preset));
+      // 複数のレイヤーを選んでいるときは、全部がそのプリセットのときだけ押した状態にする
+      b.setAttribute('aria-pressed', String(ls.length > 0 && ls.every(x => x.physics.preset === b.dataset.value)));
       b.disabled = !l;
     }
     ui.mAuto.setAttribute('aria-pressed', String(app.project.autoSwing.enabled));
@@ -222,8 +224,11 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     if (!PAINT_TOOLS.includes(app.tool)) lastMain = app.tool;
     ui.mToolDesc.textContent = TOOL_DESC[app.tool];
     ui.mBrushOpts.hidden = !BRUSH_TOOLS.includes(app.tool);
+    // 描いたあとはパネル(同じタブに出る)で同じ値を変えるので、重ねて出さない
+    ui.mInflOpts.hidden = app.tool !== 'inflate' || app.previewingInflate;
   }
   app.on('tool', syncTool);
+  app.on('inflate', syncTool);
 
   // 範囲を描いたら、高さや断面を決められるよう「ツール」タブを開く。終わったら元の高さに戻す
   let before: SheetState | null = null;

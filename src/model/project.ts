@@ -12,9 +12,9 @@ export interface Vec3 { x: number; y: number; z: number }
  * 揺らし方。自動揺らしのとき、塗った部分を支える土台(アンカー)をどう動かすか。
  * 塗った部分はバネで土台に繋がっていて、遅れて付いてくる(physics/motion.ts)。
  * ピストンだけは土台ではなく画像全体を動かし、塗った部分はその動きに慣性で遅れて付いてくる。
- * ためて膨らむ2 は手前への動きに加えて、塗った範囲を中心から外へ広げる(縮める)。
+ * ためて膨らむ2・ふわっと膨らむ・一瞬膨らむは、土台の動きに加えて、塗った範囲を中心から外へ広げる(physics/motion.ts の SPREAD_MOTIONS)。
  */
-export type MotionPattern = 'charge' | 'charge2' | 'jiggle' | 'jump' | 'bounce' | 'piston' | 'shiver' | 'float' | 'sway' | 'shake' | 'circle' | 'heartbeat' | 'stretch' | 'none';
+export type MotionPattern = 'charge' | 'charge2' | 'jiggle' | 'jump' | 'bounce' | 'piston' | 'shiver' | 'float' | 'sway' | 'shake' | 'circle' | 'heartbeat' | 'stretch' | 'puff' | 'pulse' | 'none';
 
 export const MOTIONS: Record<MotionPattern, { label: string; desc: string }> = {
   jiggle: { label: '上下に小刻み', desc: '上下に軽くつついて揺らす' },
@@ -30,6 +30,8 @@ export const MOTIONS: Record<MotionPattern, { label: string; desc: string }> = {
   charge: { label: 'ためて膨らむ', desc: 'ポップ量をぐーっと縮めてから、いっきにぼよんと膨らませる' },
   charge2: { label: 'ためて膨らむ2', desc: '塗った範囲ごと内へ縮めてから、手前にも横にもいっきにぼよんと広げる' },
   stretch: { label: '伸びて戻る', desc: 'ゆっくり引き伸ばして、ぱっと離す' },
+  puff: { label: 'ふわっと膨らむ', desc: '一瞬だけふわっと上下に揺れて、同時に塗った範囲が横にも膨らむ' },
+  pulse: { label: '一瞬膨らむ', desc: '手前に少し膨らんですぐ戻り、同時に塗った範囲が横にも膨らむ' },
   none: { label: 'なし(つかむ操作だけ)', desc: '自動では揺らさない' },
 };
 
@@ -105,6 +107,17 @@ export const MOTION_PARAMS: Record<MotionPattern, MotionParamDef[]> = {
     pct('time', '伸ばす時間', 0.65, 0.9, 0.2),
     { key: 'dir', label: '向き', unit: 'select', min: 0, max: 4, step: 1, def: 0, options: [[0, '上'], [1, '下'], [2, '左'], [3, '右'], [4, '手前']] },
   ],
+  puff: [
+    pct('height', '上下の幅', 1),
+    pct('down', '下がる深さ', 0.5, 1.5, 0, '上がったあとに下がる深さ(上がる高さに対する割合)'),
+    pct('spread', '横の広がり', 0.2, 0.5, 0, '上がるのと同時に、塗った範囲を中心から外へ広げる量(中心からの距離に対する割合)'),
+    pct('time', '揺れる長さ', 0.3, 0.8, 0.1, '周期のうち、上下に揺れている時間の割合。残りは止まっていて、余韻だけが残る'),
+  ],
+  pulse: [
+    pct('bulge', '膨らみ', 0.3, 2, 0, '手前に膨らむ量(ポップ量に対する割合)'),
+    pct('spread', '横の広がり', 0.15, 0.5, 0, '同時に、塗った範囲を中心から外へ広げる量(中心からの距離に対する割合)'),
+    pct('time', '膨らむ長さ', 0.15, 0.6, 0.04, '周期のうち、膨らんで戻るまでの時間の割合。短いほどすぐ戻る'),
+  ],
   none: [],
 };
 
@@ -115,7 +128,7 @@ export function motionParam(values: Record<string, number> | undefined, motion: 
   return MOTION_PARAMS[motion].find(d => d.key === key)?.def ?? 0;
 }
 
-export type PresetName = 'puru' | 'bain' | 'poyo' | 'zun' | 'buru' | 'fuwa' | 'yura' | 'furi' | 'guru' | 'doki' | 'tame' | 'puku' | 'biyo' | 'custom';
+export type PresetName = 'puru' | 'bain' | 'poyo' | 'zun' | 'buru' | 'fuwa' | 'yura' | 'furi' | 'guru' | 'doki' | 'tame' | 'puku' | 'biyo' | 'pofu' | 'pon' | 'custom';
 
 /** 揺れのパラメータ。数値はすべて 0〜1 の正規化値。 */
 export interface PhysicsParams {
@@ -141,6 +154,24 @@ export const BLENDS: Record<BlendMode, { label: string; short: string; desc: str
 };
 
 export const BLEND_ORDER = Object.keys(BLENDS) as BlendMode[];
+
+/**
+ * ウェイトの重ね表示で、レイヤーごとに塗る色(一覧の下から順。一覧の色の印も同じ)。
+ * 先頭は1枚だけ重ねていたころの色。ファイルには保存せず、並びで決める
+ */
+export const LAYER_COLORS = ['#ff3380', '#ff8a00', '#e0b800', '#22b573', '#00a9cc', '#3d6bff', '#9b59ff', '#a0673f'] as const;
+export const layerColor = (index: number): string => LAYER_COLORS[((index % LAYER_COLORS.length) + LAYER_COLORS.length) % LAYER_COLORS.length];
+
+/**
+ * 複数のレイヤーのポップ量を、比率を保ったまま伸び縮みさせる。基準は一番高いレイヤーで、それが target になる。
+ * 0 のレイヤーは 0 のまま、0 より大きいレイヤーは 1 より小さくしない。全部 0 のときだけ、全部を target に揃える。target は呼び出し側で上限に収めておく
+ */
+export function scalePops(start: readonly number[], target: number): number[] {
+  const top = Math.max(0, ...start);
+  if (top === 0) return start.map(() => target);
+  // 0 より大きいレイヤーは、丸めで 0 にしない(0 は「伸び縮みしない」なので、一度 0 になると戻らなくなる)
+  return start.map(p => p > 0 && target > 0 ? Math.max(1, Math.round(p * target / top)) : Math.round(p * target / top));
+}
 
 export interface Layer {
   id: string;
@@ -258,6 +289,8 @@ export const PRESETS: Record<Exclude<PresetName, 'custom'>, Preset> = {
   tame: { label: 'ためてぼよん', desc: 'ぐーっと縮んでから、いっきにぼよんと膨らんで弾む', hardness: 0.3, mass: 0.2, damping: 0.1, motion: 'charge', period: 2 },
   puku: { label: 'ぷっくり', desc: '塗った範囲ごとぐーっと縮んでから、手前にも横にもいっきにぼよんと広がって弾む', hardness: 0.3, mass: 0.2, damping: 0.1, motion: 'charge2', period: 2 },
   biyo: { label: 'びよーん', desc: 'ゆっくり引き伸ばされて、離すと大きく弾む', hardness: 0.35, mass: 0.2, damping: 0.08, motion: 'stretch', period: 2.4 },
+  pofu: { label: 'ぽふん', desc: '一瞬ふわっと上下に揺れて、同時に塗った範囲が横にもぽよんと膨らむ', hardness: 0.3, mass: 0.2, damping: 0.25, motion: 'puff', period: 1.6 },
+  pon: { label: 'ぽんっ', desc: '一瞬だけ手前にも横にも少し膨らんで、すぐ戻って弾む', hardness: 0.45, mass: 0.12, damping: 0.25, motion: 'pulse', period: 1.2 },
 };
 
 export const PRESET_ORDER = Object.keys(PRESETS) as Exclude<PresetName, 'custom'>[];

@@ -1,7 +1,8 @@
 /** 右パネル(レイヤー一覧とプロパティ)とツールオプション。 */
-import type { App } from '../app';
-import { PRESETS, PRESET_ORDER, BLENDS, BLEND_ORDER, MOTIONS, MOTION_PARAMS, LIMITS, motionParam, type MotionParamDef, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type BlendMode, type Project, type Document } from '../model/project';
-import { PatchLayer, PatchDocument, PatchProject, SetFov } from '../commands/commands';
+import { countLabel, type App } from '../app';
+import { PRESETS, PRESET_ORDER, BLENDS, BLEND_ORDER, MOTIONS, MOTION_PARAMS, LIMITS, motionParam, scalePops, layerColor, type MotionParamDef, type Layer, type PhysicsParams, type PresetName, type MotionPattern, type BlendMode, type Project, type Document } from '../model/project';
+import { PatchLayer, PatchDocument, PatchProject, SetFov, Batch } from '../commands/commands';
+import type { Command } from '../commands/history';
 import { prefs } from '../storage/prefs';
 import { ui } from './ids';
 import { drawWeightThumb } from './imageio';
@@ -9,74 +10,124 @@ import { popToSlider, sliderToPop } from './popSlider';
 import { createHelp } from './help';
 
 type Target = 'layer' | 'doc' | 'project';
+/** レイヤーへの変更は、選んでいるレイヤーごとに作る(揺れの設定など、変えた項目のほかはそのレイヤーの値を残すため) */
+type LayerPatch = (l: Layer) => Partial<Layer>;
+/** 変える前の値。レイヤーは id ごと、ドキュメントは id、プロジェクトは '' */
+type Snap = Map<string, Record<string, unknown>>;
+
+/** 重ね方のアイコン(一覧の右)。加算: 山の上に山を積む。最大: 2つの山をつないだ外形 */
+const BLEND_ICONS: Record<BlendMode, string> = {
+  add: '<path d="M1 15C3 10 6 9 12 9s9 1 11 6z" fill="currentColor" opacity=".35"/><path d="M7 9.6C8 4.5 9.8 2 12 2s4 2.5 5 7.6C15.5 9.2 14 9 12 9s-3.5.2-5 .6z" fill="currentColor"/>',
+  max: '<path d="M1 15C2.5 8 4.5 4 8 4c2.6 0 3.8 2.4 4.6 5.2C13.6 6.6 15 5 17 5c3 0 4.8 4 6 10z" fill="currentColor" opacity=".8"/>',
+};
+const blendIcon = (b: BlendMode) => `<svg class="blend-ico" viewBox="0 0 24 16" width="20" height="14" aria-hidden="true">${BLEND_ICONS[b]}</svg>`;
+
+/** 選んだレイヤーで値が揃っていないときに、出力欄に出す文言 */
+const MIXED = '混在';
 
 export function bindPanels(app: App): { refresh: () => void } {
   const { store, history } = app;
 
   /* ---------- 汎用: スライダー → パッチ(ドラッグ中はその場で反映、離したら1手として記録) ---------- */
 
-  function patchNow(target: Target, patch: object): void {
-    if (target === 'layer') { const l = app.activeLayer; if (l) store.patchLayer(l.id, patch as Partial<Layer>); }
+  function patchNow(target: Target, patch: object | LayerPatch): void {
+    if (target === 'layer') { for (const l of app.selectedLayers) store.patchLayer(l.id, typeof patch === 'function' ? (patch as LayerPatch)(l) : patch as Partial<Layer>); }
     else if (target === 'doc') { const d = app.doc; if (d) store.patchDocument(d.id, patch as Partial<Document>); }
     else store.patchProject(patch as Partial<Project>);
   }
 
-  function snapshot(target: Target, keys: string[]): Record<string, unknown> {
-    const src = (target === 'layer' ? app.activeLayer : target === 'doc' ? app.doc : app.project) as unknown as Record<string, unknown> | undefined;
-    const out: Record<string, unknown> = {};
-    if (src) for (const k of keys) out[k] = structuredClone(src[k]);
-    return out;
+  function snapshot(target: Target, keys: string[]): Snap {
+    const m: Snap = new Map();
+    const put = (id: string, src: object) => {
+      const o: Record<string, unknown> = {};
+      for (const k of keys) o[k] = structuredClone((src as Record<string, unknown>)[k]);
+      m.set(id, o);
+    };
+    if (target === 'layer') for (const l of app.selectedLayers) put(l.id, l);
+    else if (target === 'doc') { if (app.doc) put(app.doc.id, app.doc); }
+    else put('', app.project);
+    return m;
   }
 
-  function record(target: Target, label: string, before: Record<string, unknown>, after: Record<string, unknown>): void {
-    if (JSON.stringify(before) === JSON.stringify(after)) return;
-    if (target === 'layer') { const l = app.activeLayer; if (l) history.push(new PatchLayer(label, l.id, before, after)); }
-    else if (target === 'doc') { const d = app.doc; if (d) history.push(new PatchDocument(label, d.id, before, after)); }
-    else history.push(new PatchProject(label, before, after));
+  /** 変わったものだけを記録する。レイヤーを複数変えたときもまとめて1手 */
+  function record(target: Target, label: string, before: Snap, after: Snap): void {
+    const changed = [...before].filter(([id, b]) => after.has(id) && JSON.stringify(b) !== JSON.stringify(after.get(id)));
+    if (!changed.length) return;
+    // 名前の枚数は、選んでいた枚数(値が元から同じで変わらなかったレイヤーも含める)
+    const name = target === 'layer' ? countLabel(label, before.size) : label;
+    const cmds: Command[] = changed.map(([id, b]) => {
+      const a = after.get(id)!;
+      return target === 'layer' ? new PatchLayer(name, id, b, a) : target === 'doc' ? new PatchDocument(name, id, b, a) : new PatchProject(name, b, a);
+    });
+    history.push(cmds.length === 1 ? cmds[0] : new Batch(name, cmds));
   }
 
   /**
    * 動かしている間はその場で反映し(input)、離したら1手として記録する(change)。
-   * begin は動かし始めに1回だけ呼び、その戻り値(変える前の値)を commit に渡す。
+   * begin は動かし始めに1回だけ呼び、その戻り値(変える前の値)を input と commit に渡す。
    */
-  function bindLive<B>(el: HTMLInputElement, o: { begin: () => B; input: (value: string) => void; commit: (before: B) => void }): void {
+  function bindLive<B>(el: HTMLInputElement, o: { begin: () => B; input: (value: string, before: B) => void; commit: (before: B) => void }): void {
     let before: { v: B } | null = null;
-    el.addEventListener('input', () => { before ??= { v: o.begin() }; o.input(el.value); });
+    el.addEventListener('input', () => { before ??= { v: o.begin() }; o.input(el.value, before.v); });
     el.addEventListener('change', () => { if (before) o.commit(before.v); before = null; });
   }
 
   /** スライダー → 対象(レイヤー・ドキュメント・プロジェクト)への変更。out があれば値を書く */
-  function bindRange(el: HTMLInputElement, out: HTMLElement | null, o: { target: Target; keys: string[]; label: string; toPatch: (v: number) => object; fmt?: (v: number) => string }): void {
+  function bindRange(el: HTMLInputElement, out: HTMLElement | null, o: { target: Target; keys: string[]; label: string; toPatch: (v: number) => object | LayerPatch; fmt?: (v: number) => string }): void {
     bindLive(el, {
       begin: () => snapshot(o.target, o.keys),
-      input: v => { patchNow(o.target, o.toPatch(+v)); if (out && o.fmt) out.textContent = o.fmt(+v); },
+      input: v => { patchNow(o.target, o.toPatch(+v)); if (out && o.fmt) { out.textContent = o.fmt(+v); out.classList.remove('is-mixed'); } },
       commit: before => record(o.target, o.label, before, snapshot(o.target, o.keys)),
     });
   }
 
-  function exec(target: Target, label: string, patch: object): void {
-    const keys = Object.keys(patch), before = snapshot(target, keys);
+  function exec(target: Target, label: string, patch: object | LayerPatch): void {
+    const keys = typeof patch === 'function' ? Object.keys((patch as LayerPatch)(app.selectedLayers[0] ?? ({} as Layer))) : Object.keys(patch);
+    const before = snapshot(target, keys);
     patchNow(target, patch);
     record(target, label, before, snapshot(target, keys));
   }
 
-  const physics = () => app.activeLayer?.physics;
-  const physPatch = (k: keyof PhysicsParams, v: number) => ({ physics: { ...physics()!, [k]: v / 100, preset: 'custom' as PresetName } });
+  /** 揺れの1項目だけを、選んでいるレイヤーそれぞれの値に書く */
+  const physPatch = (k: keyof PhysicsParams, v: number, custom = true): LayerPatch => l => ({ physics: { ...l.physics, [k]: v / 100, ...(custom ? { preset: 'custom' as PresetName } : {}) } });
   const pct = (v: number) => `${Math.round(v)}`;
+  /** 選んでいるレイヤーで値が揃っているか */
+  const same = <T>(ls: readonly Layer[], f: (l: Layer) => T) => ls.every(l => f(l) === f(ls[0]));
+  /** 出力欄に値か「混在」を書く */
+  const setOut = (out: HTMLElement, text: string, mixed: boolean) => { if (out.textContent !== text) out.textContent = text; out.classList.toggle('is-mixed', mixed); };
+  /** 選択欄に「混在」を出す(選べない項目。値を選び直すと消える) */
+  function setSelect(el: HTMLSelectElement, mixed: boolean, value: string): void {
+    let o = el.querySelector<HTMLOptionElement>('option[data-mixed]');
+    if (mixed) {
+      if (!o) { o = new Option(MIXED, ''); o.dataset.mixed = ''; o.disabled = true; o.hidden = true; el.prepend(o); }
+      el.value = '';
+    } else { o?.remove(); el.value = value; }
+  }
 
   /* ---------- レイヤーのプロパティ ---------- */
 
   // ポップ量のスライダーは目盛りと px が比例しない(後半ほど粗い。popSlider.ts)
-  bindRange(ui.pPop, null, { target: 'layer', keys: ['pop'], label: 'ポップ量', toPatch: v => ({ pop: sliderToPop(v) }) });
-  ui.pPop.addEventListener('input', () => { ui.pPopN.value = String(sliderToPop(+ui.pPop.value)); });
+  // 複数のレイヤーを選んでいるときは、比率を保って伸び縮みさせる。数値とスライダーは一番高いレイヤーの値(model の scalePops)
+  const popStart = () => app.selectedLayers.map(l => [l.id, l.pop] as const);
+  const applyPops = (start: readonly (readonly [string, number])[], target: number) => {
+    const pops = scalePops(start.map(([, p]) => p), target);
+    start.forEach(([id], i) => store.patchLayer(id, { pop: pops[i] }));
+  };
+  bindLive(ui.pPop, {
+    begin: () => ({ snap: snapshot('layer', ['pop']), start: popStart() }),
+    input: (v, b) => { applyPops(b.start, sliderToPop(+v)); ui.pPopN.value = String(sliderToPop(+v)); },
+    commit: b => record('layer', 'ポップ量', b.snap, snapshot('layer', ['pop'])),
+  });
   ui.pPopN.addEventListener('change', () => {
     const v = Math.max(LIMITS.pop.min, Math.min(LIMITS.pop.max, Math.round(+ui.pPopN.value || 0)));
-    exec('layer', 'ポップ量', { pop: v });
+    const before = snapshot('layer', ['pop']);
+    applyPops(popStart(), v);
+    record('layer', 'ポップ量', before, snapshot('layer', ['pop']));
   });
   // 重ね方
   const blendSel = ui.pBlend;
   for (const b of BLEND_ORDER) blendSel.add(new Option(BLENDS[b].label, b));
-  blendSel.addEventListener('change', () => exec('layer', '重ね方', { blend: blendSel.value as BlendMode }));
+  blendSel.addEventListener('change', () => { if (blendSel.value) exec('layer', '重ね方', { blend: blendSel.value as BlendMode }); });
   // 「揺れ」「自動で揺らす」は右のパネルと上のツールバーの両方に置く。どちらも App を通して変え、表示は refreshProps で合わせる
   for (const el of [ui.pSwing, ui.tSwing]) el.addEventListener('change', () => app.setLayerSwing(el.checked));
   for (const el of [ui.pAuto, ui.tAuto]) el.addEventListener('change', () => app.setAutoSwing(el.checked));
@@ -86,10 +137,10 @@ export function bindPanels(app: App): { refresh: () => void } {
   motionSel.replaceChildren(...(Object.keys(MOTIONS) as MotionPattern[]).map(k => new Option(MOTIONS[k].label, k)));
 
   // プリセットは材質と揺らし方を変え、自動揺らしの周期もおすすめの値にする(スマホのボタンと共通。app.setPreset)
-  presetSel.addEventListener('change', () => app.setPreset(presetSel.value as PresetName));
+  presetSel.addEventListener('change', () => { if (presetSel.value) app.setPreset(presetSel.value as PresetName); });
   motionSel.addEventListener('change', () => {
-    const p = physics(); if (!p) return;
-    exec('layer', '揺らし方', { physics: { ...p, motion: motionSel.value as MotionPattern, preset: 'custom' } });
+    if (!motionSel.value) return;
+    exec('layer', '揺らし方', l => ({ physics: { ...l.physics, motion: motionSel.value as MotionPattern, preset: 'custom' } }));
   });
 
   // 詳細設定の開閉は、見る人ごとの好みとしてブラウザに覚えておく(使えなければ毎回閉じた状態)
@@ -102,10 +153,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   const paramBox = ui.motionParams;
   let paramKey = '';
   const fmtParam = (d: MotionParamDef, v: number) => (d.unit === '%' ? `${Math.round(v * 100)}%` : d.unit === 'Hz' ? `${v.toFixed(1)}Hz` : '');
-  const paramPatch = (key: string, v: number) => {
-    const p = physics()!;
-    return { physics: { ...p, preset: 'custom' as PresetName, motionParams: { ...p.motionParams, [key]: v } } };
-  };
+  const paramPatch = (key: string, v: number): LayerPatch => l => ({ physics: { ...l.physics, preset: 'custom' as PresetName, motionParams: { ...l.physics.motionParams, [key]: v } } });
 
   function buildMotionParams(l: Layer): void {
     const motion = l.physics.motion, defs = MOTION_PARAMS[motion];
@@ -140,15 +188,26 @@ export function bindPanels(app: App): { refresh: () => void } {
     }
   }
 
-  function refreshMotionParams(l: Layer): void {
-    const k = `${l.id}/${l.physics.motion}`;
-    if (k !== paramKey) { paramKey = k; buildMotionParams(l); }
-    for (const d of MOTION_PARAMS[l.physics.motion]) {
-      const el = paramBox.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-param="${l.physics.motion}.${d.key}"]`);
+  /** 選んだレイヤーで揺らし方が揃っていないときは、揺らし方ごとの設定は出さない(項目が揺らし方ごとに違うため) */
+  function showMixedMotion(): void {
+    const note = document.createElement('p');
+    note.className = 'text-xs opacity-70'; note.textContent = '揺らし方が揃っていないので、揺らし方ごとの設定は出していません。';
+    paramBox.replaceChildren(note);
+    paramBox.classList.remove('hidden');
+  }
+
+  function refreshMotionParams(l: Layer, ls: readonly Layer[]): void {
+    const mixed = !same(ls, x => x.physics.motion), motion = l.physics.motion;
+    const k = mixed ? 'mixed' : `${l.id}/${motion}`;
+    if (k !== paramKey) { paramKey = k; if (mixed) showMixedMotion(); else buildMotionParams(l); }
+    if (mixed) return;
+    for (const d of MOTION_PARAMS[motion]) {
+      const el = paramBox.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-param="${motion}.${d.key}"]`);
       if (!el) continue;
-      const v = motionParam(l.physics.motionParams, l.physics.motion, d.key);
-      if (!(el instanceof HTMLInputElement && el.matches(':active'))) el.value = String(v);
-      if (el instanceof HTMLInputElement) (el.nextElementSibling as HTMLElement).textContent = fmtParam(d, v);
+      const val = (x: Layer) => motionParam(x.physics.motionParams, motion, d.key), v = val(l), all = same(ls, val);
+      if (el instanceof HTMLSelectElement) { setSelect(el, !all, String(v)); continue; }
+      if (!el.matches(':active')) el.value = String(v);
+      setOut(el.nextElementSibling as HTMLElement, all ? fmtParam(d, v) : MIXED, !all);
     }
   }
 
@@ -156,7 +215,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   bindRange(ui.pMass, ui.pMassO, { target: 'layer', keys: ['physics'], label: '質量', toPatch: v => physPatch('mass', v), fmt: pct });
   bindRange(ui.pDamp, ui.pDampO, { target: 'layer', keys: ['physics'], label: 'おさまり', toPatch: v => physPatch('damping', v), fmt: pct });
   // 「重さ」はプリセットに含まれないので、変えてもカスタムにはしない
-  bindRange(ui.pWeight, ui.pWeightO, { target: 'layer', keys: ['physics'], label: '重さ', toPatch: v => ({ physics: { ...physics()!, weight: v / 100 } }), fmt: pct });
+  bindRange(ui.pWeight, ui.pWeightO, { target: 'layer', keys: ['physics'], label: '重さ', toPatch: v => physPatch('weight', v, false), fmt: pct });
 
   /* ---------- 画像・カメラ・自動揺らし ---------- */
 
@@ -179,9 +238,13 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   /* ---------- 表示 ---------- */
 
-  const viewToggles = [[ui.vOverlay, 'overlay'], [ui.vFade, 'fade'], [ui.vMulti, 'multi'], [ui.vFlat, 'flat'], [ui.vGrid, 'grid']] as const;
+  // ウェイトの重ね表示は3つから選ぶ(OFF / 選択中 / 全レイヤー)
+  const overlayRadios = [[ui.vOverlayOff, 'off'], [ui.vOverlaySel, 'selected'], [ui.vOverlayAll, 'all']] as const;
+  for (const [el, mode] of overlayRadios) el.addEventListener('change', () => { if (el.checked) app.setOverlayMode(mode); });
+  const viewToggles = [[ui.vFade, 'fade'], [ui.vMulti, 'multi'], [ui.vFlat, 'flat'], [ui.vGrid, 'grid']] as const;
   for (const [el, key] of viewToggles) el.addEventListener('change', () => app.setViewOption(key, el.checked));
   ui.vPause.addEventListener('change', () => app.setPaused(ui.vPause.checked));
+  ui.vAutoOverlay.addEventListener('change', () => app.setAutoOverlay(ui.vAutoOverlay.checked));
 
   /* ---------- ツールオプション ---------- */
 
@@ -198,6 +261,12 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   const list = ui.layerList;
   const thumbs = new Map<string, HTMLCanvasElement>();
+  /** Shift+クリックで範囲を選ぶときの起点 */
+  let anchor: string | null = null;
+  /** スマホの選択モード(長押しで入る)。入っている間は、タップで足す・外す */
+  let selectMode = false;
+  /** 一覧のクリックで選び直している間(選択モードを抜けるかの判定用) */
+  let fromList = false;
 
   function renderList(): void {
     const doc = app.doc;
@@ -205,23 +274,25 @@ export function bindPanels(app: App): { refresh: () => void } {
     const hadFocus = list.contains(document.activeElement) && document.activeElement?.tagName === 'LI';
     list.replaceChildren();
     thumbs.clear();
-    if (!doc) return;
+    if (!doc) { updateSelection(); return; }
     ui.layerCount.textContent = `${doc.layers.length} / ${LIMITS.maxLayers}`;
     // 上ほど手前(配列の後ろ)に並べる
-    for (const layer of [...doc.layers].reverse()) {
+    doc.layers.forEach((layer, index) => {
       const li = document.createElement('li');
-      li.className = 'flex items-center gap-2 rounded px-1.5 py-1 cursor-pointer hover:bg-base-200';
+      li.className = 'layer-row flex items-center gap-2 rounded px-1.5 py-1 cursor-pointer hover:bg-base-200';
       li.setAttribute('role', 'option');
-      li.setAttribute('aria-selected', String(layer.id === app.activeLayerId));
       li.setAttribute('aria-label', layer.name);
-      // 一覧の中では選択中の項目だけを Tab で止め、矢印キーで移る(roving tabindex)
-      li.tabIndex = layer.id === app.activeLayerId ? 0 : -1;
       li.dataset.id = layer.id;
 
       const eye = document.createElement('input');
       eye.type = 'checkbox'; eye.className = 'checkbox checkbox-xs'; eye.checked = layer.visible; eye.title = '表示';
       eye.addEventListener('click', e => e.stopPropagation());
+      // 表示のチェックは、選んでいても押した1行だけに効かせる
       eye.addEventListener('change', () => history.execute(PatchLayer.from(store, layer.id, { visible: eye.checked }, eye.checked ? 'レイヤーを表示' : 'レイヤーを非表示')));
+
+      // 重ね表示の色(一覧の下から順に決まる)
+      const swatch = document.createElement('span');
+      swatch.className = 'layer-color'; swatch.style.background = layerColor(index); swatch.title = 'ウェイトの重ね表示の色';
 
       const th = document.createElement('canvas');
       th.width = 44; th.height = 33; th.className = 'shrink-0';
@@ -233,40 +304,120 @@ export function bindPanels(app: App): { refresh: () => void } {
       name.addEventListener('dblclick', () => rename(layer, name));
 
       const info = document.createElement('span');
-      info.className = 'text-xs opacity-60 tabular-nums';
-      info.textContent = layer.blend === 'max' ? `${BLENDS.max.short} ${layer.pop}` : `${layer.pop > 0 ? '+' : ''}${layer.pop}`;
+      info.className = 'layer-info text-xs opacity-70 tabular-nums flex items-center gap-1';
+      info.dataset.blend = layer.blend;
+      info.innerHTML = blendIcon(layer.blend);
+      info.append(String(layer.pop));
       info.title = `重ね方: ${BLENDS[layer.blend].label} / ポップ量 ${layer.pop}px`;
 
-      li.append(eye, th, name, info);
-      li.addEventListener('click', () => { if (layer.id !== app.activeLayerId) app.setActiveLayer(layer.id); });
+      li.append(eye, swatch, th, name, info);
+      li.addEventListener('click', e => onRowClick(layer.id, e));
+      bindLongPress(li, layer.id);
       li.addEventListener('keydown', e => {
         if (e.target !== li) return;
         if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); e.stopPropagation(); rename(layer, name); }
       });
-      list.append(li);
-    }
-    if (hadFocus) list.querySelector<HTMLElement>('li[aria-selected=true]')?.focus();
+      list.prepend(li);
+    });
+    updateSelection();
+    if (hadFocus) list.querySelector<HTMLElement>('li.is-primary-focus')?.focus();
   }
 
-  // 上下の矢印・Home・End で選ぶレイヤーを移す
+  /** 一覧の下から順の id(Shift の範囲選択用) */
+  const order = () => app.doc?.layers.map(l => l.id) ?? [];
+  /** 範囲の起点。選択の中に無い(一覧の外で選び直した・消えた)ときは、最後に押したレイヤー */
+  const rangeAnchor = () => (anchor && app.selectedLayerIds.has(anchor) && order().includes(anchor) ? anchor : app.activeLayerId!);
+
+  /** クリック: そのレイヤーだけ。Ctrl(⌘): 足す・外す。Shift: 起点からの範囲。選択モードではタップで足す・外す */
+  function onRowClick(id: string, e: MouseEvent): void {
+    fromList = true;
+    try { rowClick(id, e); } finally { fromList = false; }
+  }
+  function rowClick(id: string, e: MouseEvent): void {
+    if (pressed === id) { pressed = null; return; } // 長押しで選択モードに入った直後のクリックは無視する
+    const ids = app.selectedLayerIds;
+    if (e.shiftKey) {
+      const anchor = rangeAnchor();
+      const o = order(), a = o.indexOf(anchor), b = o.indexOf(id);
+      app.selectLayers(o.slice(Math.min(a, b), Math.max(a, b) + 1), id);
+      return;
+    }
+    anchor = id;
+    if (e.ctrlKey || e.metaKey || selectMode) {
+      if (!ids.has(id)) { app.selectLayers([...ids, id], id); return; }
+      if (ids.size === 1) return; // 最後の1枚は外さない
+      const rest = [...ids].filter(x => x !== id);
+      app.selectLayers(rest, id === app.activeLayerId ? rest[rest.length - 1] : app.activeLayerId!);
+      return;
+    }
+    if (id !== app.activeLayerId || app.multiSelected) app.setActiveLayer(id);
+  }
+
+  // スマホ: 長押しで選択モードに入り、そのレイヤーを足す
+  let pressTimer = 0, pressed: string | null = null;
+  function bindLongPress(li: HTMLElement, id: string): void {
+    let start: { x: number; y: number } | null = null;
+    const cancel = () => { clearTimeout(pressTimer); start = null; };
+    li.addEventListener('pointerdown', e => {
+      pressed = null; // 長押しのあとにクリックが来なかったときに、次のタップを無視しない
+      if (e.pointerType !== 'touch') return;
+      start = { x: e.clientX, y: e.clientY };
+      clearTimeout(pressTimer);
+      pressTimer = window.setTimeout(() => {
+        start = null; pressed = id; selectMode = true;
+        if (!app.selectedLayerIds.has(id)) app.selectLayers([...app.selectedLayerIds, id], id);
+        else updateSelection();
+        navigator.vibrate?.(15);
+      }, 450);
+    });
+    li.addEventListener('pointermove', e => { if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 8) cancel(); });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave'] as const) li.addEventListener(ev, cancel);
+    // 長押しでブラウザのメニューを出さない
+    li.addEventListener('contextmenu', e => { if (pressed === id || selectMode) e.preventDefault(); });
+  }
+
+  // 上下の矢印・Home・End で選ぶレイヤーを移す(Shift 付きは範囲を広げる)。Esc で1枚に戻す
   list.addEventListener('keydown', e => {
     if ((e.target as HTMLElement).tagName !== 'LI') return;
+    if (e.key === 'Escape' && (app.multiSelected || selectMode)) {
+      e.preventDefault(); e.stopPropagation(); selectMode = false;
+      if (app.activeLayerId) app.setActiveLayer(app.activeLayerId);
+      return;
+    }
     const items = [...list.querySelectorAll<HTMLElement>('li')];
     const i = items.indexOf(e.target as HTMLElement);
     const j = e.key === 'ArrowUp' ? i - 1 : e.key === 'ArrowDown' ? i + 1 : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : -2;
     if (j === -2) return;
     e.preventDefault(); e.stopPropagation();
-    const next = items[Math.max(0, Math.min(items.length - 1, j))];
-    if (next.dataset.id && next.dataset.id !== app.activeLayerId) app.setActiveLayer(next.dataset.id);
+    const next = items[Math.max(0, Math.min(items.length - 1, j))], id = next.dataset.id;
+    if (id && e.shiftKey) {
+      const anchor = rangeAnchor();
+      const o = order(), a = o.indexOf(anchor), b = o.indexOf(id);
+      app.selectLayers(o.slice(Math.min(a, b), Math.max(a, b) + 1), id);
+    } else if (id) { anchor = id; if (id !== app.activeLayerId || app.multiSelected) app.setActiveLayer(id); }
     next.focus();
   });
 
+  // プレビュー中(膨らみ・全体ぼかし)は、仮のレイヤーやぼかし中のレイヤーの選択を変えない
+  ui.layerSelAll.addEventListener('click', () => { if (!app.previewing) app.selectAllLayers(); });
+  ui.layerSelOne.addEventListener('click', () => { if (app.previewing) return; selectMode = false; if (app.activeLayerId) app.setActiveLayer(app.activeLayerId); });
+  ui.layerSelDone.addEventListener('click', () => { selectMode = false; updateSelection(); });
+
   function updateSelection(): void {
+    const ids = app.selectedLayerIds;
     list.querySelectorAll<HTMLElement>('li').forEach(li => {
-      const on = li.dataset.id === app.activeLayerId;
+      const on = ids.has(li.dataset.id!), primary = li.dataset.id === app.activeLayerId;
       li.setAttribute('aria-selected', String(on));
-      li.tabIndex = on ? 0 : -1;
+      // 選んだ中で、塗りの先になるレイヤー(最後に押したもの)に枠を付ける。複数のときだけ見分けが要る
+      li.classList.toggle('is-primary', primary && ids.size > 1);
+      li.classList.toggle('is-primary-focus', primary);
+      // 一覧の中では最後に押した項目だけを Tab で止め、矢印キーで移る(roving tabindex)
+      li.tabIndex = primary ? 0 : -1;
     });
+    const n = ids.size;
+    ui.layerSelBar.hidden = n < 2 && !selectMode;
+    ui.layerSelText.textContent = selectMode ? `選択モード: ${n}枚` : `${n}枚を選択中`;
+    ui.layerSelDone.hidden = !selectMode;
   }
 
   function rename(layer: Layer, span: HTMLElement): void {
@@ -280,7 +431,7 @@ export function bindPanels(app: App): { refresh: () => void } {
       if (ok && v && v !== layer.name) history.execute(PatchLayer.from(store, layer.id, { name: v }, '名前の変更'));
       else renderList();
       // Enter / Esc で終えたときは、項目にフォーカスを戻す(クリックで外したときは奪わない)
-      if (byKey) list.querySelector<HTMLElement>('li[aria-selected=true]')?.focus();
+      if (byKey) list.querySelector<HTMLElement>('li.is-primary-focus')?.focus();
     };
     input.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true, true); if (e.key === 'Escape') finish(false, true); e.stopPropagation(); });
     input.addEventListener('blur', () => finish(true));
@@ -312,7 +463,7 @@ export function bindPanels(app: App): { refresh: () => void } {
    * 選択中のレイヤーが無いとき(画像を開く前)に止める部品の入れ物。表示の切り替えは画像が無くても使えるので除く。
    * スマホではシートへ移すので、いま #props の中にあるかどうかではなく、最初に入れ物ごと覚えておく
    */
-  const viewSection = ui.vOverlay.closest('section');
+  const viewSection = ui.vOverlayOff.closest('section');
   const layerSections = [...ui.props.querySelectorAll('section')].filter(s => s !== viewSection);
 
   function refreshProps(): void {
@@ -324,25 +475,36 @@ export function bindPanels(app: App): { refresh: () => void } {
     // レイヤー一覧も、仮に入れたレイヤーの名前や表示を変えて記録しないよう、操作できなくする
     if (app.previewingInflate) ui.pPop.disabled = ui.pPopN.disabled = true;
     // 全体ぼかしのプレビュー中も、ぼかしているレイヤーを切り替えたり消したりしないよう、一覧は操作できなくする
-    list.inert = app.previewing;
+    list.inert = ui.layerSelBar.inert = app.previewing;
     list.classList.toggle('opacity-60', app.previewing);
-    ui.activeLayerName.textContent = l?.name ?? '-';
-    if (l) {
-      setRange(ui.pPop, null, popToSlider(l.pop));
-      if (document.activeElement !== ui.pPopN) ui.pPopN.value = String(l.pop);
-      blendSel.value = l.blend;
+    const ls = app.selectedLayers;
+    // 複数のときは「最後に押したレイヤー ほか N 枚」。ほかの名前は title で見せる
+    ui.activeLayerName.textContent = !l ? '-' : ls.length > 1 ? `${l.name} ほか${ls.length - 1}枚` : l.name;
+    ui.activeLayerName.title = ls.length > 1 ? ls.map(x => x.name).reverse().join('、') : '';
+    if (l && ls.length) {
+      // ポップ量は一番高いレイヤーの値を出す(動かすとほかは同じ比率で変わる)
+      const top = Math.max(...ls.map(x => x.pop));
+      setRange(ui.pPop, null, popToSlider(top));
+      if (document.activeElement !== ui.pPopN) ui.pPopN.value = String(top);
+      const blendMixed = !same(ls, x => x.blend);
+      setSelect(blendSel, blendMixed, l.blend);
       // 説明は画面に並べず、「?」で開く欄に入れる(選択欄の aria-describedby でも読み上げる)
-      ui.pBlendDesc.textContent = BLENDS[l.blend].desc;
-      ui.pSwing.checked = ui.tSwing.checked = l.physics.enabled;
-      presetSel.value = l.physics.preset;
-      motionSel.value = l.physics.motion;
-      ui.pPresetDesc.textContent = l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
-      refreshMotionParams(l);
-      ui.physSummary.textContent = `— ${MOTIONS[l.physics.motion].label}`;
-      setRange(ui.pHard, ui.pHardO, Math.round(l.physics.hardness * 100), pct(l.physics.hardness * 100));
-      setRange(ui.pMass, ui.pMassO, Math.round(l.physics.mass * 100), pct(l.physics.mass * 100));
-      setRange(ui.pWeight, ui.pWeightO, Math.round(l.physics.weight * 100), pct(l.physics.weight * 100));
-      setRange(ui.pDamp, ui.pDampO, Math.round(l.physics.damping * 100), pct(l.physics.damping * 100));
+      ui.pBlendDesc.textContent = blendMixed ? '選んだレイヤーで重ね方が違います。選ぶと全部をその重ね方にします。' : BLENDS[l.blend].desc;
+      const swingMixed = !same(ls, x => x.physics.enabled);
+      for (const el of [ui.pSwing, ui.tSwing]) { el.checked = !swingMixed && l.physics.enabled; el.indeterminate = swingMixed; }
+      const presetMixed = !same(ls, x => x.physics.preset), motionMixed = !same(ls, x => x.physics.motion);
+      setSelect(presetSel, presetMixed, l.physics.preset);
+      setSelect(motionSel, motionMixed, l.physics.motion);
+      ui.pPresetDesc.textContent = presetMixed ? '選んだレイヤーでプリセットが違います。選ぶと全部に当てます。'
+        : l.physics.preset === 'custom' ? `${MOTIONS[l.physics.motion].desc}(詳細設定で調整中)` : PRESETS[l.physics.preset].desc;
+      refreshMotionParams(l, ls);
+      ui.physSummary.textContent = `— ${motionMixed ? MIXED : MOTIONS[l.physics.motion].label}`;
+      const mat = (el: HTMLInputElement, out: HTMLElement, k: 'hardness' | 'mass' | 'weight' | 'damping') => {
+        const all = same(ls, x => x.physics[k]);
+        setRange(el, null, Math.round(l.physics[k] * 100));
+        setOut(out, all ? pct(l.physics[k] * 100) : MIXED, !all);
+      };
+      mat(ui.pHard, ui.pHardO, 'hardness'); mat(ui.pMass, ui.pMassO, 'mass'); mat(ui.pWeight, ui.pWeightO, 'weight'); mat(ui.pDamp, ui.pDampO, 'damping');
     }
     if (d) {
       setRange(ui.pDensity, ui.pDensityO, d.meshDensity, `${d.meshDensity}`);
@@ -355,7 +517,9 @@ export function bindPanels(app: App): { refresh: () => void } {
     setRange(ui.pPeriod, ui.pPeriodO, Math.round(p.autoSwing.period * 10), `${p.autoSwing.period.toFixed(1)}秒`);
     setRange(ui.pAutoStr, ui.pAutoStrO, Math.round(p.autoSwing.strength * 100), pct(p.autoSwing.strength * 100));
     for (const [el, key] of viewToggles) el.checked = app.view[key];
+    for (const [el, mode] of overlayRadios) el.checked = app.overlayMode === mode;
     ui.vPause.checked = app.paused;
+    ui.vAutoOverlay.checked = app.autoOverlay;
   }
 
   let queued = false;
@@ -367,10 +531,18 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   store.on('replace', () => { renderList(); refresh(); });
   store.on('layers', () => { renderList(); refresh(); });
-  store.on('layer', ({ keys }) => { if (keys.some(k => k === 'name' || k === 'visible' || k === 'pop' || k === 'blend')) renderList(); refresh(); });
+  // 複数のレイヤーを一度に変えると1枚ごとに届くので、一覧の作り直しは次の描画の前に1回にまとめる
+  let listQueued = false;
+  const queueList = () => {
+    if (listQueued) return;
+    listQueued = true;
+    requestAnimationFrame(() => { listQueued = false; renderList(); });
+  };
+  store.on('layer', ({ keys }) => { if (keys.some(k => k === 'name' || k === 'visible' || k === 'pop' || k === 'blend')) queueList(); refresh(); });
   store.on('document', refresh);
   store.on('project', refresh);
-  app.on('active', () => { updateSelection(); refresh(); });
+  // 一覧の外(新規・削除・ファイルの読み込みなど)で1枚を選び直したときは、選択モードを抜ける。一覧のタップで減ったときは抜けない
+  app.on('active', () => { if (!fromList && !app.multiSelected) selectMode = false; updateSelection(); refresh(); });
   app.on('view', refresh);
   app.on('inflate', refresh); // プレビュー中はポップ量を触らせない
   app.on('blur', refresh);

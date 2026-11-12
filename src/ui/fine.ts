@@ -31,6 +31,11 @@ export function wheelFineFactor(e: WheelEvent): number {
   return fineLock || ctrlDown || e.metaKey || e.shiftKey ? FINE : 1;
 }
 
+/** タッチパッドのピンチか(ctrlKey が立っているのに Ctrl キーは押していない) */
+export function isPinchWheel(e: WheelEvent): boolean {
+  return e.ctrlKey && !ctrlDown;
+}
+
 /** ホイールの縦の量。Shift を押すとブラウザが横に回したことにするので、そのときは横の量を使う */
 export function wheelDelta(e: WheelEvent): number {
   return e.deltaY !== 0 ? e.deltaY : e.shiftKey ? e.deltaX : 0;

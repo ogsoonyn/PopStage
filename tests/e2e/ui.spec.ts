@@ -115,7 +115,13 @@ test('ショートカット: 一覧のキーがすべて期待どおりに効く
   }
   // 表示の切り替え(押すたびに入れ替わる)
   const view = () => app(a => ({ ...a.view, paused: a.paused }));
-  for (const [key, prop] of [['w', 'overlay'], ['Shift+W', 'fade'], ['Shift+G', 'grid'], ['f', 'flat'], ['p', 'paused'], ['m', 'multi']] as const) {
+  // W は重ね表示を OFF → 選択中 → 全レイヤー → OFF と回す
+  await app(a => a.setOverlayMode('off'));
+  for (const mode of ['selected', 'all', 'off']) {
+    await page.keyboard.press('w');
+    await expect.poll(() => app(a => a.overlayMode), 'w').toBe(mode);
+  }
+  for (const [key, prop] of [['Shift+W', 'fade'], ['Shift+G', 'grid'], ['f', 'flat'], ['p', 'paused'], ['m', 'multi']] as const) {
     const before = (await view())[prop];
     await page.keyboard.press(key);
     await expect.poll(async () => (await view())[prop], key).toBe(!before);
@@ -188,9 +194,9 @@ test('ショートカット: 一覧のキーがすべて期待どおりに効く
   await dragOnStage(page, [0.4, 0.35], [0.6, 0.65]);
   await expect(page.locator('#inflateDialog')).toHaveJSProperty('open', true);
   await page.locator('#view').focus();
-  const overlay = (await view()).overlay;
+  const mode = await app(a => a.overlayMode);
   await page.keyboard.press('w');
-  await expect.poll(async () => (await view()).overlay).toBe(!overlay);
+  await expect.poll(() => app(a => a.overlayMode)).not.toBe(mode);
   await page.keyboard.press('b');
   expect(await app(a => a.tool)).toBe('inflate');
   const undo0 = await app(a => a.history.size);
@@ -248,6 +254,7 @@ test('表示の切り替えはキーで変えても覚える。ファイルの�
   await page.locator('#view').focus();
   await page.keyboard.press('m');
   await page.keyboard.press('Shift+W'); // 画像を薄く(重ね表示も入る)
+  await page.keyboard.press('w');       // 重ね表示を全レイヤーに
   await page.keyboard.press('w');       // 重ね表示だけ外す
   await page.waitForTimeout(400);
   await page.goto('/?e2e');
@@ -285,6 +292,64 @@ test('表示の切り替えはキーで変えても覚える。ファイルの�
   await page.locator('#askYes').click();
   await expect.poll(() => page.evaluate(() => (window as any).__save)).toBe(2);
   expect(await page.evaluate(() => (window as any).__downloads)).toBe(0);
+});
+
+test('塗るツールを選ぶと重ね表示を自動でONにする。設定で切れて、ブラウザに覚える', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  const overlay = () => app(a => a.view.overlay as boolean);
+  /** W は OFF → 選択中 → 全レイヤーと回るので、OFF になるまで押す */
+  const overlayOff = async () => { for (let i = 0; i < 3 && await overlay(); i++) await page.keyboard.press('w'); };
+  const reboot = async () => {
+    await page.waitForTimeout(400);
+    await page.goto('/?e2e');
+    await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  };
+  await openTab(page, 'view');
+  await expect(page.locator('#vAutoOverlay')).toBeChecked();
+  await page.locator('#view').focus();
+
+  // 塗るツールに切り替えるとONになる
+  for (const key of ['b', 'e', 's', 'i']) {
+    await page.keyboard.press('g');
+    await overlayOff();
+    expect(await overlay()).toBe(false);
+    await page.keyboard.press(key);
+    expect(await overlay(), key).toBe(true);
+    await expect(page.locator('#vOverlaySel')).toBeChecked();
+  }
+  // 塗るツールから離れても切らない。塗るツールのままOFFにしたら、そのまま
+  await page.keyboard.press('g');
+  expect(await overlay()).toBe(true);
+  await page.keyboard.press('b');
+  await overlayOff();
+  expect(await overlay()).toBe(false);
+  await page.keyboard.press('b'); // 選び直しでは入れない
+  expect(await overlay()).toBe(false);
+  // 「全体をぼかす」を開いてもONになる
+  await page.evaluate(() => (document.querySelector('[data-cmd=smoothAll]') as HTMLButtonElement).click());
+  await expect(page.locator('#blurDialog')).toBeVisible();
+  expect(await overlay()).toBe(true);
+  await page.locator('#blurCancel').click();
+
+  // 起動して前回の塗るツールを戻すだけでは入れない
+  await page.locator('#view').focus();
+  await overlayOff();
+  expect(await overlay()).toBe(false);
+  await reboot();
+  expect(await app(a => [a.tool, a.view.overlay, a.autoOverlay])).toEqual(['brush', false, true]);
+
+  // 設定を切ると入らない。切ったことは覚える
+  await openTab(page, 'view');
+  await page.locator('#vAutoOverlay').uncheck();
+  await page.locator('#view').focus();
+  await page.keyboard.press('g');
+  await page.keyboard.press('b');
+  expect(await overlay()).toBe(false);
+  await reboot();
+  expect(await app(a => a.autoOverlay)).toBe(false);
+  await openTab(page, 'view');
+  await expect(page.locator('#vAutoOverlay')).not.toBeChecked();
 });
 
 test('左のメニュー: 表示クリアで編集用の表示をまとめて切る。レイヤー向けの操作と、上のツールバーの揺れの切り替え', async ({ page }) => {
@@ -488,7 +553,7 @@ test('左のツールバー: 表示の切り替えは、入・切を aria-presse
   const allOff = () => app(a => { Object.assign(a.view, { overlay: false, fade: false, grid: false, multi: false }); a.syncView(); });
   const btn = (cmd: string) => page.locator(`#toolNav [data-cmd=${cmd}]`);
   // 1つずつ、すべて切った状態から押す(画像を薄くは重ね表示も入れるので、順番に頼らない)
-  const toggles = [['toggleMulti', 'multi', 'M'], ['toggleOverlay', 'overlay', 'W'], ['toggleFade', 'fade', '⇧W'], ['toggleGrid', 'grid', '⇧G']] as const;
+  const toggles = [['toggleMulti', 'multi', 'M'], ['toggleFade', 'fade', '⇧W'], ['toggleGrid', 'grid', '⇧G']] as const;
   for (const [cmd, key, label] of toggles) {
     await allOff();
     const b = btn(cmd);
@@ -501,6 +566,16 @@ test('左のツールバー: 表示の切り替えは、入・切を aria-presse
     await b.click();
     await expect(b).toHaveAttribute('aria-pressed', 'false');
     await expect(page.locator(`#menubar [data-check=${key}]`)).toHaveText('');
+  }
+  // ウェイトは押すたびに OFF → 選択中 → 全レイヤー → OFF。全レイヤーのときは「全」の印を付け、メニューには状態を書く
+  await allOff();
+  const ov = btn('toggleOverlay');
+  await expect(ov.locator('.tool-key')).toHaveText('W');
+  for (const [pressed, menu, badge] of [['true', '選択中', false], ['true', '全レイヤー', true], ['false', '', false]] as const) {
+    await ov.click();
+    await expect(ov).toHaveAttribute('aria-pressed', pressed);
+    await expect(page.locator('#menubar [data-check=overlay]')).toHaveText(menu);
+    await expect(ov.locator('.nav-badge')).toBeVisible({ visible: badge });
   }
   // 画像を薄くを入れると、重ね表示も入るので、ウェイトのボタンも入になる
   await allOff();

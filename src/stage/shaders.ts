@@ -1,7 +1,7 @@
 /**
  * 頂点シェーダがウェイトマップ(テクスチャ配列)を読み、各レイヤーのずれ d_i を一覧の下から順に重ねて持ち上げる。
  *   d_i = w_i (p_i ẑ + s_i) + w_i r_i (x_xy - c_i)
- * r_i は塗った範囲の広がり(ためて膨らむ2)、c_i はそのレイヤーのウェイトの重心。広がりは画像の面内だけに効く。
+ * r_i は塗った範囲の広がり(ためて膨らむ2 など、physics/motion.ts の SPREAD_MOTIONS)、c_i はそのレイヤーのウェイトの重心。広がりは画像の面内だけに効く。
  * 重ね方(uBlend): 0 = 加算(下までのずれ D に d_i を足す)、1 = 最大(D と d_i の高さ z を比べ、高い方のずれを使う)。
  * 最大は高さの差が小さい所で2つをなめらかに混ぜる。境目で揺れの向きが急に変わってメッシュが折れないようにするため。
  * 塗っていない所(w_i = 0)は下のずれをそのまま残す。
@@ -50,7 +50,9 @@ export const fragmentShader = /* glsl */ `
   precision highp sampler2DArray;
   uniform sampler2D uMap;
   uniform sampler2DArray uW;
-  uniform int uActive;
+  uniform int uLayerCount;
+  uniform float uShow[${MAX_LAYERS}];
+  uniform vec3 uColor[${MAX_LAYERS}];
   uniform float uOverlay, uGrid, uBrushOn, uOpacity, uFade;
   uniform vec2 uGridN;
   uniform vec3 uBrush;
@@ -69,12 +71,17 @@ export const fragmentShader = /* glsl */ `
       c.a *= 0.25;
     }
 
-    // 選択中レイヤーのウェイトを半透明の色で重ねる(画像を薄くしているときは濃く)
-    if (uActive >= 0 && uOverlay > 0.5) {
-      float w = texture(uW, vec3(wuv, float(uActive))).r;
+    // ウェイトをレイヤーごとの色で、一覧の下から順に半透明で重ねる(画像を薄くしているときは濃く)。
+    // uShow は重ねる濃さの倍率で、0 のレイヤーは重ねない(選択中だけ / 全レイヤーで選んだもの以外を薄く、は呼び出し側が決める)
+    if (uOverlay > 0.5) {
       float k = uFade > 0.5 ? 0.9 : 0.5;
-      c.rgb = mix(c.rgb, vec3(1.0, 0.2, 0.5), clamp(w * k / max(max(c.a, w * k), 1e-4), 0.0, 1.0));
-      c.a = max(c.a, w * k);
+      for (int i = 0; i < ${MAX_LAYERS}; i++) {
+        if (i >= uLayerCount) break;
+        if (uShow[i] <= 0.0) continue;
+        float a = texture(uW, vec3(wuv, float(i))).r * k * uShow[i];
+        c.rgb = mix(c.rgb, uColor[i], clamp(a / max(max(c.a, a), 1e-4), 0.0, 1.0));
+        c.a = max(c.a, a);
+      }
     }
 
     // グリッド(メッシュの分割線)

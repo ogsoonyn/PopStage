@@ -1,6 +1,6 @@
 /** E2E: 視点・表示の切り替え・3面図・細かく動かす・見た目の基準画像 */
 import { test, expect } from '@playwright/test';
-import { watchGlErrors, boot, openTab, weightSum, dragOnStage, watchSwingX, autosaveOp } from './helpers';
+import { watchGlErrors, boot, openTab, weightSum, dragOnStage, watchSwingX, autosaveOp, settled } from './helpers';
 
 watchGlErrors();
 
@@ -27,7 +27,7 @@ test('画像を薄く・ポップを一時OFF: 画面だけが変わり、書き
   await page.keyboard.press('Shift+W');
   await page.waitForTimeout(100);
   expect(await page.locator('#vFade').isChecked()).toBe(true);
-  expect(await page.locator('#vOverlay').isChecked()).toBe(true);
+  expect(await page.locator('#vOverlaySel').isChecked()).toBe(true);
   expect((await stage.screenshot()).equals(shotFlat)).toBe(false);
   expect(await frame()).toBe(frame0);
 
@@ -130,6 +130,7 @@ test('3面図: 正面・右・下はホイールでズーム・ドラッグで�
   await expect.poll(async () => (await state()).ortho.zoom).toBeCloseTo(0.5);
   await page.mouse.wheel(0, -600);
   await expect.poll(async () => (await state()).ortho.zoom).toBeGreaterThan(1);
+  await settled(page, async () => (await state()).ortho.zoom); // ズームが止まってから平行移動を測る
 
   // 正面: 左ドラッグで平行移動(画像がポインタに付いてくるので、中心は逆へずれる)
   const pan0 = (await state()).ortho.pan;
@@ -412,14 +413,15 @@ test('Ctrl か Shift を押しながらだと、回転・平行移動・ズー�
   // ホイールのズーム(Shift を押すと横の量になるブラウザでも効く)
   const zoom = () => app(a => a.project.camera.zoom as number);
   await page.mouse.move(...at(0.5, 0.5));
-  let z0 = await zoom(); await page.mouse.wheel(0, 200); await expect.poll(zoom).not.toBe(z0); const zFull = Math.log((await zoom()) / z0);
+  // ホイールはなめらかに寄せるので、止まってから測る
+  let z0 = await zoom(); await page.mouse.wheel(0, 200); await expect.poll(zoom).not.toBe(z0); const zFull = Math.log((await settled(page, zoom)) / z0);
   z0 = await zoom(); await page.keyboard.down('Control'); await page.mouse.wheel(0, 200); await page.keyboard.up('Control');
-  await expect.poll(zoom).not.toBe(z0); const zCtrl = Math.log((await zoom()) / z0);
+  await expect.poll(zoom).not.toBe(z0); const zCtrl = Math.log((await settled(page, zoom)) / z0);
   expect(zCtrl / zFull).toBeCloseTo(0.2, 1);
   z0 = await zoom(); await page.keyboard.down('Shift'); await page.mouse.wheel(0, 200); await page.keyboard.up('Shift');
   await expect.poll(zoom).not.toBe(z0);
-  expect(Math.log((await zoom()) / z0) / zFull).toBeCloseTo(0.2, 1);
-  // タッチパッドのピンチ(ctrlKey 付きのホイール。Ctrl キーは押していない)は細かくしない
+  expect(Math.log((await settled(page, zoom)) / z0) / zFull).toBeCloseTo(0.2, 1);
+  // タッチパッドのピンチ(ctrlKey 付きのホイール。Ctrl キーは押していない)は細かくせず、寄せずにその場で変える
   z0 = await zoom();
   await page.evaluate(() => document.getElementById('view')!.dispatchEvent(new WheelEvent('wheel', { deltaY: 200, ctrlKey: true, bubbles: true, cancelable: true })));
   expect(Math.log((await zoom()) / z0) / zFull).toBeCloseTo(1, 1);
@@ -470,10 +472,10 @@ test('Ctrl か Shift を押しながらだと、回転・平行移動・ズー�
   const oz = () => app(a => a.multiOrtho.zoom as number);
   const fb = (await page.locator('#multiView [data-kind=front]').boundingBox())!;
   await page.mouse.move(fb.x + fb.width / 2, fb.y + fb.height / 2);
-  let q0 = await oz(); await page.mouse.wheel(0, -200); await expect.poll(oz).not.toBe(q0); const ozFull = Math.log((await oz()) / q0);
+  let q0 = await oz(); await page.mouse.wheel(0, -200); await expect.poll(oz).not.toBe(q0); const ozFull = Math.log((await settled(page, oz)) / q0);
   q0 = await oz(); await page.keyboard.down('Control'); await page.mouse.wheel(0, -200); await page.keyboard.up('Control');
   await expect.poll(oz).not.toBe(q0);
-  expect(Math.log((await oz()) / q0) / ozFull).toBeCloseTo(0.2, 1);
+  expect(Math.log((await settled(page, oz)) / q0) / ozFull).toBeCloseTo(0.2, 1);
   const free = () => app(a => ({ yaw: a.multiCam.yaw as number, x: a.multiCam.target.x as number, y: a.multiCam.target.y as number, z: a.multiCam.target.z as number }));
   let f0 = await free(); await cellDrag('free', null, 'middle'); let f1 = await free();
   const panLen = Math.hypot(f1.x - f0.x, f1.y - f0.y, f1.z - f0.z);
