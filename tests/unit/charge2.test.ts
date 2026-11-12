@@ -134,6 +134,7 @@ describe('ためて膨らむ2(塗った範囲も横に広がる)', () => {
       const rs: number[] = [];
       await runExport({
         stage: { renderFrame: (w: number, h: number) => new Uint8ClampedArray(w * h * 4) } as never, store, recorder: new MotionRecorder(),
+        centerOf: () => ({ x: 0, y: 0 }),
         applySwing: (world, d) => { rs.push(world.spread(d.layers[0].id)); },
       }, { format: 'gif', width: 2, height: 2, fps: 30, duration: 2 * T, background: '#fff', motion: 'auto' }, () => {}, new AbortController().signal);
       return rs;
