@@ -109,7 +109,7 @@
   <span id="docTitle" class="ml-auto opacity-70 truncate px-2"></span>
 </header>
 
-<!-- ツールオプション -->
+<!-- ツールオプション: 選択中のツールの設定(ブラシ・膨らみ)と操作のヒント。ツールに合わせて中身を入れ替える(ui/toolOptions.ts) -->
 <div class="flex flex-wrap items-center gap-x-5 gap-y-1 px-3 py-1.5 bg-base-100 border-b border-base-300 shrink-0" id="toolOptions">
   <div class="join">
     <button class="btn btn-xs join-item" data-cmd="undo">↶ 戻す</button>
@@ -128,6 +128,16 @@
     <select id="brushPressure" class="select select-xs w-24">
       <option value="strength">強さ</option><option value="size">サイズ</option><option value="none">無効</option>
     </select></label>
+  <!-- 膨らみの既定値(次に範囲を描くときの設定。描いたあとは下のパネルと同じ値を変える)。ui/toolOptions.ts -->
+  <label class="flex items-center gap-2" data-inflate-opt hidden>形
+    <select id="tInflKind" class="select select-xs w-20"><option value="ellipse">楕円</option><option value="rect">矩形</option></select></label>
+  <label class="flex items-center gap-2" data-inflate-opt hidden>断面
+    <select id="tInflProfile" class="select select-xs w-28"><option value="dome">ドーム</option><option value="cushion">クッション</option><option value="cone">直線</option></select></label>
+  <label class="flex items-center gap-2" data-inflate-opt hidden>縁のなだらかさ
+    <input id="tInflSoft" type="range" min="0" max="100" value="100" class="range range-xs w-24">
+    <output id="tInflSoftO" class="w-10 tabular-nums"></output></label>
+  <label class="flex items-center gap-2" data-inflate-opt hidden>重ね方
+    <select id="tInflBlend" class="select select-xs w-32"><option value="max">重ねる(高い方)</option><option value="add">足す</option><option value="replace">置き換える</option></select></label>
   <span id="toolHint" class="opacity-70 hidden md:inline flex-1 min-w-0 truncate"></span>
   <div class="ml-auto flex items-center gap-4 shrink-0" role="group" aria-label="揺れの切り替え">
     <label class="flex items-center gap-2" title="選択中のレイヤーを揺らすか(右のパネルの「揺れ」と同じ)">レイヤーの揺れ <input id="tSwing" type="checkbox" class="toggle toggle-sm"></label>
@@ -244,7 +254,7 @@
             <button id="keyAdd" class="btn btn-xs ml-auto" title="今の視点を末尾に追加">＋ 追加</button>
           </div>
           <p id="keyHelp" class="help-text" hidden>視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す動きを作ります。画像の位置が動くと揺れます。「次まで」は次のフレームまでの秒数です。「通り方」は、なめらか(止まらず通り抜ける)か、弾む(急に止まって揺れる)かを選びます。作った動きは今の記録と入れ替わります(元に戻せます)。</p>
-          <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span></span><span></span><span>次まで</span><span>通り方</span></div>
+          <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span>次まで</span><span>通り方</span><span></span><span></span></div>
           <ol id="keyList" class="flex flex-col gap-1" aria-label="キーフレーム一覧"></ol>
           <div class="flex items-center gap-2">
             <button id="keyMake" class="btn btn-sm btn-primary" title="今の記録と入れ替える(元に戻せる)">▶ 作成して再生</button>
@@ -345,8 +355,9 @@
 
 <!-- ステータスバー -->
 <footer class="flex items-center gap-4 px-3 h-7 bg-base-100 border-t border-base-300 text-xs tabular-nums shrink-0 opacity-90">
-  <span id="sFps">- fps</span>
-  <span id="sVerts">- 頂点</span>
+  <!-- fps と頂点数は開発向けなので、?debug のときだけ出す(main.ts) -->
+  <span id="sFps" hidden>- fps</span>
+  <span id="sVerts" hidden>- 頂点</span>
   <span id="sZoom">-</span>
   <span id="sImage">-</span>
   <span id="sRec" class="ml-auto"></span>
@@ -401,9 +412,9 @@
   </div>
 </dialog>
 
-<!-- 全体をぼかす(ガウス)。3Dビューでプレビューが見えるよう背景を暗くしない -->
-<dialog id="blurDialog" class="modal modal-bottom">
-  <div class="modal-box max-w-xl mx-auto mb-10 shadow-2xl border border-base-300">
+<!-- 全体をぼかす(ガウス)。視点を回して確かめられるよう、膨らませると同じく、ほかの操作を止めないダイアログとして開く(show) -->
+<dialog id="blurDialog" class="float-panel bg-base-100 text-base-content rounded-box shadow-2xl border border-base-300 p-4">
+  <div>
     <h3 class="font-bold text-lg">全体をぼかす(ガウス)</h3>
     <p id="blurTarget" class="text-sm opacity-70 pt-1 pb-3"></p>
     <div class="flex items-center gap-3">
@@ -412,8 +423,8 @@
       <input id="blurRadiusN" type="number" min="0" max="200" class="input input-sm w-20 text-right">
       <span class="shrink-0">px</span>
     </div>
-    <p class="text-xs opacity-60 pt-2">スライダーを動かすと 3D ビューにその場で反映されます。半径は元画像のピクセル単位です。</p>
-    <div class="modal-action mt-3">
+    <p class="text-xs opacity-60 pt-2">スライダーを動かすと 3D ビューにその場で反映されます。半径は元画像のピクセル単位です。右ドラッグで視点を回して確かめられます。</p>
+    <div class="flex justify-end gap-2 mt-3">
       <button id="blurCancel" class="btn btn-sm">キャンセル</button>
       <button id="blurApply" class="btn btn-sm btn-primary">適用</button>
     </div>
@@ -421,7 +432,7 @@
 </dialog>
 
 <!-- 膨らませる。視点を回して確かめられるよう、ほかの操作を止めないダイアログとして開く(show) -->
-<dialog id="inflateDialog" class="bg-base-100 text-base-content rounded-box shadow-2xl border border-base-300 p-4">
+<dialog id="inflateDialog" class="float-panel bg-base-100 text-base-content rounded-box shadow-2xl border border-base-300 p-4">
   <h3 id="inflTitle" class="font-bold text-lg">範囲を膨らませる</h3>
   <p id="inflTarget" class="text-sm opacity-70 pt-1 pb-3"></p>
   <div class="flex flex-col gap-2">

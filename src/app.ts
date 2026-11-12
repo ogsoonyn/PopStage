@@ -56,10 +56,15 @@ type AppEvents = {
   tool: Tool;
   active: string | null;
   view: void;
+  /** 画像・保存の状態・書き出し中かなど、ステータスバーや使えるかの表示に関わる変化(fps は含めない) */
   status: void;
+  /** fps を測り直した(0.5 秒ごと) */
+  fps: number;
   file: void;
   /** 膨らませるプレビューの開始・変更・終了 */
   inflate: 'begin' | 'change' | 'end';
+  /** 全体ぼかしのプレビューの開始・終了 */
+  blur: 'begin' | 'end';
   /** 描画ループで1フレーム描いた(画像全体が動いている間に、ブラシの円を当て直すのに使う) */
   frame: void;
   /** 操作の記録の状態(記録中・ループ再生中)が変わった */
@@ -554,6 +559,7 @@ export class App extends Emitter<AppEvents> {
     if (!doc || !layer) return false;
     if (!layer.visible) { toast('非表示のレイヤーには塗れません。', 'warning'); return false; }
     if (this.previewingInflate) { toast('「膨らませる」を適用するかキャンセルしてから塗ってください。', 'warning'); return false; }
+    if (this.previewingBlur) { toast('「全体をぼかす」を適用するかキャンセルしてから塗ってください。', 'warning'); return false; }
     const wm = layer.weights, k = wm.width / doc.image.width;
     this.stroke = {
       stroke: new Stroke(wm, mode, { size: this.brush.size * k, strength: this.brush.strength, hardness: this.brush.hardness }),
@@ -618,6 +624,7 @@ export class App extends Emitter<AppEvents> {
   beginBlurPreview(): boolean {
     const layer = this.activeLayer; if (!layer || this.blurPreview) return false;
     this.blurPreview = { layerId: layer.id, original: layer.weights.data.slice() };
+    this.emit('blur', 'begin');
     return true;
   }
 
@@ -634,6 +641,10 @@ export class App extends Emitter<AppEvents> {
   endBlurPreview(apply: boolean, radius: number): void {
     const p = this.blurPreview; if (!p) return;
     this.blurPreview = null;
+    try { this.finishBlur(p, apply, radius); } finally { this.emit('blur', 'end'); }
+  }
+
+  private finishBlur(p: NonNullable<App['blurPreview']>, apply: boolean, radius: number): void {
     const layer = this.store.findLayer(p.layerId)?.layer; if (!layer) return;
     const wm = layer.weights;
     if (!apply) {
@@ -666,6 +677,8 @@ export class App extends Emitter<AppEvents> {
   } | null = null;
 
   get previewingInflate(): boolean { return !!this.inflateSession; }
+  /** 全体ぼかし・膨らませるのプレビュー中か。プレビュー中のウェイトを元に戻したりしないよう、使える操作を絞る */
+  get previewing(): boolean { return this.previewingBlur || this.previewingInflate; }
   get inflateState(): InflateState | null {
     const s = this.inflateSession; if (!s) return null;
     return { layerId: s.layerId, area: s.area, settings: s.settings, sourcePop: s.sourcePop, limited: s.limited, newLayer: s.newLayer && { name: s.newLayer.name, pop: s.newLayer.pop } };
@@ -842,7 +855,11 @@ export class App extends Emitter<AppEvents> {
     this.history.execute(PatchProject.from(this.store, { autoSwing: { ...this.project.autoSwing, enabled: on } }, '自動揺らしの切替'));
   }
 
-  /** 選択中のレイヤーに揺れのプリセットを当てる。材質と揺らし方を変え、自動揺らしの周期もおすすめの値にする(まとめて1手) */
+  /**
+   * 選択中のレイヤーに揺れのプリセットを当てる。材質と揺らし方を変える。
+   * 自動揺らしの周期はプロジェクト全体の設定なので、揺れているレイヤーがこのレイヤーだけのときだけ、おすすめの値にする
+   * (ほかのレイヤーの揺れ方まで変えないように)。変えるときはまとめて1手
+   */
   setPreset(name: PresetName): void {
     const l = this.activeLayer;
     if (!l || l.physics.preset === name) return;
@@ -851,11 +868,15 @@ export class App extends Emitter<AppEvents> {
       return;
     }
     const pr = PRESETS[name], label = `プリセット「${pr.label}」`;
+    const others = this.doc?.layers.some(o => o.id !== l.id && o.visible && o.physics.enabled) ?? false;
+    const changePeriod = !others && this.project.autoSwing.period !== pr.period;
     this.history.execute(new Batch(label, [
       PatchLayer.from(this.store, l.id, { physics: applyPreset(l.physics, name) }, label),
-      PatchProject.from(this.store, { autoSwing: { ...this.project.autoSwing, period: pr.period } }, label),
+      ...(changePeriod ? [PatchProject.from(this.store, { autoSwing: { ...this.project.autoSwing, period: pr.period } }, label)] : []),
     ]));
-    if (!this.project.autoSwing.enabled) toast('「自動で揺らす」がオフなので、自動では動きません。「つかむ」「揺らす」で揺らすか、自動揺らしをオンにしてください。', 'info', 5000);
+    if (others && this.project.autoSwing.period !== pr.period) {
+      toast(`ほかにも揺れているレイヤーがあるので、自動揺らしの周期は変えていません(このプリセットのおすすめは ${pr.period.toFixed(1)} 秒。「アニメーション」タブで変えられます)。`, 'info', 6000);
+    } else if (!this.project.autoSwing.enabled) toast('「自動で揺らす」がオフなので、自動では動きません。「つかむ」「揺らす」で揺らすか、自動揺らしをオンにしてください。', 'info', 5000);
     else if (!l.physics.enabled) toast('このレイヤーは「揺れ」がオフです。', 'info');
   }
 
@@ -1066,7 +1087,7 @@ export class App extends Emitter<AppEvents> {
       this.prev = now;
       this.frame(dt);
       this.frames++; this.fpsTime += dt;
-      if (this.fpsTime >= 0.5) { this.fps = Math.round(this.frames / this.fpsTime); this.frames = 0; this.fpsTime = 0; this.emit('status', undefined); }
+      if (this.fpsTime >= 0.5) { this.fps = Math.round(this.frames / this.fpsTime); this.frames = 0; this.fpsTime = 0; this.emit('fps', this.fps); }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);

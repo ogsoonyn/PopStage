@@ -9,7 +9,7 @@ import type { App } from '../app';
 import { ui } from './ids';
 import { toast } from './dom';
 import { isTyping } from './input';
-import { TOOL_GROUPS, TOOLS, toolDef } from './tools';
+import { TOOL_GROUPS, TOOLS } from './tools';
 import { icon, type IconName } from './icons';
 
 export interface Action {
@@ -21,7 +21,7 @@ export interface Action {
   keys?: string[];
   run: () => unknown;
   enabled?: () => boolean;
-  /** 膨らませるのプレビュー中も使えるか(表示の切り替えなど、ウェイトにも履歴にも触れないもの) */
+  /** 全体ぼかし・膨らませるのプレビュー中も使えるか(表示の切り替えなど、ウェイトにも履歴にも触れないもの) */
   duringPreview?: boolean;
   /** ヘルプでの名前(名前と違うときだけ) */
   helpLabel?: string;
@@ -141,7 +141,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   const enabled = (name: string): boolean => {
     const a = table[name];
     if (!a) return false;
-    if (app.previewingInflate && !a.duringPreview) return false;
+    if (app.previewing && !a.duringPreview) return false;
     return !a.enabled || a.enabled();
   };
   const run = (name: string): void => {
@@ -263,20 +263,17 @@ export function bindActions(app: App, deps: ActionDeps): void {
   app.on('active', refresh);
   app.on('view', refresh);
   app.on('inflate', refresh);
+  app.on('blur', refresh);
   app.on('take', refresh);
-  app.on('status', refresh); // 書き出しの始まり・終わりなど、ほかのイベントの無い変化も拾う
+  app.on('status', refresh); // 書き出しの始まり・終わりなど(fps の更新は別のイベントなので、ここでは拾わない)
   app.store.on('layers', refresh);
   app.store.on('replace', refresh);
   app.store.on('project', ({ keys }) => { if (keys.includes('take')) refresh(); });
 
-  /* ---------- ツールの表示 ---------- */
+  /* ---------- ツールの表示(ツールオプションの欄は ui/toolOptions.ts) ---------- */
   const toolButtons = [...ui.toolNav.querySelectorAll<HTMLButtonElement>('.tool')];
-  const brushOpts = [...document.querySelectorAll<HTMLElement>('[data-brush-opt]')];
   function refreshTool(): void {
     for (const b of toolButtons) b.setAttribute('aria-pressed', String(b.dataset.tool === app.tool));
-    const paint = app.tool === 'brush' || app.tool === 'erase' || app.tool === 'smooth';
-    for (const el of brushOpts) el.classList.toggle('opacity-40', !paint);
-    ui.toolHint.textContent = toolDef(app.tool).hint;
   }
   app.on('tool', refreshTool);
 
