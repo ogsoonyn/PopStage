@@ -107,6 +107,8 @@ test('プリセットはシートのボタンで選べる', async ({ page }) => 
   await page.locator('#mAuto').click();
   expect(await auto()).toBe(!before);
   await expect(page.locator('#mAuto')).toHaveAttribute('aria-pressed', String(!before));
+  // スマホの上のメニューには、PC のキー表記を付けない
+  await expect(page.locator('#mTop .menu kbd')).toHaveCount(0);
 });
 
 test('2本指で平行移動とピンチズームができ、画像の外をなぞると回転する', async ({ page }) => {

@@ -3,7 +3,7 @@
  * 名前・ショートカット・使える条件はこの表だけに書き、メニューの <kbd>・ボタンのツールチップ・aria-keyshortcuts・
  * ヘルプのショートカット一覧・キーの処理は、すべて表から作る。
  */
-import type { App, Tool } from '../app';
+import type { App } from '../app';
 import { ui } from './ids';
 import { toast } from './dom';
 import { isTyping } from './input';
@@ -102,16 +102,6 @@ function defineActions(app: App, d: ActionDeps) {
   } satisfies Record<string, Action>;
 }
 
-type BaseName = keyof ReturnType<typeof defineActions>;
-export type ActionName = BaseName | `tool.${Tool}`;
-
-export interface Actions {
-  run(name: ActionName): void;
-  enabled(name: ActionName): boolean;
-  /** ボタンの使える・使えない、メニューのチェックなどを今の状態に合わせる */
-  refresh(): void;
-}
-
 /** キーの押し方を 'Ctrl+Shift+Z' の形にする */
 export function keyString(e: KeyboardEvent): string {
   // 日本語入力がオンのときは key が 'Process'、Mac の Option は別の文字になるので、キーの位置(code)から読む
@@ -124,7 +114,7 @@ const ariaKeys = (keys: string[]) => keys.map(k => k.replace(/\bCtrl\b/g, 'Contr
 
 const NAV_BTN = 'relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0 whitespace-nowrap';
 
-export function bindActions(app: App, deps: ActionDeps): Actions {
+export function bindActions(app: App, deps: ActionDeps): void {
   const table: Record<string, Action> = defineActions(app, deps);
   for (const t of TOOLS) {
     table[`tool.${t.id}`] = {
@@ -182,7 +172,8 @@ export function bindActions(app: App, deps: ActionDeps): Actions {
       b.setAttribute('aria-keyshortcuts', ariaKeys(a.keys));
       const tk = b.querySelector('kbd.tool-key');
       if (tk) tk.textContent = a.keys[0];
-      if (b.closest('.menu') && !b.querySelector('kbd')) {
+      // キーの表記は PC のメニューにだけ付ける(スマホの上のメニューにはキーボードが無い)
+      if (b.closest('.menu') && !b.closest('.m-only') && !b.querySelector('kbd')) {
         const kbd = document.createElement('kbd');
         kbd.className = b.querySelector('[data-check]') ? 'kbd kbd-xs' : 'kbd kbd-xs ml-auto';
         kbd.textContent = a.keys[0];
@@ -191,8 +182,10 @@ export function bindActions(app: App, deps: ActionDeps): Actions {
     }
     // スマホの部品とメニューは文字で分かるので、ツールチップは PC のボタンにだけ付ける
     if (!b.closest('.menu, .m-only')) b.title = tooltip(a);
+    const inDropdown = !!b.closest('.dropdown');
     b.addEventListener('click', () => {
-      (document.activeElement as HTMLElement | null)?.blur(); // ドロップダウンを閉じる
+      // ドロップダウンの中ならフォーカスを外して閉じる。ほかのボタンはキーボードで続けて押せるようフォーカスを残す
+      if (inDropdown) (document.activeElement as HTMLElement | null)?.blur();
       run(name);
     });
   }
@@ -228,12 +221,14 @@ export function bindActions(app: App, deps: ActionDeps): Actions {
   /* ---------- 状態 → 画面 ---------- */
   const undoLabel = document.querySelector('[data-label=undo]')!, redoLabel = document.querySelector('[data-label=redo]')!;
   const checks = [...document.querySelectorAll<HTMLElement>('[data-check]')];
+  /** 'status' でも呼ぶ(0.5 秒ごと)ので、変わったときだけ書く */
+  const setText = (el: Element, text: string) => { if (el.textContent !== text) el.textContent = text; };
   function refresh(): void {
-    for (const b of cmdButtons) b.disabled = !enabled(b.dataset.cmd!);
-    undoLabel.textContent = app.history.undoLabel ? `(${app.history.undoLabel})` : '';
-    redoLabel.textContent = app.history.redoLabel ? `(${app.history.redoLabel})` : '';
+    for (const b of cmdButtons) { const off = !enabled(b.dataset.cmd!); if (b.disabled !== off) b.disabled = off; }
+    setText(undoLabel, app.history.undoLabel ? `(${app.history.undoLabel})` : '');
+    setText(redoLabel, app.history.redoLabel ? `(${app.history.redoLabel})` : '');
     const on: Record<string, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused };
-    for (const el of checks) el.textContent = on[el.dataset.check!] ? '✓' : '';
+    for (const el of checks) setText(el, on[el.dataset.check!] ? '✓' : '');
   }
   app.history.on('change', refresh);
   app.on('active', refresh);
@@ -257,5 +252,4 @@ export function bindActions(app: App, deps: ActionDeps): Actions {
   app.on('tool', refreshTool);
 
   refresh(); refreshTool();
-  return { run, enabled, refresh };
 }

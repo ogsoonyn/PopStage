@@ -2065,4 +2065,12 @@ test('コマンドの表から、メニューのキー表記・ボタンのツ�
   expect(await app(a => a.takeState)).toBe('playing');
   await page.locator('#takeBadge').click();
   expect(await app(a => a.takeState)).toBe('idle');
+  // メニューの外のボタンは、キーボードで押してもフォーカスを残す(続けて押せる)
+  await openTab(page, 'anim');
+  await page.locator('#takeRec').focus();
+  await page.keyboard.press('Enter');
+  expect(await app(a => a.takeState)).toBe('recording');
+  await expect(page.locator('#takeRec')).toBeFocused();
+  await page.keyboard.press('Enter');
+  expect(await app(a => a.takeState)).toBe('idle');
 });
