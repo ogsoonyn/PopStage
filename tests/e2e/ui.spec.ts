@@ -349,7 +349,7 @@ test('左のメニュー: 表示クリアで編集用の表示をまとめて切
 test('左のメニュー: 低い画面でもすべてのボタンに届く', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 620 });
   await boot(page);
-  for (const sel of ['[data-tool=brush]', '[data-tool=view]', '[data-cmd=cleanView]', '[data-cmd=invert]']) {
+  for (const sel of ['[data-tool=brush]', '[data-tool=view]', '[data-cmd=toggleMulti]', '[data-cmd=toggleFade]', '[data-cmd=cleanView]', '[data-cmd=invert]']) {
     const el = page.locator(`#toolNav ${sel}`);
     await el.scrollIntoViewIfNeeded();
     await expect(el).toBeInViewport();
@@ -357,6 +357,22 @@ test('左のメニュー: 低い画面でもすべてのボタンに届く', asy
   // ステータスバーに重ならない
   const nav = (await page.locator('#toolNav').boundingBox())!, status = (await page.locator('#sSave').boundingBox())!;
   expect(nav.y + nav.height).toBeLessThanOrEqual(status.y + 1);
+  // 詰めた表示では、⇧W のような2文字のキー表記は名前と重なるので隠す(1文字のものは出す)
+  await expect(page.locator('#toolNav [data-cmd=toggleFade] .tool-key')).toBeHidden();
+  await expect(page.locator('#toolNav [data-cmd=toggleMulti] .tool-key')).toBeVisible();
+});
+
+test('左のメニュー: よくある高さ(864px)なら、スクロールせずに最後のボタンまで見える', async ({ page }) => {
+  await page.setViewportSize({ width: 1536, height: 864 });
+  await boot(page);
+  await expect(page.locator('#toolNav [data-cmd=invert]')).toBeInViewport({ ratio: 1 });
+  expect(await page.locator('#toolNav').evaluate(n => n.scrollHeight <= n.clientHeight)).toBe(true);
+  // ツールのアイコンは残し、その場で効く操作のアイコンだけを隠す
+  await expect(page.locator('#toolNav [data-tool=brush] svg')).toBeVisible();
+  await expect(page.locator('#toolNav [data-cmd=toggleMulti] svg')).toBeHidden();
+  // アイコンが無いと名前がキーの表記と同じ高さに来るので、2文字の表記は隠す
+  await expect(page.locator('#toolNav [data-cmd=toggleFade] .tool-key')).toBeHidden();
+  await expect(page.locator('#toolNav [data-cmd=toggleMulti] .tool-key')).toBeVisible();
 });
 
 test('コマンドの表から、メニューのキー表記・ボタンのツールチップ・ヘルプのキー一覧を作る。記録・再生はメニューからも使える', async ({ page }) => {
@@ -457,12 +473,51 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(4);
-  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(4);
+  await expect(acts).toHaveCount(9);
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(9);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
-  await expect(page.locator('#toolNav [role=group]')).toHaveText([/表示/, /レイヤー/]);
+  await expect(page.locator('#toolNav [role=group]')).toHaveText([/表示/, /レイヤー/, /アニメ/]);
   await page.locator('#toolNav [data-cmd=cleanView]').click();
   await expect(page.locator('#toolNav [data-cmd=cleanView]')).not.toHaveAttribute('aria-pressed', /.*/);
+
+});
+
+test('左のツールバー: 表示の切り替えは、入・切を aria-pressed とメニューの ✓ に映す', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  const allOff = () => app(a => { Object.assign(a.view, { overlay: false, fade: false, grid: false, multi: false }); a.syncView(); });
+  const btn = (cmd: string) => page.locator(`#toolNav [data-cmd=${cmd}]`);
+  // 1つずつ、すべて切った状態から押す(画像を薄くは重ね表示も入れるので、順番に頼らない)
+  const toggles = [['toggleMulti', 'multi', 'M'], ['toggleOverlay', 'overlay', 'W'], ['toggleFade', 'fade', '⇧W'], ['toggleGrid', 'grid', '⇧G']] as const;
+  for (const [cmd, key, label] of toggles) {
+    await allOff();
+    const b = btn(cmd);
+    await expect(b.locator('.tool-key')).toHaveText(label);
+    await expect(b).toHaveAttribute('aria-pressed', 'false');
+    await b.click();
+    expect((await app(a => ({ ...a.view })))[key]).toBe(true);
+    await expect(b).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator(`#menubar [data-check=${key}]`)).toHaveText('✓');
+    await b.click();
+    await expect(b).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator(`#menubar [data-check=${key}]`)).toHaveText('');
+  }
+  // 画像を薄くを入れると、重ね表示も入るので、ウェイトのボタンも入になる
+  await allOff();
+  await btn('toggleFade').click();
+  await expect(btn('toggleOverlay')).toHaveAttribute('aria-pressed', 'true');
+  // 読み上げでは、縮めた文言でなく元の名前で呼ぶ
+  await expect(btn('toggleOverlay')).toHaveAccessibleName('ウェイトの重ね表示');
+  // キーで変えても映る
+  await allOff();
+  await page.locator('#view').focus();
+  await page.keyboard.press('Shift+G');
+  expect(await app(a => a.view.grid)).toBe(true);
+  await expect(btn('toggleGrid')).toHaveAttribute('aria-pressed', 'true');
+  // 表示クリアで切れたものは、ボタンも切に戻る(3面図は切らない)
+  await app(a => { Object.assign(a.view, { overlay: true, fade: true, grid: true, multi: true }); a.syncView(); });
+  await btn('cleanView').click();
+  await expect(page.locator('#toolNav .nav-act[aria-pressed=true]')).toHaveText([/3面図/]);
 });
 
 test('ツールオプションの欄は選択中のツールの設定だけを出す。膨らみは描く前に形や断面を選べる', async ({ page }) => {

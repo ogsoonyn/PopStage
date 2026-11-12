@@ -18,6 +18,15 @@
 .key-row { display: grid; grid-template-columns: 1.75rem 4.75rem 1fr 1.75rem 1.5rem; align-items: center; gap: .375rem; }
 .key-row .key-set svg { width: 1rem; height: 1rem; }
 .key-head { padding: 0 .125rem; }
+/* お気に入りの行: 今の状態と同じ印・名前と中身・適用・今の状態で上書き・削除 */
+.fav-row { display: grid; grid-template-columns: .75rem minmax(0, 1fr) auto 1.75rem 1.5rem; align-items: center; gap: .375rem; }
+.fav-row .fav-mark { color: var(--color-primary); font-size: .625rem; visibility: hidden; }
+/* visibility: hidden の間は読み上げにも出ない */
+.fav-row[aria-current="true"] .fav-mark { visibility: visible; }
+/* 件数が増えても、下の自動揺らし・記録を押し出しすぎない */
+#favList { max-height: 16rem; overflow-y: auto; }
+html.mobile #favList { max-height: 10rem; }
+.fav-row .fav-set svg { width: 1rem; height: 1rem; }
 .key-row .key-no { font-variant-numeric: tabular-nums; padding: 0; }
 .prop2 { display: grid; grid-template-columns: 6.5rem 1fr; align-items: center; gap: .5rem; }
 
@@ -55,11 +64,26 @@ html.mobile #blurDialog { bottom: calc(var(--m-tools) + .5rem); }
 /* ボタンの右上に出すショートカット */
 .tool-key { position: absolute; top: 1px; right: 3px; font: 600 9px/1 ui-monospace, monospace; opacity: .55; }
 .tool[aria-pressed=true] .tool-key { opacity: .85; }
-/* 高さが足りないときは、アイコンを隠して詰める(それでも入らなければスクロール) */
+/*
+ * その場で効く操作のうち、表示の切り替えは、入のときに淡い色と枠を付ける(ツールの塗りつぶしと見分けられるように)。
+ * 文字の色は変えない(暗いテーマで小さい文字が読みにくくなるため)。枠は outline にして、強制カラーモードでも残す
+ */
+#toolNav .nav-act[aria-pressed=true] { background: color-mix(in oklab, var(--color-primary) 20%, transparent); outline: 1px solid color-mix(in oklab, var(--color-primary) 60%, transparent); outline-offset: -1px; font-weight: 600; }
+#toolNav .nav-act[aria-pressed=true]:hover { background: color-mix(in oklab, var(--color-primary) 30%, transparent); }
+/* 高さが足りないときは、まずその場で効く操作のアイコンを隠し(ツールバーがおよそ 900px より高い画面なら全部入る)、
+   さらに低いときはツールのアイコンも隠して詰める(それでも入らなければスクロール) */
+@media (max-height: 900px) {
+  #toolNav .nav-act .nav-ico { display: none; }
+  /* アイコンが無いと名前が右上のキーと同じ高さに来るので、キーの分だけ右を空ける */
+  #toolNav .nav-act { padding-left: 2px; padding-right: 12px; }
+  /* ⇧W のような2文字のキーは名前と重なるので出さない(ツールチップとヘルプには出る) */
+  #toolNav .nav-act.key-wide .tool-key { display: none; }
+  #toolNav .nav-act.key-wide { padding-right: 2px; }
+}
 @media (max-height: 720px) {
   #toolNav .nav-ico { display: none; }
   #toolNav .btn { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
-  #toolNav > .tool, #toolNav .nav-act { padding-left: 2px; padding-right: 12px; }
+  #toolNav > .tool { padding-left: 2px; padding-right: 12px; }
   #toolNav > .divider { margin: 0; height: 8px; }
 }
 

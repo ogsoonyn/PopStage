@@ -11,6 +11,7 @@ import { toast } from './dom';
 import { isTyping } from './input';
 import { TOOL_GROUPS, TOOLS } from './tools';
 import { icon, type IconName } from './icons';
+import { LIMITS } from '../model/project';
 
 export interface Action {
   /** ツールチップ・ヘルプでの名前 */
@@ -95,6 +96,11 @@ function defineActions(app: App, d: ActionDeps) {
     deleteLayer: { label: '削除', run: () => app.deleteLayer(), enabled: () => (app.doc?.layers.length ?? 0) > 1 },
     layerUp: { label: '上へ', run: () => app.moveLayer(1), enabled: () => app.activeIndex >= 0 && app.activeIndex < (app.doc?.layers.length ?? 0) - 1 },
     layerDown: { label: '下へ', run: () => app.moveLayer(-1), enabled: () => app.activeIndex > 0 },
+    // お気に入り
+    addFavorite: {
+      label: 'お気に入りに残す', keys: ['K'], desc: '今の揺れと動きの組み合わせを残す(画像とウェイトは残さない)',
+      run: () => app.addFavorite(), enabled: () => app.canEditFavorites && app.project.favorites.length < LIMITS.favorites,
+    },
     // ヘルプ・その他
     help: { label: '操作方法', run: () => ui.helpDialog.showModal(), duringPreview: true },
     about: {
@@ -107,13 +113,30 @@ function defineActions(app: App, d: ActionDeps) {
 
 type CommandName = keyof ReturnType<typeof defineActions>;
 
-/** 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く) */
-const NAV_ACTIONS: readonly { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string }[] }[] = [
-  { label: '表示', title: '表示に効く操作', items: [{ cmd: 'cleanView', icon: 'cleanView', text: '表示クリア' }] },
+/** 表示の切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す) */
+type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause';
+
+/**
+ * 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く)。
+ * check を持つものは切り替えで、入・切を aria-pressed で示す。name は、ボタンの文言を幅に合わせて縮めたときの読み上げ用の名前
+ */
+const NAV_ACTIONS: readonly { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string; check?: ViewCheck; name?: string }[] }[] = [
+  {
+    label: '表示', title: '表示に効く操作',
+    items: [
+      { cmd: 'toggleMulti', icon: 'multi', text: '3面図', check: 'multi' },
+      { cmd: 'toggleOverlay', icon: 'overlay', text: 'ウェイト', check: 'overlay', name: 'ウェイトの重ね表示' },
+      { cmd: 'toggleFade', icon: 'fade', text: '画像を薄く', check: 'fade' },
+      { cmd: 'toggleGrid', icon: 'grid', text: 'グリッド', check: 'grid' },
+      { cmd: 'cleanView', icon: 'cleanView', text: '表示クリア' },
+    ],
+  },
   {
     label: 'レイヤー', title: '選択中のレイヤーに効く操作',
     items: [{ cmd: 'smoothAll', icon: 'smoothAll', text: '全体ぼかし…' }, { cmd: 'normalize', icon: 'normalize', text: '正規化' }, { cmd: 'invert', icon: 'invert', text: '反転' }],
   },
+  // 揺らしながら試している最中に、いい動きをすぐ残せるように
+  { label: 'アニメ', title: '揺れと動きの組み合わせに効く操作', items: [{ cmd: 'addFavorite', icon: 'favorite', text: 'お気に入り' }] },
 ];
 
 /** キーの押し方を 'Ctrl+Shift+Z' の形にする */
@@ -189,6 +212,8 @@ export function bindActions(app: App, deps: ActionDeps): void {
     for (const it of g.items) {
       const b = navButton(ACT_BTN, it.icon, it.text);
       b.dataset.cmd = it.cmd; // 結び付け・キーの表記・ツールチップは、下の data-cmd の処理で付ける
+      if (it.check) b.dataset.pressed = it.check;
+      if (it.name) b.setAttribute('aria-label', it.name);
       box.append(b);
     }
     navItems.push(box);
@@ -203,7 +228,12 @@ export function bindActions(app: App, deps: ActionDeps): void {
     if (a.keys) {
       b.setAttribute('aria-keyshortcuts', ariaKeys(a.keys));
       const tk = b.querySelector('kbd.tool-key');
-      if (tk) tk.textContent = a.keys[0];
+      // ボタンの右上は狭いので、Shift は ⇧ と短く書く
+      if (tk) {
+        tk.textContent = a.keys[0].replace('Shift+', '⇧');
+        // 2文字以上の表記は、低い画面で名前と重なるので隠す(style.css)
+        b.classList.toggle('key-wide', tk.textContent.length > 1);
+      }
       // キーの表記は PC のメニューにだけ付ける(スマホの上のメニューにはキーボードが無い)
       if (b.closest('.menu') && !b.closest('.m-only') && !b.querySelector('kbd')) {
         const kbd = document.createElement('kbd');
@@ -254,14 +284,19 @@ export function bindActions(app: App, deps: ActionDeps): void {
   /* ---------- 状態 → 画面 ---------- */
   const undoLabel = document.querySelector('[data-label=undo]')!, redoLabel = document.querySelector('[data-label=redo]')!;
   const checks = [...document.querySelectorAll<HTMLElement>('[data-check]')];
+  const pressables = [...ui.toolNav.querySelectorAll<HTMLElement>('[data-pressed]')];
   /** 'status' でも呼ぶ(0.5 秒ごと)ので、変わったときだけ書く */
   const setText = (el: Element, text: string) => { if (el.textContent !== text) el.textContent = text; };
   function refresh(): void {
     for (const b of cmdButtons) { const off = !enabled(b.dataset.cmd!); if (b.disabled !== off) b.disabled = off; }
     setText(undoLabel, app.history.undoLabel ? `(${app.history.undoLabel})` : '');
     setText(redoLabel, app.history.redoLabel ? `(${app.history.redoLabel})` : '');
-    const on: Record<string, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused };
-    for (const el of checks) setText(el, on[el.dataset.check!] ? '✓' : '');
+    const on: Record<ViewCheck, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused };
+    for (const el of checks) setText(el, on[el.dataset.check as ViewCheck] ? '✓' : '');
+    for (const el of pressables) {
+      const v = String(on[el.dataset.pressed as ViewCheck]);
+      if (el.getAttribute('aria-pressed') !== v) el.setAttribute('aria-pressed', v);
+    }
   }
   app.history.on('change', refresh);
   app.on('active', refresh);
