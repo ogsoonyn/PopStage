@@ -49,7 +49,7 @@ npm run e2e        # E2E テスト(Playwright。エージェントは下の「�
 
 - 実装は `.claude/worktrees/<名前>` の git worktree で行う(node_modules は親から解決される)。
 - 自分で立てる Vite はポート 5175〜5179 にし、`cacheDir` を分ける。設定ファイルは `vite.<名前>.config.ts` / `playwright.<名前>.config.ts`、キャッシュは `.vite-<名前>/` という名前にする(`.gitignore` で追跡外になる)。
-- E2E に既定の `playwright.config.ts` は使わない(ポート 5174 のサーバーを使い回す設定のため)。自分の Playwright の設定では `webServer: undefined`、`workers: 1` にし、`use.baseURL` を自分で立てたポートにする。
+- E2E に既定の `playwright.config.ts` は使わない(ポート 5174 のサーバーを使い回す設定のため)。自分の Playwright の設定では `webServer: undefined` にし、`use.baseURL` を自分で立てたポートにする。`workers` は指定しない(Playwright の既定の並列数で流す。並列で流すと 5173 が重くなることがある)。
 - 作業中は、変えた機能の spec だけを流す。全件の E2E は最後に1回だけ流す。
 - Playwright のブラウザはダウンロードしない(`npx playwright install` をしない)。インストール済みの Chrome を使う。
 - Windows では、バックグラウンドのコマンドを TaskStop で止めても vite の node 子プロセスが残る。残すとワークツリーを削除できない。PowerShell で `Get-NetTCPConnection -LocalPort <port> -State Listen | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { Stop-Process -Id $_ -Force }` のようにポートから止める。
