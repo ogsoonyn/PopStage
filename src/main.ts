@@ -7,12 +7,15 @@ import { bindActions } from './ui/actions';
 import { bindExportDialog } from './ui/exportDialog';
 import { bindBlurDialog } from './ui/blurDialog';
 import { bindInflateDialog } from './ui/inflateDialog';
+import { bindFloatPanels } from './ui/floatPanel';
 import { bindToolOptions } from './ui/toolOptions';
 import { bindMenus } from './ui/menus';
 import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
+import { bindSettingsDialog } from './ui/settingsDialog';
 import { bindMobileLayout } from './ui/mobile';
 import { bindTakeControls } from './ui/take';
+import { bindKeyPath } from './ui/keyPath';
 import { bindFavoriteControls } from './ui/favorites';
 import { isTool } from './ui/tools';
 import { bindHelp } from './ui/help';
@@ -49,6 +52,7 @@ bindStageInput(app, canvas);
 const multiView = bindMultiView(app, canvas);
 bindPanels(app);
 bindTakeControls(app);
+bindKeyPath(app);
 bindFavoriteControls(app);
 
 /* ---------- 右のパネルのタブ(レイヤー・アニメーション・画像と表示)。選んだタブはブラウザに覚える ---------- */
@@ -92,6 +96,7 @@ const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
 const recentDialog = bindRecentDialog(app);
 bindInflateDialog(app);
+bindFloatPanels([{ dialog: ui.blurDialog, handle: ui.blurTitle }, { dialog: ui.inflateDialog, handle: ui.inflTitle }]);
 bindToolOptions(app);
 
 /* ---------- ファイルを開く ---------- */
@@ -122,9 +127,12 @@ bindActions(app, {
   openRecent: () => recentDialog.open(),
   openExport: () => exportDialog.open(),
   openBlur: () => blurDialog.open(),
+  openSettings: () => settingsDialog.open(),
   togglePerf,
 });
 bindMenus();
+// 左のツールバーを作ったあとに、隠すボタンを映す
+const settingsDialog = bindSettingsDialog();
 // スマホの配置。右パネルなどの部品を移すので、ほかの部品を結び付けたあとに呼ぶ
 bindMobileLayout(app);
 

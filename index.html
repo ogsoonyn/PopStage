@@ -32,6 +32,7 @@
       <li><button data-cmd="save">保存</button></li>
       <li><button data-cmd="export">書き出し…</button></li>
       <li><button data-cmd="sample">サンプルを開く</button></li>
+      <li><button data-cmd="settings">設定…</button></li>
       <li><button data-cmd="help">操作方法</button></li>
       <li><button data-cmd="about">PukuPop について</button></li>
     </ul>
@@ -109,6 +110,7 @@
     </ul>
   </div>
   <span id="docTitle" class="ml-auto opacity-70 truncate px-2"></span>
+  <button class="btn btn-ghost btn-sm btn-square" data-cmd="settings" aria-label="設定"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 </header>
 
 <!-- ツールオプション: 選択中のツールの設定(ブラシ・膨らみ)と操作のヒント。ツールに合わせて中身を入れ替える(ui/toolOptions.ts) -->
@@ -166,6 +168,8 @@
       <div class="mv-cell cursor-move" data-kind="bottom" title="ドラッグで平行移動、ホイールでズーム(Ctrl・Shift で細かく)、ダブルクリックで元の表示に戻す(正面・右から・下からの3つで共通)"><span class="mv-label">下から</span></div>
       <div class="mv-cell cursor-grab" data-kind="free" title="ドラッグで回転、中ドラッグ・Shift+ドラッグで平行移動、ホイールでズーム(Ctrl で細かく)、ダブルクリックで初期の視点に戻す"><span class="mv-label">自由角度(ドラッグで回転)</span></div>
     </div>
+    <!-- キーフレームの枠と経路(ui/keyPath.ts が主ビューの大きさに合わせて SVG を描く) -->
+    <div id="keyPath" class="absolute pointer-events-none" hidden></div>
     <div id="dropHint" class="absolute inset-3 border-4 border-dashed border-primary rounded-box bg-base-100/70 hidden items-center justify-center text-lg font-bold pointer-events-none">
       ここに画像か .pukupop ファイルをドロップ
     </div>
@@ -275,10 +279,11 @@
           <div class="flex items-center gap-2">
             <h2 id="keyTitle" class="font-bold">キーフレーム</h2><button type="button" class="help-btn" data-help="keyHelp"></button>
             <span id="keyCount" class="text-xs opacity-60 tabular-nums"></span>
-            <button id="keyAdd" class="btn btn-xs ml-auto" title="今の視点を末尾に追加">＋ 追加</button>
+            <label class="flex items-center gap-1 text-xs ml-auto" title="枠と経路を3Dビューに重ねる"><input id="keyPathShow" type="checkbox" class="checkbox checkbox-xs"> 経路</label>
+            <button id="keyAdd" class="btn btn-xs" title="今の視点を末尾に追加">＋ 追加</button>
           </div>
-          <p id="keyHelp" class="help-text" hidden>視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す動きを作ります。画像の位置が動くと揺れます。「次まで」は次のフレームまでの秒数です。「通り方」は、なめらか(止まらず通り抜ける)か、弾む(急に止まって揺れる)かを選びます。作った動きは今の記録と入れ替わります(元に戻せます)。</p>
-          <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span>次まで</span><span>通り方</span><span></span><span></span></div>
+          <p id="keyHelp" class="help-text" hidden>視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す動きを作ります。画像の位置が動くと揺れます。フレームの間の秒数は、次のフレームまでの時間です(最後の後の ↩ は、最初へ戻るまでの時間)。「通り方」は、そのフレームを、なめらか(止まらず通り抜ける)か、弾む(勢いよく着いて止まり、揺れる)かを選びます。作った動きは今の記録と入れ替わります(元に戻せます)。「経路」をオンにすると、各フレームで映る範囲を枠で、順番を番号で、動きの道筋を矢印と秒数で3Dビューに重ねます(番号を押すとその視点へ移ります。記録中・再生中は消えます)。</p>
+          <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span>通り方</span><span></span><span></span></div>
           <ol id="keyList" class="flex flex-col gap-1" aria-label="キーフレーム一覧"></ol>
           <div class="flex items-center gap-2">
             <button id="keyMake" class="btn btn-sm btn-primary" title="今の記録と入れ替える(元に戻せる)">▶ 作成して再生</button>
@@ -302,8 +307,6 @@
               <input id="vOverlayAll" type="radio" name="vOverlay" class="join-item btn btn-xs" aria-label="全レイヤー">
             </div></div>
           <p id="vOverlayHelp" class="help-text" hidden>塗った所を色で重ねます。「選択中」は選んでいるレイヤーだけ、「全レイヤー」は表示中のレイヤー全部を、一覧の色の印と同じ色で重ねます(選んだレイヤーは濃く、ほかは薄く)。W キーと左のツールバーの「ウェイト」は、押すたびに OFF → 選択中 → 全レイヤーと切り替えます。</p>
-          <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlay">塗るときは自動でON</label><button type="button" class="help-btn" data-help="vAutoOverlayHelp"></button></span><input id="vAutoOverlay" type="checkbox" class="toggle toggle-sm"></div>
-          <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。ほかのツールに移っても自動ではOFFにしません。</p>
           <div class="toggle-row"><span class="prop-name"><label for="vFade">画像を薄く</label><button type="button" class="help-btn" data-help="vFadeHelp"></button></span><input id="vFade" type="checkbox" class="toggle toggle-sm"></div>
           <p id="vFadeHelp" class="help-text" hidden>画像を薄くして、塗りを見やすくします(書き出しには影響しません)。</p>
           <div class="toggle-row"><span class="prop-name"><label for="vFlat">ポップを一時OFF</label><button type="button" class="help-btn" data-help="vFlatHelp"></button></span><input id="vFlat" type="checkbox" class="toggle toggle-sm"></div>
@@ -448,7 +451,7 @@
 <!-- 全体をぼかす(ガウス)。視点を回して確かめられるよう、膨らませると同じく、ほかの操作を止めないダイアログとして開く(show) -->
 <dialog id="blurDialog" class="float-panel bg-base-100 text-base-content rounded-box shadow-2xl border border-base-300 p-4">
   <div>
-    <h3 class="font-bold text-lg">全体をぼかす(ガウス)</h3>
+    <h3 id="blurTitle" class="font-bold text-lg">全体をぼかす(ガウス)</h3>
     <p id="blurTarget" class="text-sm opacity-70 pt-1 pb-3"></p>
     <div class="flex items-center gap-3">
       <span class="shrink-0">半径</span>
@@ -526,6 +529,28 @@
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 
+<!-- ツール全体の設定(ui/settingsDialog.ts)。このブラウザに覚え、ファイルには書かない -->
+<dialog id="settingsDialog" class="modal">
+  <div class="modal-box max-w-xl">
+    <h3 class="font-bold text-lg mb-3">設定</h3>
+    <section class="flex flex-col gap-2">
+      <h4 class="font-bold">ウェイトの重ね表示</h4>
+      <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlay">塗るときは自動でON</label><button type="button" class="help-btn" data-help="vAutoOverlayHelp"></button></span><input id="vAutoOverlay" type="checkbox" class="toggle toggle-sm"></div>
+      <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。ほかのツールに移っても自動ではOFFにしません。</p>
+    </section>
+    <section class="d-only flex flex-col gap-2 mt-4">
+      <div class="flex items-center gap-2">
+        <h4 class="font-bold"><span id="setToolbarLabel">左のツールバーに出すボタン</span></h4><button type="button" class="help-btn" data-help="setToolbarHelp"></button>
+        <button id="setToolbarReset" type="button" class="btn btn-xs btn-ghost ml-auto">すべて出す</button>
+      </div>
+      <p id="setToolbarHelp" class="help-text" hidden>チェックを外したボタンは左のツールバーから隠します。隠してもショートカットとメニューからは使えます(隠したツールを選んでいる間は、ツールバーに選んだ印が出ません)。</p>
+      <div id="setToolbarList" class="set-list" role="group" aria-labelledby="setToolbarLabel"></div>
+    </section>
+    <div class="modal-action"><form method="dialog"><button class="btn btn-sm">閉じる</button></form></div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
 <!-- 操作方法 -->
 <dialog id="helpDialog" class="modal">
   <div class="modal-box max-w-2xl">
@@ -539,6 +564,7 @@
       <span class="font-bold">レイヤーを複数選ぶ</span><span>一覧で長押しすると選択モード。タップで足す・外し、「完了」で抜ける</span>
       <span class="font-bold">膨らみ・塗る・消す</span><span>シートの「レイヤー」→「塗って直す」</span>
       <span class="font-bold">操作の記録</span><span>シートの「アニメ」→「操作の記録」で記録・ループ再生。画面を触ると再生が止まる</span>
+      <span class="font-bold">設定</span><span>右上の「…」→「設定…」</span>
     </div>
     <ol class="d-only list-decimal pl-5 leading-relaxed mb-3">
       <li>画像をウィンドウへドロップする(PNG / JPEG / WebP)。</li>
@@ -557,10 +583,12 @@
       <span>画像ごと上下に動かす</span><span>揺らし方「ピストン」(プリセット「ずんずん」)</span>
       <span>膨らませる範囲を正円・正方形に</span><span>膨らみで Shift + ドラッグ</span>
       <span>一時的に消しゴム</span><span>ブラシ中に Alt</span>
-      <span>最近開いたファイル</span><span>ファイル → 最近開いたファイル…</span>
+      <span>最近開いたファイル</span><span>左のツールバーの「最近」/ ファイル → 最近開いたファイル…</span>
+      <span>左のツールバーに出すボタンを選ぶ</span><span>右上の歯車(設定)</span>
       <span>3面図の正面・右から・下から</span><span>ドラッグで平行移動 / ホイールでズーム(3つ共通)</span>
       <span>3面図の自由角度</span><span>ドラッグで回転 / 中ドラッグ・Shift+ドラッグで平行移動 / ホイールでズーム</span>
       <span>3面図の視点を戻す</span><span>その図をダブルクリック</span>
+      <span>膨らませる・ぼかすのパネルを動かす</span><span>見出しをドラッグ / ダブルクリックで右下に戻す</span>
       <span>レイヤーを足して選ぶ・外す</span><span>一覧で Ctrl(Mac は ⌘)+クリック</span>
       <span>レイヤーを範囲で選ぶ</span><span>一覧で Shift+クリック / Shift+↑↓</span>
       <span>選んだレイヤーを1枚に戻す</span><span>一覧で Esc / 「1枚に戻す」</span>

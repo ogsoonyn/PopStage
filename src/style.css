@@ -14,8 +14,13 @@
 
 .prop { display: grid; grid-template-columns: 6.25rem 1fr 3.25rem; align-items: center; gap: .5rem; }
 .prop output { text-align: right; font-variant-numeric: tabular-nums; }
-/* キーフレームの行: 番号(押すとその視点を見る)・次まで・通り方・今の視点で上書き・削除 */
-.key-row { display: grid; grid-template-columns: 1.75rem 4.75rem 1fr 1.75rem 1.5rem; align-items: center; gap: .375rem; }
+/* キーフレームの行: 番号(押すとその視点を見る)・通り方・今の視点で上書き・削除。間の行は次までの秒数で、行の間にあると分かるよう半分ずらす */
+.key-row { display: grid; grid-template-columns: 1.75rem 1fr 1.75rem 1.5rem; align-items: center; gap: .375rem; }
+.key-gap { display: flex; align-items: center; gap: .375rem; padding-left: .5rem; margin: -.125rem 0; }
+.key-gap .key-arrow { width: 1.25rem; text-align: center; opacity: .6; }
+/* 最初へ戻る区間は、秒数の欄は使えるので濃さはそのままにし、↩ と「1 最初へ戻る」だけ薄くする */
+.key-gap.back .key-arrow, .key-back { opacity: .45; }
+.key-back .key-no { text-align: center; font-size: .75rem; }
 .key-row .key-set svg { width: 1rem; height: 1rem; }
 .key-head { padding: 0 .125rem; }
 /* お気に入りの行: 今の状態と同じ印・名前と中身・適用・今の状態で上書き・削除 */
@@ -44,10 +49,17 @@ html.mobile #favList { max-height: 10rem; }
 #multiView .mv-cell:first-child { border-top: 0; }
 #multiView .mv-label { position: absolute; left: 6px; top: 4px; padding: 0 6px; border-radius: 4px; background: color-mix(in oklab, var(--color-base-100) 80%, transparent); pointer-events: none; }
 
-/* 膨らませる・全体ぼかし: 3Dビューの下に浮かべ、視点の操作などはそのまま受け付ける(show で開く) */
-.float-panel { position: fixed; left: 50%; right: auto; top: auto; bottom: 2.5rem; transform: translateX(-50%); margin: 0; z-index: 40; width: min(34rem, calc(100vw - 2rem)); }
+/*
+ * 膨らませる・全体ぼかし: 画面の右下に浮かべ、視点の操作などはそのまま受け付ける(show で開く)。
+ * 絵を隠さないよう、右パネルや3面図にはかぶってよい。見出しをつかんで動かせる(ui/floatPanel.ts が right / bottom を書く)
+ */
+.float-panel { position: fixed; left: auto; right: 1rem; top: auto; bottom: 2.5rem; margin: 0; z-index: 40; width: min(34rem, calc(100vw - 2rem)); }
+.float-handle { cursor: move; user-select: none; touch-action: none; }
+.float-handle::before { content: "⠿" / ""; margin-right: .375rem; opacity: .4; font-weight: 400; }
+html.mobile .float-handle { cursor: auto; touch-action: auto; }
+html.mobile .float-handle::before { content: none; }
 /* スマホでは下のバーの上に出す(膨らませるはシートの中に置くので除く) */
-html.mobile #blurDialog { bottom: calc(var(--m-tools) + .5rem); }
+html.mobile #blurDialog { left: 50%; right: auto; transform: translateX(-50%); bottom: calc(var(--m-tools) + .5rem); }
 
 /*
  * 左のツールバー(ui/actions.ts が作る)。押すと選んだ状態になるツールは塗りつぶしのボタン、
@@ -60,6 +72,8 @@ html.mobile #blurDialog { bottom: calc(var(--m-tools) + .5rem); }
 .nav-group { width: 4.5rem; display: flex; flex-direction: column; gap: 2px; padding: 4px 0 2px; border-radius: 6px; border: 1px dashed color-mix(in oklab, var(--color-base-content) 22%, transparent); }
 /* 枠の線の分だけ広がらないよう、中のボタンは枠の内側に合わせる(ツールバーの幅はツールのボタンと同じ) */
 #toolNav .nav-group .nav-act { width: 100%; }
+/* 設定で隠したボタン(と、中が空になったまとまり・要らなくなった区切り)。ui/settingsDialog.ts */
+#toolNav .nav-off, #toolNav.nav-off { display: none !important; }
 .nav-group-label { font-size: 10px; text-align: center; opacity: .6; line-height: 1; }
 /* ボタンの右上に出すショートカット */
 .tool-key { position: absolute; top: 1px; right: 3px; font: 600 9px/1 ui-monospace, monospace; opacity: .55; }
@@ -190,3 +204,31 @@ output.is-mixed { font-size: .7rem; opacity: .8; }
 /* 左のツールバーの「ウェイト」: 全レイヤー表示の印 */
 .nav-badge { position: absolute; top: 2px; right: 4px; font-size: .6rem; line-height: 1; padding: 1px 3px; border-radius: 4px; background: var(--color-secondary); color: var(--color-secondary-content); }
 .nav-badge[hidden] { display: none; }
+
+/* 設定の、左のツールバーに出すボタンの一覧(まとまりごとに枠で囲む) */
+.set-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .5rem; }
+.set-group { border: 1px solid var(--color-base-300); border-radius: 6px; padding: .25rem .5rem .5rem; display: flex; flex-direction: column; gap: .25rem; }
+.set-group legend { font-size: .75rem; opacity: .7; padding: 0 .25rem; }
+.set-group label { display: flex; align-items: center; gap: .5rem; cursor: pointer; }
+
+/* キーフレームの枠と経路(ui/keyPath.ts)。画像の明暗どちらの上でも読めるよう、線の下に暗い太い線(kp-halo)を敷く。主ビューの外へははみ出させない */
+#keyPath { z-index: 4; overflow: hidden; }
+#keyPath[hidden] { display: none; }
+#keyPath .key-path { width: 100%; height: 100%; --kp: #fbbf24; }
+.key-path .kp-frame { fill: none; stroke: var(--kp); stroke-width: 1.25; stroke-dasharray: 6 4; }
+.key-path .kp-frame.strong { stroke-width: 2.5; stroke-dasharray: none; }
+.key-path .kp-path { fill: none; stroke: var(--kp); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.key-path .kp-path.back { stroke-dasharray: 2 5; }
+.key-path .kp-arrow { fill: var(--kp); stroke: none; }
+.key-path .kp-halo { stroke: rgb(0 0 0 / .35); fill: none; }
+.key-path .kp-frame.kp-halo { stroke-width: 2.75; }
+.key-path .kp-frame.strong.kp-halo { stroke-width: 4.5; }
+.key-path .kp-path.kp-halo { stroke-width: 4; }
+.key-path .kp-arrow.kp-halo { stroke-width: 2.5; stroke-linejoin: round; }
+.key-path .kp-sec rect { fill: rgb(0 0 0 / .62); }
+.key-path .kp-sec text { fill: #fff; font-size: 10px; font-variant-numeric: tabular-nums; }
+.key-path .kp-sec.back text { fill: rgb(255 255 255 / .75); }
+.key-path .kp-mark { pointer-events: auto; cursor: pointer; }
+.key-path .kp-mark circle { fill: var(--kp); stroke: rgb(0 0 0 / .7); stroke-width: 1.5; }
+.key-path .kp-mark text { fill: #1f1300; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
+.key-path .kp-mark.strong circle { stroke: #fff; stroke-width: 2.5; }

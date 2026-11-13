@@ -42,30 +42,69 @@ export function bindTakeControls(app: App): void {
     else if (el.dataset.act === 'mode') app.setKeyOption(i, { mode: el.value as KeyMode });
   });
 
+  /*
+   * 一覧はフレームの行と、その間の行を交互に並べる。フレームの行は、そのフレームの瞬間の値(番号・通り方)と上書き・削除。
+   * 間の行は、次のフレームまでの秒数(2つ以上のとき)。最後のフレームの後には、最初へ戻るまでの秒数と、薄い最初の番号を出す。
+   */
   function keyRow(): HTMLLIElement {
     const li = document.createElement('li');
     li.className = 'key-row';
-    // 番号・次まで・通り方・今の視点で上書き・削除の順(よく触る値を前に、上書きと削除は行の末尾に寄せる)
+    // 番号・通り方・今の視点で上書き・削除の順(上書きと削除は行の末尾に寄せる)
     li.innerHTML = `<button class="btn btn-xs btn-ghost key-no" data-act="go" title="この視点を見る"></button>`
-      + `<label class="flex items-center gap-0.5"><input data-act="sec" type="number" min="${KEY_SECONDS.min}" max="${KEY_SECONDS.max}" step="0.1" class="input input-xs w-14 text-right" title="次のフレームまでの時間(最後は最初へ戻るまで)" aria-label="次まで(秒)"><span class="text-xs">秒</span></label>`
-      + `<select data-act="mode" class="select select-xs" title="なめらか: 止まらず通り抜ける / 弾む: 急に止まって揺れる" aria-label="通り方"><option value="smooth">なめらか</option><option value="bounce">弾む</option></select>`
+      + `<select data-act="mode" class="select select-xs" title="なめらか: 止まらず通り抜ける / 弾む: 勢いよく着いて止まり、揺れる" aria-label="通り方"><option value="smooth">なめらか</option><option value="bounce">弾む</option></select>`
       + `<button class="btn btn-xs btn-ghost btn-square key-set" data-act="set" title="今の視点で上書きする" aria-label="今の視点で上書き">${icon('keySet')}</button>`
       + `<button class="btn btn-xs btn-ghost btn-square" data-act="del" title="削除" aria-label="削除">×</button>`;
     return li;
   }
+  function gapRow(): HTMLLIElement {
+    const li = document.createElement('li');
+    li.className = 'key-gap';
+    // 読み上げの一覧の数はフレームの数に合わせる(秒数の欄は aria-label で読める)
+    li.setAttribute('role', 'presentation');
+    li.innerHTML = `<span class="key-arrow" aria-hidden="true"></span>`
+      + `<label class="flex items-center gap-0.5"><input data-act="sec" type="number" min="${KEY_SECONDS.min}" max="${KEY_SECONDS.max}" step="0.1" class="input input-xs w-14 text-right"><span class="text-xs">秒</span></label>`;
+    return li;
+  }
+  function backRow(): HTMLLIElement {
+    const li = document.createElement('li');
+    li.className = 'key-row key-back';
+    li.setAttribute('aria-hidden', 'true');
+    li.innerHTML = `<span class="key-no">1</span><span class="text-xs">最初へ戻る</span>`;
+    return li;
+  }
+
+  /** 並びの形(フレームの数)が変わったときだけ行を作り直す。入力中の欄を消さないように */
+  let built = -1;
+  function buildKeys(n: number): void {
+    if (n === built) return;
+    built = n;
+    const rows: HTMLLIElement[] = [];
+    for (let i = 0; i < n; i++) {
+      const r = keyRow(); r.dataset.key = String(i); rows.push(r);
+      if (n < 2) continue;
+      const g = gapRow(); g.dataset.key = String(i); rows.push(g);
+      const last = i === n - 1;
+      g.classList.toggle('back', last);
+      g.querySelector('.key-arrow')!.textContent = last ? '↩' : '↓';
+      const s = g.querySelector<HTMLInputElement>('[data-act=sec]')!;
+      s.title = last ? `${n} から 1 へ戻るまでの時間` : `${i + 1} から ${i + 2} までの時間`;
+      s.setAttribute('aria-label', last ? `${n}から1へ戻るまで(秒)` : `${i + 1}から${i + 2}まで(秒)`);
+    }
+    if (n >= 2) rows.push(backRow());
+    list.replaceChildren(...rows);
+  }
 
   function refreshKeys(): void {
     const keys = app.keyDraft;
-    while (list.children.length < keys.length) list.append(keyRow());
-    while (list.children.length > keys.length) list.lastElementChild!.remove();
+    buildKeys(keys.length);
     keys.forEach((k, i) => {
-      const li = list.children[i] as HTMLLIElement;
-      li.dataset.key = String(i);
-      li.querySelector('.key-no')!.textContent = String(i + 1);
-      const s = li.querySelector<HTMLInputElement>('[data-act=sec]')!, m = li.querySelector<HTMLSelectElement>('[data-act=mode]')!;
-      // 入力中・開いている選択肢は書き換えない
-      if (document.activeElement !== s && +s.value !== k.seconds) s.value = k.seconds.toFixed(1);
+      const row = list.querySelector<HTMLLIElement>(`.key-row[data-key="${i}"]`)!;
+      row.querySelector('.key-no')!.textContent = String(i + 1);
+      const m = row.querySelector<HTMLSelectElement>('[data-act=mode]')!;
       if (m.value !== k.mode) m.value = k.mode;
+      // 入力中の欄は書き換えない
+      const s = list.querySelector<HTMLInputElement>(`.key-gap[data-key="${i}"] [data-act=sec]`);
+      if (s && document.activeElement !== s && +s.value !== k.seconds) s.value = k.seconds.toFixed(1);
     });
     ui.keyCount.textContent = `${keys.length}/${MAX_KEYS}`;
     add.disabled = keys.length >= MAX_KEYS || !app.doc;

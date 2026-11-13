@@ -413,6 +413,48 @@ export class Stage {
     cam.target.z += -dx * k * e[2] + dy * k * e[6];
   }
 
+  /** 主ビューの矩形(キャンバス左上からの CSS ピクセル) */
+  mainView(): ViewRect { return { ...this.main() }; }
+
+  private projCam = new THREE.PerspectiveCamera(40, 1, 1, 1e6);
+  private restInv = new THREE.Matrix4();
+  private projV = new THREE.Vector3();
+
+  /**
+   * 視点 cam で主ビューに映る範囲を、画像の面(持ち上げる前の平面。揺れやピストンでは動かない)の上で求める(キーフレームの枠と経路を描く用)。
+   * 縦横比は今の主ビューのもの(書き出しの縦横比ではない)。点はワールド座標で、今の視点には関わらないので、視点が動くたびに求め直さなくてよい。
+   * corners は左上・右上・右下・左下の順で、1つでも面に当たらなければ null。center は画面の中心が当たる点
+   */
+  viewFootprint(cam: CameraState, withCorners = true): { center: Vec3 | null; corners: Vec3[] | null } {
+    if (!this.mesh) return { center: null, corners: null };
+    const pc = this.projCam;
+    this.applyCamera(cam, this.camera.aspect, pc);
+    this.restInv.copy(this.restMatrix).invert();
+    const limit = this.cameraDistance(cam) * 50 / Math.max(1e-6, this.mesh.scale.x);
+    const at = (nx: number, ny: number): Vec3 | null => {
+      this.ndc.set(nx, ny);
+      this.ray.setFromCamera(this.ndc, pc);
+      const local = this.pickRay.copy(this.ray.ray).applyMatrix4(this.restInv);
+      if (!local.intersectPlane(this.plane, this.hit) || this.hit.distanceTo(local.origin) > limit) return null;
+      const w = this.projV.copy(this.hit).applyMatrix4(this.restMatrix);
+      return { x: w.x, y: w.y, z: w.z };
+    };
+    const center = at(0, 0);
+    if (!withCorners) return { center, corners: null };
+    const corners = [at(-1, 1), at(1, 1), at(1, -1), at(-1, -1)];
+    return { center, corners: corners.every(c => c) ? corners as Vec3[] : null };
+  }
+
+  /** ワールドの点を今の主ビューの画面(主ビューの左上からの CSS ピクセル)へ。直前の render の視点を使う。カメラの後ろなら null */
+  toMainScreen(p: Vec3): { x: number; y: number } | null {
+    const c = this.camera, m = this.main(), v = this.projV.set(p.x, p.y, p.z);
+    this.tmp.copy(v).applyMatrix4(c.matrixWorldInverse);
+    if (this.tmp.z > -c.near) return null;
+    v.project(c);
+    const x = (v.x + 1) / 2 * m.w, y = (1 - v.y) / 2 * m.h;
+    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+  }
+
   /** ポインタからのレイと「持ち上げる前の平面」の交点 */
   pick(clientX: number, clientY: number): PickResult | null {
     if (!this.mesh) return null;

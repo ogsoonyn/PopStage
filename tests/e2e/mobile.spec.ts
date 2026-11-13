@@ -113,6 +113,15 @@ test('プリセットはシートのボタンで選べる', async ({ page }) => 
   await expect(page.locator('#mTop .menu kbd')).toHaveCount(0);
 });
 
+test('上のメニューから設定を開ける。左のツールバーが無いので、その欄は出さない', async ({ page }) => {
+  await boot(page);
+  await page.locator('#mTop [aria-label=メニュー]').click();
+  await page.locator('#mTop [data-cmd=settings]').click();
+  await expect(page.locator('#settingsDialog')).toBeVisible();
+  await expect(page.locator('#vAutoOverlay')).toBeVisible();
+  await expect(page.locator('#setToolbarList')).toBeHidden();
+});
+
 test('2本指で平行移動とピンチズームができ、画像の外をなぞると回転する', async ({ page }) => {
   await boot(page);
   const cdp = await page.context().newCDPSession(page);
