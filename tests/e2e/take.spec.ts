@@ -36,8 +36,8 @@ test('操作の記録: R で記録し、L でループ再生。画面を触る�
   await page.locator('#view').focus();
   await page.keyboard.press('r');
   expect(await app(page, a => [a.takeState, a.paused])).toEqual(['recording', false]);
-  await expect(page.locator('#takeBadge')).toBeVisible();
-  await expect(page.locator('#takeBadge')).toHaveClass(/recording/);
+  await expect(page.locator('#playBar')).toBeVisible();
+  await expect(page.locator('#playBar')).toHaveClass(/recording/);
   // 記録中に右ドラッグで視点を回す
   const box = (await page.locator('#view').boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5);
@@ -48,7 +48,7 @@ test('操作の記録: R で記録し、L でループ再生。画面を触る�
   await page.locator('#view').focus();
   await page.keyboard.press('r');
   expect(await app(page, a => a.takeState)).toBe('idle');
-  await expect(page.locator('#takeBadge')).toBeHidden();
+  await expect(page.locator('#playBar')).toBeHidden();
   const len = await app(page, a => a.takeLength);
   expect(len).toBeGreaterThan(0.5);
   await expect(page.locator('#takePlay')).toBeEnabled();
@@ -59,7 +59,8 @@ test('操作の記録: R で記録し、L でループ再生。画面を触る�
   await page.keyboard.press('l');
   expect(await app(page, a => a.takeState)).toBe('playing');
   expect(await app(page, a => a.project.camera.yaw)).toBe(yaw0);
-  await expect(page.locator('#takeBadge')).toContainText('▶');
+  await expect(page.locator('#playBar')).not.toHaveClass(/recording/);
+  await expect(page.locator('#playTime')).toContainText('秒');
   const yaws = await app(page, a => a.project.take.samples.map((s: any) => s.camera.yaw));
   const lo = Math.min(...yaws) - 1e-6, hi = Math.max(...yaws) + 1e-6;
   await expect.poll(() => app(page, a => a.playView.yaw)).not.toBe(yaw0);
@@ -95,19 +96,19 @@ test('操作の記録: R で記録し、L でループ再生。画面を触る�
   expect(await app(page, a => a.takeLength)).toBeCloseTo(len, 5);
 });
 
-test('操作の記録: ボタンで記録・再生・消す。再生中のボタンの印で止められる', async ({ page }) => {
+test('操作の記録: ボタンで記録・再生・消す。3Dビューの下のバーの停止で止められる', async ({ page }) => {
   await boot(page);
   await page.locator('#pTabs [data-ptab=anim]').click();
   await page.locator('#takeRec').click();
   expect(await app(page, a => a.takeState)).toBe('recording');
   await expect(page.locator('#takeRec')).toContainText('停止');
   await app(page, a => { a.world.grab = { x: 0.2, y: 0, z: 0 }; for (let i = 0; i < 60; i++) a.frame(1 / 60); a.world.grab = null; for (let i = 0; i < 30; i++) a.frame(1 / 60); });
-  await page.locator('#takeBadge').click();
+  await page.locator('#playStop').click();
   expect(await app(page, a => a.takeState)).toBe('idle');
   expect(await app(page, a => !!a.project.take)).toBe(true);
   await page.locator('#takePlay').click();
   expect(await app(page, a => a.takeState)).toBe('playing');
-  await page.locator('#takeBadge').click();
+  await page.locator('#playStop').click();
   expect(await app(page, a => a.takeState)).toBe('idle');
   await page.locator('#takeClear').click();
   expect(await app(page, a => a.project.take)).toBeNull();
@@ -194,7 +195,7 @@ test('キーフレーム: 視点を追加・登録・見る・削除し、つな
   await expect(page.locator('#keyTotal')).toHaveText('1周 5.5秒');
   await page.locator('#keyMake').click();
   expect(await app(page, a => [a.takeState, a.takeLength, a.project.take.keys.length])).toEqual(['playing', 5.5, 2]);
-  await expect(page.locator('#takeInfo')).toContainText('▶');
+  await expect(page.locator('#takeInfo')).toHaveText('再生中');
   // 再生中は画像から見た視点がフレームの間を動き、画像が動くので揺れる
   await expect.poll(() => app(page, a => a.playView.yaw), { timeout: 8000 }).toBeGreaterThan(0.2);
   await expect.poll(() => app(page, a => Math.abs(a.world.displacement(a.doc.layers[0].id).x)), { timeout: 8000 }).toBeGreaterThan(0.001);

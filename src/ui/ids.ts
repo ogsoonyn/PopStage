@@ -13,7 +13,8 @@ export const UI_IDS = {
   tInflKind: 'select', tInflProfile: 'select', tInflSoft: 'input', tInflSoftO: 'output', tInflAngle: 'input', tInflAngleO: 'output', tInflBlend: 'select',
   tSwing: 'input', tAuto: 'input',
   // ツールバー・3Dビュー
-  toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', keyPath: 'div', takeBadge: 'button', takeCam: 'button', mFine: 'button', busy: 'div',
+  toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', keyPath: 'div', takeCam: 'button',
+  playBar: 'div', playStop: 'button', playPause: 'button', playTime: 'span', playTrack: 'div', playKeys: 'div', playLoop: 'span', playCam: 'button', mFine: 'button', busy: 'div',
   // レイヤー一覧
   layerCount: 'span', layerList: 'ul',
   layerSelBar: 'div', layerSelText: 'span', layerSelAll: 'button', layerSelOne: 'button', layerSelDone: 'button',
