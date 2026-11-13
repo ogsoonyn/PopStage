@@ -46,6 +46,8 @@ export const UI_IDS = {
   inflSoft: 'input', inflSoftN: 'input', inflAngle: 'input', inflAngleN: 'input', inflBlend: 'select', inflNote: 'p', inflCancel: 'button', inflApply: 'button',
   // 確認・数値入力
   askDialog: 'dialog', askTitle: 'h3', askBody: 'p', askInputWrap: 'div', askInputLabel: 'span', askInput: 'input', askNo: 'button', askYes: 'button',
+  // 設定
+  settingsDialog: 'dialog', setToolbarList: 'div', setToolbarReset: 'button',
   // 最近開いたファイル・ヘルプ・このアプリについて
   recentDialog: 'dialog', recentEmpty: 'p', recentList: 'ul', recentClear: 'button',
   helpDialog: 'dialog', helpKeys: 'div', aboutDialog: 'dialog', aboutVersion: 'p',

@@ -39,6 +39,7 @@ export interface ActionDeps {
   openRecent: () => unknown;
   openExport: () => unknown;
   openBlur: () => unknown;
+  openSettings: () => unknown;
   togglePerf: () => unknown;
 }
 
@@ -104,6 +105,7 @@ function defineActions(app: App, d: ActionDeps) {
       run: () => app.addFavorite(), enabled: () => app.canEditFavorites && app.project.favorites.length < LIMITS.favorites,
     },
     // ヘルプ・その他
+    settings: { label: '設定', desc: 'ツール全体の設定(左のツールバーに出すボタンなど)', run: d.openSettings, duringPreview: true },
     help: { label: '操作方法', run: () => ui.helpDialog.showModal(), duringPreview: true },
     about: {
       label: 'PukuPop について', duringPreview: true,
@@ -122,7 +124,14 @@ type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause';
  * 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く)。
  * check を持つものは切り替えで、入・切を aria-pressed で示す。name は、ボタンの文言を幅に合わせて縮めたときの読み上げ用の名前
  */
-const NAV_ACTIONS: readonly { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string; check?: ViewCheck; name?: string }[] }[] = [
+type NavGroup = { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string; check?: ViewCheck; name?: string }[] };
+
+/** ツールの上に置く、ファイルの操作(作業を始めるときにすぐ開き直せるように) */
+const NAV_TOP: readonly NavGroup[] = [
+  { label: 'ファイル', title: 'ファイルの操作', items: [{ cmd: 'recent', icon: 'recent', text: '最近', name: '最近開いたファイル' }] },
+];
+
+const NAV_ACTIONS: readonly NavGroup[] = [
   {
     label: '表示', title: '表示に効く操作',
     items: [
@@ -140,6 +149,22 @@ const NAV_ACTIONS: readonly { label: string; title: string; items: readonly { cm
   // 揺らしながら試している最中に、いい動きをすぐ残せるように
   { label: 'アニメ', title: '揺れと動きの組み合わせに効く操作', items: [{ cmd: 'addFavorite', icon: 'favorite', text: 'お気に入り' }] },
 ];
+
+/**
+ * 左のツールバーのボタンの一覧(並びのとおり)。設定で出す・隠すを選ぶのに使う。
+ * id はボタンの data-nav と同じ(ツールはツールの id、操作はコマンドの名前)
+ */
+export const TOOLBAR_ITEMS: readonly { group: string; items: readonly { id: string; label: string }[] }[] = [
+  ...NAV_TOP.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text })) })),
+  { group: 'ツール', items: TOOL_GROUPS.flat().map(t => ({ id: t.id as string, label: t.name ?? t.label })) },
+  ...NAV_ACTIONS.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text })) })),
+];
+{
+  // ツールの id とコマンドの名前は同じ data-nav に入るので、重なると1つのチェックで2つのボタンが隠れる
+  const ids = TOOLBAR_ITEMS.flatMap(g => g.items.map(it => it.id));
+  const dup = ids.find((id, i) => ids.indexOf(id) !== i);
+  if (dup) throw new Error(`左のツールバーのボタン「${dup}」が重なっています`);
+}
 
 /** キーの押し方を 'Ctrl+Shift+Z' の形にする */
 export function keyString(e: KeyboardEvent): string {
@@ -179,7 +204,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   /** ツールチップ: 「名前 (キー補足): 説明」 */
   const tooltip = (a: Action, keyNote = '') => `${a.label}${a.keys ? ` (${a.keys[0]}${keyNote})` : ''}${a.desc ? `: ${a.desc}` : ''}`;
 
-  /* ---------- 左のツールバーを作る(ツール → 区切り → その場で効く操作のまとまり) ---------- */
+  /* ---------- 左のツールバーを作る(ファイルの操作 → 区切り → ツール → 区切り → その場で効く操作のまとまり) ---------- */
   const navItems: Node[] = [];
   const divider = () => Object.assign(document.createElement('div'), { className: 'divider my-0' });
   /** アイコン・名前・キーの3段のボタン */
@@ -192,18 +217,8 @@ export function bindActions(app: App, deps: ActionDeps): void {
     b.querySelector('.tool-key')!.textContent = key;
     return b;
   };
-  for (const group of TOOL_GROUPS) {
-    for (const t of group) {
-      const b = navButton(TOOL_BTN, t.id, t.label, t.key);
-      b.dataset.tool = t.id;
-      b.title = tooltip(table[`tool.${t.id}`], t.keyNote);
-      b.setAttribute('aria-keyshortcuts', t.key);
-      b.addEventListener('click', () => run(`tool.${t.id}`));
-      navItems.push(b);
-    }
-    navItems.push(divider());
-  }
-  for (const g of NAV_ACTIONS) {
+  /** 見出し付きの枠に入れた、その場で効く操作のまとまり */
+  const actionGroup = (g: NavGroup) => {
     const box = document.createElement('div');
     box.className = 'nav-group';
     box.setAttribute('role', 'group');
@@ -214,14 +229,30 @@ export function bindActions(app: App, deps: ActionDeps): void {
     for (const it of g.items) {
       const b = navButton(ACT_BTN, it.icon, it.text);
       b.dataset.cmd = it.cmd; // 結び付け・キーの表記・ツールチップは、下の data-cmd の処理で付ける
+      b.dataset.nav = it.cmd;
       if (it.check) b.dataset.pressed = it.check;
       if (it.name) b.setAttribute('aria-label', it.name);
       // 重ね表示が全レイヤーのときの印(押すたびに OFF → 選択中 → 全レイヤー)
       if (it.check === 'overlay') b.append(Object.assign(document.createElement('span'), { className: 'nav-badge', textContent: '全', hidden: true }));
       box.append(b);
     }
-    navItems.push(box);
+    return box;
+  };
+  for (const g of NAV_TOP) navItems.push(actionGroup(g));
+  navItems.push(divider());
+  for (const group of TOOL_GROUPS) {
+    for (const t of group) {
+      const b = navButton(TOOL_BTN, t.id, t.label, t.key);
+      b.dataset.tool = t.id;
+      b.dataset.nav = t.id;
+      b.title = tooltip(table[`tool.${t.id}`], t.keyNote);
+      b.setAttribute('aria-keyshortcuts', t.key);
+      b.addEventListener('click', () => run(`tool.${t.id}`));
+      navItems.push(b);
+    }
+    navItems.push(divider());
   }
+  for (const g of NAV_ACTIONS) navItems.push(actionGroup(g));
   ui.toolNav.replaceChildren(...navItems);
 
   /* ---------- data-cmd の部品に、キーの表記・ツールチップを付けて結び付ける ---------- */
