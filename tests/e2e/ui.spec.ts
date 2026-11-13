@@ -708,3 +708,75 @@ test('膨らみの既定値は覚える。プレビュー中に変えてキャ�
   await page.waitForFunction(() => (window as any).popstage?.doc);
   expect(await profile()).toBe('cone');
 });
+
+test('膨らませる・ぼかすのパネルは右下に出て、見出しをつかんで動かせる。位置は覚え、ダブルクリックで右下に戻る', async ({ page }) => {
+  await boot(page);
+  const dlg = page.locator('#blurDialog');
+  const title = page.locator('#blurTitle');
+  const box = async () => (await dlg.boundingBox())!;
+  const vp = page.viewportSize()!;
+  await page.locator('nav button[data-cmd=smoothAll]').click();
+  await expect(dlg).toHaveJSProperty('open', true);
+  // 最初は画面の右下(右パネルにかぶってよい)
+  let b = await box();
+  expect(vp.width - (b.x + b.width)).toBeLessThan(40);
+  expect(vp.height - (b.y + b.height)).toBeLessThan(80);
+
+  // 見出しをつかんで左上へ動かす
+  const t = (await title.boundingBox())!;
+  await page.mouse.move(t.x + 40, t.y + t.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(t.x - 500, t.y - 300, { steps: 5 });
+  await page.mouse.up();
+  b = await box();
+  expect(b.x).toBeLessThan(t.x - 400);
+  expect(b.y).toBeLessThan(t.y - 200);
+  const moved = { x: Math.round(b.x), y: Math.round(b.y) };
+
+  // 閉じて開き直しても、動かした位置に出る
+  await page.locator('#blurCancel').click();
+  await expect(dlg).toHaveJSProperty('open', false);
+  await page.locator('nav button[data-cmd=smoothAll]').click();
+  await expect(dlg).toHaveJSProperty('open', true);
+  b = await box();
+  expect(Math.abs(b.x - moved.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(b.y - moved.y)).toBeLessThanOrEqual(1);
+
+  // 画面の外へは出ない
+  const t2 = (await title.boundingBox())!;
+  await page.mouse.move(t2.x + 40, t2.y + t2.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(-500, -500, { steps: 5 });
+  await page.mouse.up();
+  b = await box();
+  expect(b.x).toBeGreaterThanOrEqual(0);
+  expect(b.y).toBeGreaterThanOrEqual(0);
+
+  // 位置は膨らませるのパネルと共通。下の端に寄せておき、開いたあと高さが伸びても(説明を開くなど)画面の下へ出ない
+  const t3 = (await title.boundingBox())!;
+  await page.mouse.move(t3.x + 40, t3.y + t3.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(t3.x + 40 - 200, vp.height, { steps: 5 });
+  await page.mouse.up();
+  const blurBox = await box();
+  await page.locator('#blurCancel').click();
+  await page.keyboard.press('i');
+  await dragOnStage(page, [0.6, 0.3], [0.8, 0.5]);
+  const infl = page.locator('#inflateDialog');
+  await expect(infl).toHaveJSProperty('open', true);
+  let ib = (await infl.boundingBox())!;
+  expect(Math.abs(ib.x + ib.width - (blurBox.x + blurBox.width))).toBeLessThanOrEqual(1);
+  expect(Math.abs(ib.y + ib.height - (blurBox.y + blurBox.height))).toBeLessThanOrEqual(1);
+  await infl.locator('[data-help=inflAngleHelp]').click();
+  await expect(page.locator('#inflAngleHelp')).toBeVisible();
+  ib = (await infl.boundingBox())!;
+  expect(ib.y + ib.height).toBeLessThanOrEqual(vp.height);
+  await expect(page.locator('#inflApply')).toBeInViewport();
+
+  // ダブルクリックで右下に戻る
+  await page.locator('#inflTitle').dblclick();
+  ib = (await infl.boundingBox())!;
+  expect(vp.width - (ib.x + ib.width)).toBeLessThan(40);
+  expect(vp.height - (ib.y + ib.height)).toBeLessThan(80);
+  await page.locator('#inflCancel').click();
+});

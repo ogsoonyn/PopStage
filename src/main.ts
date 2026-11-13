@@ -7,6 +7,7 @@ import { bindActions } from './ui/actions';
 import { bindExportDialog } from './ui/exportDialog';
 import { bindBlurDialog } from './ui/blurDialog';
 import { bindInflateDialog } from './ui/inflateDialog';
+import { bindFloatPanels } from './ui/floatPanel';
 import { bindToolOptions } from './ui/toolOptions';
 import { bindMenus } from './ui/menus';
 import { bindMultiView } from './ui/multiView';
@@ -92,6 +93,7 @@ const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
 const recentDialog = bindRecentDialog(app);
 bindInflateDialog(app);
+bindFloatPanels([{ dialog: ui.blurDialog, handle: ui.blurTitle }, { dialog: ui.inflateDialog, handle: ui.inflTitle }]);
 bindToolOptions(app);
 
 /* ---------- ファイルを開く ---------- */

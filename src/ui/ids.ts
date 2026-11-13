@@ -40,9 +40,9 @@ export const UI_IDS = {
   exBgColor: 'input', exBgAlphaLabel: 'label', exRecLen: 'span', exTakeLen: 'span', exNote: 'p', exProgress: 'progress',
   exStatus: 'p', exCancel: 'button', exStart: 'button',
   // 全体ぼかし
-  blurDialog: 'dialog', blurTarget: 'p', blurRadius: 'input', blurRadiusN: 'input', blurCancel: 'button', blurApply: 'button',
+  blurDialog: 'dialog', blurTitle: 'h3', blurTarget: 'p', blurRadius: 'input', blurRadiusN: 'input', blurCancel: 'button', blurApply: 'button',
   // 膨らませる
-  inflateDialog: 'dialog', inflTarget: 'p', inflKind: 'select', inflW: 'input', inflH: 'input', inflHeight: 'input', inflHeightN: 'input',
+  inflateDialog: 'dialog', inflTitle: 'h3', inflTarget: 'p', inflKind: 'select', inflW: 'input', inflH: 'input', inflHeight: 'input', inflHeightN: 'input',
   inflSoft: 'input', inflSoftN: 'input', inflAngle: 'input', inflAngleN: 'input', inflBlend: 'select', inflNote: 'p', inflCancel: 'button', inflApply: 'button',
   // 確認・数値入力
   askDialog: 'dialog', askTitle: 'h3', askBody: 'p', askInputWrap: 'div', askInputLabel: 'span', askInput: 'input', askNo: 'button', askYes: 'button',

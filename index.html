@@ -448,7 +448,7 @@
 <!-- 全体をぼかす(ガウス)。視点を回して確かめられるよう、膨らませると同じく、ほかの操作を止めないダイアログとして開く(show) -->
 <dialog id="blurDialog" class="float-panel bg-base-100 text-base-content rounded-box shadow-2xl border border-base-300 p-4">
   <div>
-    <h3 class="font-bold text-lg">全体をぼかす(ガウス)</h3>
+    <h3 id="blurTitle" class="font-bold text-lg">全体をぼかす(ガウス)</h3>
     <p id="blurTarget" class="text-sm opacity-70 pt-1 pb-3"></p>
     <div class="flex items-center gap-3">
       <span class="shrink-0">半径</span>
@@ -561,6 +561,7 @@
       <span>3面図の正面・右から・下から</span><span>ドラッグで平行移動 / ホイールでズーム(3つ共通)</span>
       <span>3面図の自由角度</span><span>ドラッグで回転 / 中ドラッグ・Shift+ドラッグで平行移動 / ホイールでズーム</span>
       <span>3面図の視点を戻す</span><span>その図をダブルクリック</span>
+      <span>膨らませる・ぼかすのパネルを動かす</span><span>見出しをドラッグ / ダブルクリックで右下に戻す</span>
       <span>レイヤーを足して選ぶ・外す</span><span>一覧で Ctrl(Mac は ⌘)+クリック</span>
       <span>レイヤーを範囲で選ぶ</span><span>一覧で Shift+クリック / Shift+↑↓</span>
       <span>選んだレイヤーを1枚に戻す</span><span>一覧で Esc / 「1枚に戻す」</span>
