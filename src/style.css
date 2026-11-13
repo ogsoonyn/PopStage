@@ -229,6 +229,6 @@ output.is-mixed { font-size: .7rem; opacity: .8; }
 .key-path .kp-sec text { fill: #fff; font-size: 10px; font-variant-numeric: tabular-nums; }
 .key-path .kp-sec.back text { fill: rgb(255 255 255 / .75); }
 .key-path .kp-mark { pointer-events: auto; cursor: pointer; }
-.key-path .kp-mark circle { fill: var(--kp); stroke: rgb(0 0 0 / .7); stroke-width: 1.5; }
+.key-path .kp-mark .kp-shape { fill: var(--kp); stroke: rgb(0 0 0 / .7); stroke-width: 1.5; }
 .key-path .kp-mark text { fill: #1f1300; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
-.key-path .kp-mark.strong circle { stroke: #fff; stroke-width: 2.5; }
+.key-path .kp-mark.strong .kp-shape { stroke: #fff; stroke-width: 2.5; }

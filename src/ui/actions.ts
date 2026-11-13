@@ -90,6 +90,11 @@ function defineActions(app: App, d: ActionDeps) {
       label: 'ループ再生', helpLabel: 'ループ再生(開始・停止。再生中は画面を触っても止まる)', keys: ['L'], desc: '画面を触ると止まる',
       run: () => app.togglePlay(), enabled: () => !!app.project.take && app.takeState !== 'recording' && !app.exporting,
     },
+    resetPlayView: {
+      label: 'カメラを戻す', helpLabel: 'カメラを戻す(ループ再生中に動かした視点を戻す)', keys: ['Shift+Home'], desc: 'ループ再生中に動かした視点を、再生を始めた視点(記録の初めの視点。キーフレームなら1番の視点)へ戻す。再生は続ける',
+      run: () => app.resetPlayView(), enabled: () => app.takeState === 'playing',
+    },
+    stopPlay: { label: '停止', helpLabel: 'ループ再生を止める', desc: 'ループ再生を止める', run: () => app.stopTake(), enabled: () => app.takeState === 'playing' },
     clearTake: { label: '記録を消す', desc: '元に戻せる', run: () => app.clearTake(), enabled: () => !!app.project.take && app.takeState !== 'recording' },
     // レイヤー
     addLayer: { label: '新規レイヤー', run: () => app.addLayer(), enabled: () => !!app.doc },

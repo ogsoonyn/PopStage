@@ -198,6 +198,19 @@ test('キーフレーム: 視点を追加・登録・見る・削除し、つな
   // 再生中は画像から見た視点がフレームの間を動き、画像が動くので揺れる
   await expect.poll(() => app(page, a => a.playView.yaw), { timeout: 8000 }).toBeGreaterThan(0.2);
   await expect.poll(() => app(page, a => Math.abs(a.world.displacement(a.doc.layers[0].id).x)), { timeout: 8000 }).toBeGreaterThan(0.001);
+  // 再生中に動かした視点は「撮影カメラに戻す」で再生を始めた視点へ戻る(再生は続く)。「停止」で止まる
+  await expect(page.locator('#takeCam')).toBeEnabled();
+  const start = await app(page, a => a.project.take.samples[0].camera.yaw);
+  await app(page, a => { a.project.camera.yaw += 1; });
+  await page.locator('#takeCam').click();
+  expect(await app(page, a => [a.takeState, a.project.camera.yaw])).toEqual(['playing', start]);
+  await expect(page.locator('#keyStop')).toBeEnabled();
+  await page.locator('#keyStop').click();
+  expect(await app(page, a => a.takeState)).toBe('idle');
+  await expect(page.locator('#keyStop')).toBeDisabled();
+  await expect(page.locator('#takeCam')).toBeDisabled();
+  await app(page, a => a.playTake());
+  expect(await app(page, a => a.takeState)).toBe('playing');
   // アンドゥで記録が消えて止まる
   await app(page, a => a.history.undo());
   expect(await app(page, a => [a.takeState, a.project.take])).toEqual(['idle', null]);
