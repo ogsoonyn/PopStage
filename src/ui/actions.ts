@@ -155,7 +155,6 @@ const NAV_ACTIONS: readonly NavGroup[] = [
       { cmd: 'toggleFade', icon: 'fade', text: '画像を薄く', check: 'fade' },
       { cmd: 'toggleGrid', icon: 'grid', text: 'グリッド', check: 'grid' },
       { cmd: 'cleanView', icon: 'cleanView', text: '表示クリア' },
-      { cmd: 'toggleUi', icon: 'hideUi', text: 'UIを隠す' },
     ],
   },
   {
