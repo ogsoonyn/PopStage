@@ -133,7 +133,6 @@ export function bindTakeControls(app: App): void {
       badge.classList.toggle('recording', s === 'recording');
       badge.title = s === 'recording' ? '記録を止める (R)' : '再生を止める (L)';
     }
-    ui.takeCam.classList.toggle('hidden', s !== 'playing');
     refreshKeys();
   }
 

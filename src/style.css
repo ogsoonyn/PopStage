@@ -132,8 +132,7 @@ html.mobile #mTop:not([hidden]) { display: flex !important; }
 /* 3Dビューは、シートに隠れない所までに縮める(画像がシートの下に入らないように) */
 html.mobile #stageWrap { margin-bottom: var(--m-sheet); }
 /* 記録中・ループ再生中の印(3Dビューの左上) */
-#takeBar { position: absolute; top: .625rem; left: max(.625rem, env(safe-area-inset-left, 0px)); z-index: 5; max-width: calc(100% - 7rem); }
-#takeBadge { gap: .375rem; }
+#takeBadge { position: absolute; top: .625rem; left: max(.625rem, env(safe-area-inset-left, 0px)); z-index: 5; gap: .375rem; }
 #takeBadge.recording { background: var(--color-error); color: var(--color-error-content); border-color: transparent; }
 #takeBadge.recording::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; animation: take-blink 1s steps(2, start) infinite; }
 @keyframes take-blink { to { visibility: hidden; } }

@@ -173,11 +173,8 @@
     <div id="dropHint" class="absolute inset-3 border-4 border-dashed border-primary rounded-box bg-base-100/70 hidden items-center justify-center text-lg font-bold pointer-events-none">
       ここに画像か .pukupop ファイルをドロップ
     </div>
-    <!-- 記録中・ループ再生中の印(押すと止める)と、再生中に撮影カメラへ戻すボタン -->
-    <div id="takeBar" class="flex flex-wrap items-center gap-2">
-      <button id="takeBadge" class="btn btn-sm rounded-full hidden" type="button"></button>
-      <button id="takeCam" class="btn btn-sm rounded-full hidden" type="button" data-cmd="resetPlayView">カメラを戻す</button>
-    </div>
+    <!-- 記録中・ループ再生中の印。押すと止める -->
+    <button id="takeBadge" class="btn btn-sm rounded-full hidden" type="button"></button>
     <button id="mFine" class="m-only btn btn-sm rounded-full" aria-pressed="false" title="押すとオン・オフが切り替わります。オンの間は、回転・平行移動・ズーム・つかむ・揺らすの動きが 1/5 になります">微調整</button>
     <div id="busy" class="absolute inset-0 bg-base-100/60 hidden items-center justify-center"><span class="loading loading-spinner loading-lg"></span></div>
   </section>
@@ -269,7 +266,7 @@
             <h2 id="takeTitle" class="font-bold">操作の記録</h2><button type="button" class="help-btn" data-help="takeHelp"></button>
             <span id="takeInfo" class="badge badge-sm badge-ghost font-normal tabular-nums"></span>
           </div>
-          <p id="takeHelp" class="help-text" hidden>つかむ・揺らす・移動・視点の操作を覚えます(最長 60 秒)。ループ再生中も、回転・平行移動・ズームで視点を動かせます(画像のほうが記録どおりに動きます)。動かした視点は、左上の「カメラを戻す」で再生を始めた視点へ戻せます。塗る・つかむ・揺らすなどで画面を触ると止まります。記録はプロジェクトに保存され、書き出しの「記録した操作をループ再生」にも使えます。</p>
+          <p id="takeHelp" class="help-text" hidden>つかむ・揺らす・移動・視点の操作を覚えます(最長 60 秒)。ループ再生中も、回転・平行移動・ズームで視点を動かせます(画像のほうが記録どおりに動きます)。動かした視点は、キーフレームの下の「カメラを戻す」で再生を始めた視点へ戻せます。塗る・つかむ・揺らすなどで画面を触ると止まります。記録はプロジェクトに保存され、書き出しの「記録した操作をループ再生」にも使えます。</p>
           <div class="flex flex-wrap gap-2">
             <button id="takeRec" class="btn btn-sm" data-cmd="toggleRecording"><span class="text-error" aria-hidden="true">●</span> <span data-label>記録</span></button>
             <button id="takePlay" class="btn btn-sm" data-cmd="togglePlay"><span aria-hidden="true" data-icon>▶</span> <span data-label>再生</span></button>
@@ -292,9 +289,10 @@
           <p id="keyHelp" class="help-text" hidden>視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す動きを作ります。画像の位置が動くと揺れます。フレームの間の秒数は、次のフレームまでの時間です(最後の後の ↩ は、最初へ戻るまでの時間)。「通り方」は、そのフレームを、なめらか(止まらず通り抜ける)か、弾む(勢いよく着いて止まり、揺れる)かを選びます。作った動きは今の記録と入れ替わります(元に戻せます)。「経路」をオンにすると、1番のフレームの視点をカメラとして止めたまま画像のほうが動くとみなし、各フレームで画像が来る所を枠で、順番を番号で、画像の中心の動きを矢印と秒数で3Dビューに重ねます。1番の視点から見ると、そのカメラで映る並びになります。視点を動かすと横や上からも見られます。番号の形は通り方で、丸がなめらか、ひし形が弾むです。番号を押すとその視点へ移ります。「ゴースト」をオンにすると、同じ所に画像を半透明で重ねます。どちらも記録中・再生中は消えます。</p>
           <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span>通り方</span><span></span><span></span></div>
           <ol id="keyList" class="flex flex-col gap-1" aria-label="キーフレーム一覧"></ol>
-          <div class="flex items-center gap-2">
-            <button id="keyMake" type="button" class="btn btn-sm btn-primary" title="今の記録と入れ替える(元に戻せる)">▶ 作成して再生</button>
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="keyMake" type="button" class="btn btn-sm btn-primary" title="キーフレームの動きをループ再生する(今の記録と入れ替わる。元に戻せる)">▶ 再生</button>
             <button id="keyStop" type="button" class="btn btn-sm" data-cmd="stopPlay">■ 停止</button>
+            <button id="takeCam" type="button" class="btn btn-sm" data-cmd="resetPlayView">カメラを戻す</button>
             <span id="keyTotal" class="text-xs opacity-70 tabular-nums"></span>
           </div>
         </section>
