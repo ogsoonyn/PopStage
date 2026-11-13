@@ -20,7 +20,6 @@ export function bindTakeControls(app: App): void {
   const { keyList: list, keyAdd: add, keyMake: make } = ui;
   add.addEventListener('click', () => app.addKey());
   make.addEventListener('click', () => app.makeKeyTake());
-  ui.keyStop.addEventListener('click', () => app.stopTake());
   // 行の中のボタン・入力はまとめて受ける(行は作り直すことがある)
   const rowOf = (el: EventTarget | null) => Number((el as HTMLElement | null)?.closest<HTMLElement>('[data-key]')?.dataset.key ?? -1);
   list.addEventListener('click', e => {
@@ -110,7 +109,6 @@ export function bindTakeControls(app: App): void {
     ui.keyCount.textContent = `${keys.length}/${MAX_KEYS}`;
     add.disabled = keys.length >= MAX_KEYS || !app.doc;
     const total = keys.reduce((a, k) => a + k.seconds, 0);
-    ui.keyStop.disabled = app.takeState !== 'playing';
     make.disabled = keys.length < 2 || total < TAKE_MIN_SECONDS - 1e-9 || !app.doc || app.exporting || app.takeState === 'recording';
     ui.keyTotal.textContent = keys.length < 2 ? '2つ以上' : total < TAKE_MIN_SECONDS - 1e-9 ? `1周 ${TAKE_MIN_SECONDS}秒以上` : `1周 ${sec(total)}`;
   }

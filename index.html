@@ -174,9 +174,9 @@
       ここに画像か .pukupop ファイルをドロップ
     </div>
     <!-- 記録中・ループ再生中の印(押すと止める)と、再生中に撮影カメラへ戻すボタン -->
-    <div id="takeBar" class="flex items-center gap-2">
+    <div id="takeBar" class="flex flex-wrap items-center gap-2">
       <button id="takeBadge" class="btn btn-sm rounded-full hidden" type="button"></button>
-      <button id="takeCam" class="btn btn-sm rounded-full hidden" type="button" data-cmd="resetPlayView">撮影カメラに戻す</button>
+      <button id="takeCam" class="btn btn-sm rounded-full hidden" type="button" data-cmd="resetPlayView">カメラを戻す</button>
     </div>
     <button id="mFine" class="m-only btn btn-sm rounded-full" aria-pressed="false" title="押すとオン・オフが切り替わります。オンの間は、回転・平行移動・ズーム・つかむ・揺らすの動きが 1/5 になります">微調整</button>
     <div id="busy" class="absolute inset-0 bg-base-100/60 hidden items-center justify-center"><span class="loading loading-spinner loading-lg"></span></div>
@@ -269,7 +269,7 @@
             <h2 id="takeTitle" class="font-bold">操作の記録</h2><button type="button" class="help-btn" data-help="takeHelp"></button>
             <span id="takeInfo" class="badge badge-sm badge-ghost font-normal tabular-nums"></span>
           </div>
-          <p id="takeHelp" class="help-text" hidden>つかむ・揺らす・移動・視点の操作を覚えます(最長 60 秒)。ループ再生中は、画面を触ると止まります。記録はプロジェクトに保存され、書き出しの「記録した操作をループ再生」にも使えます。</p>
+          <p id="takeHelp" class="help-text" hidden>つかむ・揺らす・移動・視点の操作を覚えます(最長 60 秒)。ループ再生中も、回転・平行移動・ズームで視点を動かせます(画像のほうが記録どおりに動きます)。動かした視点は、左上の「カメラを戻す」で再生を始めた視点へ戻せます。塗る・つかむ・揺らすなどで画面を触ると止まります。記録はプロジェクトに保存され、書き出しの「記録した操作をループ再生」にも使えます。</p>
           <div class="flex flex-wrap gap-2">
             <button id="takeRec" class="btn btn-sm" data-cmd="toggleRecording"><span class="text-error" aria-hidden="true">●</span> <span data-label>記録</span></button>
             <button id="takePlay" class="btn btn-sm" data-cmd="togglePlay"><span aria-hidden="true" data-icon>▶</span> <span data-label>再生</span></button>
@@ -293,8 +293,8 @@
           <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span>通り方</span><span></span><span></span></div>
           <ol id="keyList" class="flex flex-col gap-1" aria-label="キーフレーム一覧"></ol>
           <div class="flex items-center gap-2">
-            <button id="keyMake" class="btn btn-sm btn-primary" title="今の記録と入れ替える(元に戻せる)">▶ 作成して再生</button>
-            <button id="keyStop" class="btn btn-sm" title="ループ再生を止める">■ 停止</button>
+            <button id="keyMake" type="button" class="btn btn-sm btn-primary" title="今の記録と入れ替える(元に戻せる)">▶ 作成して再生</button>
+            <button id="keyStop" type="button" class="btn btn-sm" data-cmd="stopPlay">■ 停止</button>
             <span id="keyTotal" class="text-xs opacity-70 tabular-nums"></span>
           </div>
         </section>

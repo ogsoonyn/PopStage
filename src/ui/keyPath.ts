@@ -78,7 +78,7 @@ function spread(points: readonly (Pt | null)[]): (Pt | null)[] {
   const done = new Set<number>();
   points.forEach((p, i) => {
     if (!p || done.has(i)) return;
-    const group = points.flatMap((q, j) => (q && !done.has(j) && Math.hypot(q.x - p.x, q.y - p.y) < R * 1.6 ? [j] : []));
+    const group = points.flatMap((q, j) => (q && !done.has(j) && Math.hypot(q.x - p.x, q.y - p.y) < R * 2.6 ? [j] : []));
     group.forEach(j => done.add(j));
     if (group.length < 2) return;
     group.forEach((j, k) => { out[j] = { x: p.x + (k - (group.length - 1) / 2) * (R * 2.6 + 3), y: p.y }; });
@@ -248,7 +248,8 @@ export function bindKeyPath(app: App): void {
       el('title', {}, g).textContent = `${i + 1}(${bounce ? '弾む' : 'なめらか'}): この視点を見る`;
       if (bounce) el('polygon', { class: 'kp-shape', points: `0,${-D} ${D},0 0,${D} ${-D},0` }, g);
       else el('circle', { class: 'kp-shape', r: R }, g);
-      el('text', { 'text-anchor': 'middle', 'dominant-baseline': 'central' }, g).textContent = String(i + 1);
+      // 2けたはひし形の縁にかからないよう小さくする
+      el('text', { 'text-anchor': 'middle', 'dominant-baseline': 'central', ...(i >= 9 ? { style: 'font-size: 9px' } : {}) }, g).textContent = String(i + 1);
     });
   }
 
