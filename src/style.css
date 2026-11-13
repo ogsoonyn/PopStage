@@ -14,8 +14,13 @@
 
 .prop { display: grid; grid-template-columns: 6.25rem 1fr 3.25rem; align-items: center; gap: .5rem; }
 .prop output { text-align: right; font-variant-numeric: tabular-nums; }
-/* キーフレームの行: 番号(押すとその視点を見る)・次まで・通り方・今の視点で上書き・削除 */
-.key-row { display: grid; grid-template-columns: 1.75rem 4.75rem 1fr 1.75rem 1.5rem; align-items: center; gap: .375rem; }
+/* キーフレームの行: 番号(押すとその視点を見る)・通り方・今の視点で上書き・削除。間の行は次までの秒数で、行の間にあると分かるよう半分ずらす */
+.key-row { display: grid; grid-template-columns: 1.75rem 1fr 1.75rem 1.5rem; align-items: center; gap: .375rem; }
+.key-gap { display: flex; align-items: center; gap: .375rem; padding-left: .5rem; margin: -.125rem 0; }
+.key-gap .key-arrow { width: 1.25rem; text-align: center; opacity: .6; }
+/* 最初へ戻る区間は、秒数の欄は使えるので濃さはそのままにし、↩ と「1 最初へ戻る」だけ薄くする */
+.key-gap.back .key-arrow, .key-back { opacity: .45; }
+.key-back .key-no { text-align: center; font-size: .75rem; }
 .key-row .key-set svg { width: 1rem; height: 1rem; }
 .key-head { padding: 0 .125rem; }
 /* お気に入りの行: 今の状態と同じ印・名前と中身・適用・今の状態で上書き・削除 */
@@ -197,3 +202,25 @@ output.is-mixed { font-size: .7rem; opacity: .8; }
 /* 左のツールバーの「ウェイト」: 全レイヤー表示の印 */
 .nav-badge { position: absolute; top: 2px; right: 4px; font-size: .6rem; line-height: 1; padding: 1px 3px; border-radius: 4px; background: var(--color-secondary); color: var(--color-secondary-content); }
 .nav-badge[hidden] { display: none; }
+
+/* キーフレームの枠と経路(ui/keyPath.ts)。画像の明暗どちらの上でも読めるよう、線の下に暗い太い線(kp-halo)を敷く。主ビューの外へははみ出させない */
+#keyPath { z-index: 4; overflow: hidden; }
+#keyPath[hidden] { display: none; }
+#keyPath .key-path { width: 100%; height: 100%; --kp: #fbbf24; }
+.key-path .kp-frame { fill: none; stroke: var(--kp); stroke-width: 1.25; stroke-dasharray: 6 4; }
+.key-path .kp-frame.strong { stroke-width: 2.5; stroke-dasharray: none; }
+.key-path .kp-path { fill: none; stroke: var(--kp); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.key-path .kp-path.back { stroke-dasharray: 2 5; }
+.key-path .kp-arrow { fill: var(--kp); stroke: none; }
+.key-path .kp-halo { stroke: rgb(0 0 0 / .35); fill: none; }
+.key-path .kp-frame.kp-halo { stroke-width: 2.75; }
+.key-path .kp-frame.strong.kp-halo { stroke-width: 4.5; }
+.key-path .kp-path.kp-halo { stroke-width: 4; }
+.key-path .kp-arrow.kp-halo { stroke-width: 2.5; stroke-linejoin: round; }
+.key-path .kp-sec rect { fill: rgb(0 0 0 / .62); }
+.key-path .kp-sec text { fill: #fff; font-size: 10px; font-variant-numeric: tabular-nums; }
+.key-path .kp-sec.back text { fill: rgb(255 255 255 / .75); }
+.key-path .kp-mark { pointer-events: auto; cursor: pointer; }
+.key-path .kp-mark circle { fill: var(--kp); stroke: rgb(0 0 0 / .7); stroke-width: 1.5; }
+.key-path .kp-mark text { fill: #1f1300; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
+.key-path .kp-mark.strong circle { stroke: #fff; stroke-width: 2.5; }
