@@ -142,10 +142,35 @@ test('再生の進み具合: 止まっている間は、キーフレームが2�
   await page.locator('#keyList .key-row[data-key="1"] [data-act=mode]').selectOption('bounce');
   await page.locator('#playTrack').click();
   expect(await app(page, a => [a.takeState, a.project.take === a.__take, a.project.take.keys[1].mode])).toEqual(['playing', false, 'bounce']);
+  // キーでも動かせる。止まっているときは、0秒で一時停止した状態から始まる
+  await page.locator('#playStop').focus();
+  await page.keyboard.press('Enter');
+  expect(await app(page, a => a.takeState)).toBe('idle');
+  // 消えた ■ のフォーカスは ▶ へ移る
+  await expect(page.locator('#playStart')).toBeFocused();
+  await page.locator('#playTrack').focus();
+  await page.keyboard.press('PageDown');
+  expect(await app(page, a => [a.takeState, a.playPaused])).toEqual(['playing', true]);
+  expect(await app(page, a => a.takePosition)).toBeCloseTo(1, 1);
   // 再生中はタブを替えても出したまま
   await openTab(page, 'layer');
   await expect(bar).toBeVisible();
   await expect(page.locator('#playStop')).toBeVisible();
+
+  // 手で記録した操作があるときは、止まっている間は出さない(押すとキーフレームの動きに入れ替わってしまうため)
+  await page.locator('#playStop').click();
+  await openTab(page, 'anim');
+  await expect(bar).toBeVisible();
+  await app(page, a => {
+    a.setPaused(false);
+    a.startRecording();
+    a.world.grab = { x: 0.2, y: 0, z: 0 }; a.world.grabGains.set(a.doc.layers[0].id, 1);
+    for (let i = 0; i < 60; i++) a.frame(1 / 60);
+    a.world.grab = null; a.world.grabGains.clear();
+    a.stopRecording();
+  });
+  expect(await app(page, a => !!a.project.take && !a.project.take.keys)).toBe(true);
+  await expect(bar).toBeHidden();
 });
 
 test('再生の進み具合: 記録中は赤いバーで最長までの進みを出し、■ で止める。3面図が出ているときはその左まで', async ({ page }) => {
