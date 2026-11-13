@@ -197,3 +197,20 @@ output.is-mixed { font-size: .7rem; opacity: .8; }
 /* 左のツールバーの「ウェイト」: 全レイヤー表示の印 */
 .nav-badge { position: absolute; top: 2px; right: 4px; font-size: .6rem; line-height: 1; padding: 1px 3px; border-radius: 4px; background: var(--color-secondary); color: var(--color-secondary-content); }
 .nav-badge[hidden] { display: none; }
+
+/* キーフレームの枠と経路(ui/keyPath.ts)。画像の明暗どちらの上でも読めるよう、線と文字に暗い縁を付ける */
+#keyPath { z-index: 4; }
+#keyPath[hidden] { display: none; }
+#keyPath .key-path { width: 100%; height: 100%; overflow: visible; --kp: #fbbf24; }
+.key-path .kp-frame { fill: none; stroke: var(--kp); stroke-width: 1.25; stroke-dasharray: 6 4; filter: drop-shadow(0 0 1px rgb(0 0 0 / .8)); }
+.key-path .kp-frame.strong { stroke-width: 2.5; stroke-dasharray: none; }
+.key-path .kp-path { fill: none; stroke: var(--kp); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 1.5px rgb(0 0 0 / .8)); }
+.key-path .kp-path.back { stroke-dasharray: 2 5; }
+.key-path .kp-arrow { fill: var(--kp); filter: drop-shadow(0 0 1.5px rgb(0 0 0 / .8)); }
+.key-path .kp-sec rect { fill: rgb(0 0 0 / .62); }
+.key-path .kp-sec text { fill: #fff; font-size: 10px; font-variant-numeric: tabular-nums; }
+.key-path .kp-sec.back text { fill: rgb(255 255 255 / .75); }
+.key-path .kp-mark { pointer-events: auto; cursor: pointer; }
+.key-path .kp-mark circle { fill: var(--kp); stroke: rgb(0 0 0 / .7); stroke-width: 1.5; }
+.key-path .kp-mark text { fill: #1f1300; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
+.key-path .kp-mark.strong circle { stroke: #fff; stroke-width: 2.5; }

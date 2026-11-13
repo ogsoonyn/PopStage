@@ -166,6 +166,8 @@
       <div class="mv-cell cursor-move" data-kind="bottom" title="ドラッグで平行移動、ホイールでズーム(Ctrl・Shift で細かく)、ダブルクリックで元の表示に戻す(正面・右から・下からの3つで共通)"><span class="mv-label">下から</span></div>
       <div class="mv-cell cursor-grab" data-kind="free" title="ドラッグで回転、中ドラッグ・Shift+ドラッグで平行移動、ホイールでズーム(Ctrl で細かく)、ダブルクリックで初期の視点に戻す"><span class="mv-label">自由角度(ドラッグで回転)</span></div>
     </div>
+    <!-- キーフレームの枠と経路(ui/keyPath.ts が主ビューの大きさに合わせて SVG を描く) -->
+    <div id="keyPath" class="absolute pointer-events-none" hidden></div>
     <div id="dropHint" class="absolute inset-3 border-4 border-dashed border-primary rounded-box bg-base-100/70 hidden items-center justify-center text-lg font-bold pointer-events-none">
       ここに画像か .pukupop ファイルをドロップ
     </div>
@@ -275,9 +277,10 @@
           <div class="flex items-center gap-2">
             <h2 id="keyTitle" class="font-bold">キーフレーム</h2><button type="button" class="help-btn" data-help="keyHelp"></button>
             <span id="keyCount" class="text-xs opacity-60 tabular-nums"></span>
-            <button id="keyAdd" class="btn btn-xs ml-auto" title="今の視点を末尾に追加">＋ 追加</button>
+            <label class="flex items-center gap-1 text-xs ml-auto" title="枠と経路を3Dビューに重ねる"><input id="keyPathShow" type="checkbox" class="checkbox checkbox-xs"> 経路</label>
+            <button id="keyAdd" class="btn btn-xs" title="今の視点を末尾に追加">＋ 追加</button>
           </div>
-          <p id="keyHelp" class="help-text" hidden>視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す動きを作ります。画像の位置が動くと揺れます。「次まで」は次のフレームまでの秒数です。「通り方」は、なめらか(止まらず通り抜ける)か、弾む(急に止まって揺れる)かを選びます。作った動きは今の記録と入れ替わります(元に戻せます)。</p>
+          <p id="keyHelp" class="help-text" hidden>視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す動きを作ります。画像の位置が動くと揺れます。「次まで」は次のフレームまでの秒数です。「通り方」は、なめらか(止まらず通り抜ける)か、弾む(急に止まって揺れる)かを選びます。作った動きは今の記録と入れ替わります(元に戻せます)。「経路」をオンにすると、各フレームで映る範囲を枠で、順番を番号で、動きの道筋を矢印と秒数で3Dビューに重ねます(番号を押すとその視点へ移ります。記録中・再生中は消えます)。</p>
           <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span>次まで</span><span>通り方</span><span></span><span></span></div>
           <ol id="keyList" class="flex flex-col gap-1" aria-label="キーフレーム一覧"></ol>
           <div class="flex items-center gap-2">
