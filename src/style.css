@@ -18,7 +18,8 @@
 .key-row { display: grid; grid-template-columns: 1.75rem 1fr 1.75rem 1.5rem; align-items: center; gap: .375rem; }
 .key-gap { display: flex; align-items: center; gap: .375rem; padding-left: .5rem; margin: -.125rem 0; }
 .key-gap .key-arrow { width: 1.25rem; text-align: center; opacity: .6; }
-.key-gap.back, .key-back { opacity: .5; }
+/* 最初へ戻る区間は、秒数の欄は使えるので濃さはそのままにし、↩ と「1 最初へ戻る」だけ薄くする */
+.key-gap.back .key-arrow, .key-back { opacity: .45; }
 .key-back .key-no { text-align: center; font-size: .75rem; }
 .key-row .key-set svg { width: 1rem; height: 1rem; }
 .key-head { padding: 0 .125rem; }
