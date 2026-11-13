@@ -81,6 +81,12 @@ function defineActions(app: App, d: ActionDeps) {
       desc: '見栄えを確かめるため、編集用の表示をまとめて切る(ウェイトの重ね表示・画像を薄く・ポップを一時OFF・揺れを一時停止・グリッド)。押すたびに切るだけで、元には戻さない',
     },
     resetView: { label: '視点リセット(正面)', keys: ['Home'], run: () => app.resetView(), duringPreview: true },
+    toggleUi: {
+      label: 'UIを隠す', helpLabel: 'UIを隠す・戻す(Esc でも戻る)', keys: ['Tab'], desc: '3Dビューのほかを隠して、画面いっぱいに見せる。もう一度押すか Esc で戻す',
+      run: () => app.setUiHidden(!app.uiHidden), duringPreview: true,
+      // スマホでは膨らませるのパネルが下のシートの中にあり、隠すと適用・キャンセルを押せなくなる
+      enabled: () => !(app.previewing && document.documentElement.classList.contains('mobile')),
+    },
     // アニメーション
     toggleRecording: {
       label: '操作の記録', helpLabel: '操作の記録(開始・停止)', keys: ['R'], desc: 'つかむ・揺らす・移動・視点の操作を覚える(最長 60 秒)',
@@ -149,6 +155,7 @@ const NAV_ACTIONS: readonly NavGroup[] = [
       { cmd: 'toggleFade', icon: 'fade', text: '画像を薄く', check: 'fade' },
       { cmd: 'toggleGrid', icon: 'grid', text: 'グリッド', check: 'grid' },
       { cmd: 'cleanView', icon: 'cleanView', text: '表示クリア' },
+      { cmd: 'toggleUi', icon: 'hideUi', text: 'UIを隠す' },
     ],
   },
   {
@@ -185,6 +192,17 @@ export function keyString(e: KeyboardEvent): string {
 
 /** スライダーにフォーカスがあるときは、スライダーを動かすキーをショートカットに使わない */
 const SLIDER_KEYS = new Set(['Home', 'End', 'PageUp', 'PageDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
+
+/**
+ * Tab を「UIを隠す」に使わず、ふつうにフォーカスを移すときか。入力欄・選択欄にいるときと、
+ * キーボードで移ってきた部品にいるとき(:focus-visible)。マウスで押したボタンや、どこにもフォーカスが無いときは隠すほうに使う。
+ * Shift+Tab はいつもフォーカスを戻すのに使える
+ */
+function keyboardFocus(): boolean {
+  const el = document.activeElement;
+  if (!el || el === document.body) return false;
+  return el.matches('input, select, textarea, [contenteditable]') || el.matches(':focus-visible');
+}
 
 const ariaKeys = (keys: string[]) => keys.map(k => k.replace(/\bCtrl\b/g, 'Control')).join(' ');
 
@@ -319,6 +337,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
     // 膨らませるのパネルを開いている間も、表示の切り替えなどは効かせる(できない操作は enabled で止める)
     if (isTyping(e) || modalOpen()) return;
     if (e.target instanceof HTMLInputElement && e.target.type === 'range' && SLIDER_KEYS.has(e.key)) return;
+    if (e.key === 'Tab' && !app.uiHidden && keyboardFocus()) return;
     const name = byKey.get(keyString(e));
     if (!name) return;
     e.preventDefault();

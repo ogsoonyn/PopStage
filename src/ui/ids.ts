@@ -14,7 +14,7 @@ export const UI_IDS = {
   tSwing: 'input', tAuto: 'input',
   // ツールバー・3Dビュー
   toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', keyPath: 'div', takeCam: 'button',
-  playBar: 'div', playStart: 'button', playStop: 'button', playPause: 'button', playTime: 'span', playTrack: 'div', playKeys: 'div', playLoop: 'span', playCam: 'button', mFine: 'button', busy: 'div',
+  playBar: 'div', playStart: 'button', playStop: 'button', playPause: 'button', playTime: 'span', playTrack: 'div', playKeys: 'div', playLoop: 'span', playCam: 'button', mFine: 'button', busy: 'div', uiRestore: 'button',
   // レイヤー一覧
   layerCount: 'span', layerList: 'ul',
   layerSelBar: 'div', layerSelText: 'span', layerSelAll: 'button', layerSelOne: 'button', layerSelDone: 'button',
@@ -48,7 +48,7 @@ export const UI_IDS = {
   // 確認・数値入力
   askDialog: 'dialog', askTitle: 'h3', askBody: 'p', askInputWrap: 'div', askInputLabel: 'span', askInput: 'input', askNo: 'button', askYes: 'button',
   // 設定
-  settingsDialog: 'dialog', setToolbarList: 'div', setToolbarReset: 'button',
+  settingsDialog: 'dialog', setToolbarList: 'div', setToolbarReset: 'button', setHideFull: 'input', setHideFullRow: 'section',
   // 最近開いたファイル・ヘルプ・このアプリについて
   recentDialog: 'dialog', recentEmpty: 'p', recentList: 'ul', recentClear: 'button',
   helpDialog: 'dialog', helpKeys: 'div', aboutDialog: 'dialog', aboutVersion: 'p',

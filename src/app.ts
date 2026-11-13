@@ -124,6 +124,8 @@ export class App extends Emitter<AppEvents> {
   /** 3面図の正面・右から・下からの拡大率と平行移動(3つで共有。画面だけの設定で保存しない) */
   multiOrtho: OrthoView = defaultOrthoView();
   paused = false;
+  /** UIを隠して3Dビューを画面いっぱいに出しているか(ui/hideUi.ts)。画面だけの状態で、覚えない */
+  uiHidden = false;
   /** 塗るツール(ブラシ・消しゴム・ぼかし・膨らみ)や「全体をぼかす」を使い始めたら、重ね表示を自動で入れる。ブラウザに覚える設定 */
   autoOverlay = true;
   /**
@@ -387,6 +389,13 @@ export class App extends Emitter<AppEvents> {
     this.paused = on;
     this.world.paused = on;
     if (on) this.world.reset();
+    this.emit('view', undefined);
+  }
+
+  /** UIを隠す・戻す。隠している間は3面図も出さない(app.view.multi はそのまま残し、戻すと出る) */
+  setUiHidden(on: boolean): void {
+    if (this.uiHidden === on) return;
+    this.uiHidden = on;
     this.emit('view', undefined);
   }
 

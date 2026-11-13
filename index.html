@@ -32,6 +32,7 @@
       <li><button data-cmd="save">保存</button></li>
       <li><button data-cmd="export">書き出し…</button></li>
       <li><button data-cmd="sample">サンプルを開く</button></li>
+      <li><button data-cmd="toggleUi">UIを隠す</button></li>
       <li><button data-cmd="settings">設定…</button></li>
       <li><button data-cmd="help">操作方法</button></li>
       <li><button data-cmd="about">PukuPop について</button></li>
@@ -80,6 +81,7 @@
       <li><button data-cmd="toggleGrid">グリッド <span data-check="grid" class="ml-auto"></span></button></li>
       <li><button data-cmd="cleanView">編集表示クリア</button></li>
       <li><button data-cmd="resetView">視点リセット(正面)</button></li>
+      <li><button data-cmd="toggleUi">UIを隠す</button></li>
     </ul>
   </div>
   <div class="dropdown">
@@ -557,6 +559,11 @@
       <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlay">塗るときは自動でON</label><button type="button" class="help-btn" data-help="vAutoOverlayHelp"></button></span><input id="vAutoOverlay" type="checkbox" class="toggle toggle-sm"></div>
       <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。ほかのツールに移っても自動ではOFFにしません。</p>
     </section>
+    <section id="setHideFullRow" class="flex flex-col gap-2 mt-4">
+      <h4 class="font-bold">UIを隠す</h4>
+      <div class="toggle-row"><span class="prop-name"><label for="setHideFull">ブラウザも全画面にする</label><button type="button" class="help-btn" data-help="setHideFullHelp"></button></span><input id="setHideFull" type="checkbox" class="toggle toggle-sm"></div>
+      <p id="setHideFullHelp" class="help-text" hidden>「UIを隠す」(Tab)を使ったときに、ブラウザのタブやアドレスバーも隠して画面全体に出します。Esc で全画面をやめると、UIも戻ります。</p>
+    </section>
     <section class="d-only flex flex-col gap-2 mt-4">
       <div class="flex items-center gap-2">
         <h4 class="font-bold"><span id="setToolbarLabel">左のツールバーに出すボタン</span></h4><button type="button" class="help-btn" data-help="setToolbarHelp"></button>
@@ -629,6 +636,9 @@
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
+
+<!-- UIを隠している間だけ出す、戻すボタン(ui/hideUi.ts)。PC ではマウスを動かすと少しの間だけ出し、スマホでは薄く出したままにする -->
+<button id="uiRestore" type="button" class="btn btn-sm" title="UIを戻す (Tab / Esc)"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4v5H4"/><path d="M15 4v5h5"/><path d="M9 20v-5H4"/><path d="M15 20v-5h5"/></svg>UIを戻す</button>
 
 <div id="toasts" class="toast toast-end toast-bottom z-50 mb-8"></div>
 
