@@ -1,17 +1,22 @@
 /**
- * 再生・記録の進み具合のバー。ループ再生中と記録中だけ、主ビューの下に重ねて出す(3面図が出ているときはその左まで)。
+ * 再生・記録の進み具合のバー。主ビューの下に重ねて出す(3面図が出ているときはその左まで)。
  *
  * - 再生中: 停止・一時停止・時間・トラック・ループの印・カメラを戻す。トラックを押す・ドラッグすると、その位置へ移る
  *   (ドラッグの間は一時停止してその瞬間を見せ、離すと元の状態で続ける)。キーフレームから作った動きなら、
  *   各フレームを通る時刻に番号を出す(形は枠表示と同じで、なめらかは丸、弾むはひし形)。番号を押すとその時刻へ移る。
+ * - 止まっている間: キーフレームが2つ以上あり、キーフレームの部品が見えている(アニメーションタブを開いている)ときだけ、
+ *   ▶・時間・番号を出す(一覧から求める)。▶ は右パネルの「再生」と同じ。トラック・番号を押すと、その時刻で一時停止した
+ *   状態から再生を始める(一覧が今の記録と違えば作り直す。元に戻せる)。「重ねて表示」の「シークバー」で出さないようにできる。
  * - 記録中: 赤いバーで最長(60 秒)までの進みを出す。■ で記録を止める。位置は動かせない。
  * - 書き出し中は出さない(画面の部品なので、書き出した絵には入らない)。
  */
 import type { App } from '../app';
-import { keyCurve, TAKE_MAX_SECONDS, type Take } from '../physics/take';
+import { keyCurve, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, type KeyCurve, type KeyFrame } from '../physics/take';
 import { PHYSICS_DT } from '../physics/world';
+import { prefs } from '../storage/prefs';
 import { ui } from './ids';
 import { icon } from './icons';
+import { keySectionShown } from './keyPath';
 
 const fmt = (v: number) => v.toFixed(1);
 /** ボタンの印。⏸ などの文字は絵文字で出る環境があるので、塗りの SVG にする */
@@ -23,44 +28,84 @@ const ICON_PLAY = svg('<path d="M4.5 2.8v10.4a.6.6 0 0 0 .9.5l8.2-5.2a.6.6 0 0 0
 const STEP = 0.5, FINE_STEP = 0.1;
 /** 番号を押したあと、これより動かすまでは番号の時刻のまま(px) */
 const DRAG_SLOP = 6;
+/** 止まっている間もバーを出すか(ブラウザに覚える) */
+const PREF = 'playBarIdle';
+
+const sameKeys = (a: readonly KeyFrame[] | undefined, b: readonly KeyFrame[]) => !!a && JSON.stringify(a) === JSON.stringify(b);
 
 export function bindPlayBar(app: App): void {
-  const { playBar: bar, playStop: stop, playPause: pause, playTime: time, playTrack: track, playKeys: keys, playLoop: loop, playCam: cam } = ui;
+  const { playBar: bar, playStart: start, playStop: stop, playPause: pause, playTime: time, playTrack: track, playKeys: keys, playLoop: loop, playCam: cam, playBarShow: toggle } = ui;
   const fill = track.querySelector<HTMLElement>('.play-fill')!, head = track.querySelector<HTMLElement>('.play-head')!;
   cam.querySelector('.play-cam-icon')!.innerHTML = icon('keySet');
   stop.innerHTML = ICON_STOP;
+  start.innerHTML = ICON_PLAY;
+
+  toggle.checked = prefs.get<boolean>(PREF) ?? true;
+  toggle.addEventListener('change', () => { prefs.set(PREF, toggle.checked); refresh(); });
+
+  /** 一覧のキーフレームの曲線(2つ以上で、1周が短すぎないとき)。一覧が変わったときだけ求め直す */
+  let draftSig = '', draft: KeyCurve | null = null;
+  function draftCurve(): KeyCurve | null {
+    const sig = JSON.stringify(app.keyDraft);
+    if (sig !== draftSig) {
+      draftSig = sig;
+      const c = keyCurve(app.keyDraft, app.project.camera.fov);
+      draft = c && c.total >= TAKE_MIN_SECONDS - 1e-9 ? c : null;
+    }
+    return draft;
+  }
+  /** 止まっている間に出すか */
+  const idleShown = () => toggle.checked && !!app.doc && !app.exporting && !!draftCurve() && keySectionShown();
+
+  /**
+   * 止まっているときに再生を始める。一覧が今の記録と同じならそのまま再生し、違えば作り直す(右パネルの「再生」と同じ)。
+   * 始められたら true
+   */
+  function begin(): boolean {
+    if (app.takeState === 'playing') return true;
+    if (app.takeState !== 'idle' || !app.doc || app.exporting) return false;
+    if (sameKeys(app.project.take?.keys, app.keyDraft)) app.playTake();
+    else app.makeKeyTake();
+    return (app.takeState as string) === 'playing';
+  }
 
   // 停止は記録中にも使う(記録を止める)ので、再生だけに効くコマンド(stopPlay)にはせず、ここで分ける。
   // 一時停止はコマンド(togglePlayPause、data-cmd)で、押したときの処理・キー・ツールチップは ui/actions.ts
   stop.addEventListener('click', () => { if (app.takeState === 'recording') app.stopRecording(); else app.stopTake(); });
+  start.addEventListener('click', () => { if (begin()) pause.focus({ preventScroll: true }); });
 
-  /** 再生中の1周の長さ(秒) */
-  const length = () => app.takeLength;
+  /** 1周の長さ(秒)。止まっている間は一覧から求めた長さ */
+  const length = () => app.takeState === 'idle' ? draftCurve()?.total ?? 0 : app.takeLength;
 
   /* ---------- トラック: 押す・ドラッグで位置を移す ---------- */
   /** onKey: 番号を押して、まだ動かしていない(少しの揺れでは番号の時刻から離さない) */
   let drag: { id: number; wasPaused: boolean; x: number; onKey: boolean } | null = null;
-  const timeAt = (clientX: number) => {
+  /** トラックの上の位置(1周に対する割合 0〜1) */
+  const fracAt = (clientX: number) => {
     const r = track.getBoundingClientRect();
-    return Math.max(0, Math.min(1, (clientX - r.left) / Math.max(1, r.width))) * length();
+    return Math.max(0, Math.min(1, (clientX - r.left) / Math.max(1, r.width)));
   };
+  const seekFrac = (f: number) => app.seekTake(Math.min(f * app.takeLength, app.takeLength - PHYSICS_DT));
   track.addEventListener('pointerdown', e => {
-    if (app.takeState !== 'playing' || drag || e.button !== 0) return;
+    if (drag || e.button !== 0 || app.takeState === 'recording') return;
+    // 止まっているときは、その時刻で一時停止した状態から再生を始める(離しても一時停止のまま)
+    const idle = app.takeState === 'idle';
+    if (idle && (bar.hidden || !begin())) return;
     e.preventDefault();
     track.focus({ preventScroll: true });
     track.setPointerCapture(e.pointerId);
     // 番号を押したときは、その番号の時刻ちょうどへ
     const k = (e.target as HTMLElement).closest<HTMLElement>('.play-key');
-    drag = { id: e.pointerId, wasPaused: app.playPaused, x: e.clientX, onKey: !!k };
+    drag = { id: e.pointerId, wasPaused: idle || app.playPaused, x: e.clientX, onKey: !!k };
     app.setPlayPaused(true);
-    app.seekTake(k ? +k.dataset.t! : timeAt(e.clientX));
+    seekFrac(k ? +k.dataset.f! : fracAt(e.clientX));
     refresh();
   });
   track.addEventListener('pointermove', e => {
     if (!drag || e.pointerId !== drag.id) return;
     if (drag.onKey && Math.abs(e.clientX - drag.x) < DRAG_SLOP) return;
     drag.onKey = false;
-    app.seekTake(timeAt(e.clientX));
+    seekFrac(fracAt(e.clientX));
     refresh();
   });
   const end = (e: PointerEvent) => {
@@ -78,7 +123,7 @@ export function bindPlayBar(app: App): void {
     const len = length(), pos = app.takePosition, step = e.shiftKey ? FINE_STEP : STEP, arrow = e.key.startsWith('Arrow');
     if (e.shiftKey && !arrow) return;
     // PageUp・PageDown は前・次のキーフレームの番号の時刻へ
-    const marks = [...keys.querySelectorAll<HTMLElement>('.play-key')].map(k => +k.dataset.t!);
+    const marks = [...keys.querySelectorAll<HTMLElement>('.play-key')].map(k => +k.dataset.f! * len);
     let to: number | null = null;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') to = Math.max(0, pos - step);
     else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') to = Math.min(len - PHYSICS_DT, pos + step);
@@ -94,29 +139,34 @@ export function bindPlayBar(app: App): void {
   });
 
   /* ---------- キーフレームの番号 ---------- */
-  let keysOf: Take | null | undefined;
-  function buildKeys(take: Take | null): void {
-    if (take === keysOf) return;
-    keysOf = take;
-    const curve = take?.keys ? keyCurve(take.keys, app.project.camera.fov) : null;
+  let keysOf: KeyCurve | null | undefined;
+  function buildKeys(curve: KeyCurve | null): void {
+    if (curve === keysOf) return;
+    keysOf = curve;
     keys.replaceChildren(...(curve ? curve.starts.map((t, i) => {
       // 記録は1周の刻み数をそろえるため少し伸び縮みしているので、時刻は1周に対する割合で置く
       const s = document.createElement('span'), f = t / curve.total;
       s.className = 'play-key';
       s.dataset.mode = curve.keys[i].mode;
-      s.dataset.t = String(f * takeLen(take));
+      s.dataset.f = String(f);
       s.style.left = `${f * 100}%`;
       s.textContent = String(i + 1);
       s.title = `${i + 1} 番のフレーム(${curve.keys[i].mode === 'bounce' ? '弾む' : 'なめらか'})へ移る`;
       return s;
     }) : []));
   }
-  const takeLen = (take: Take | null) => (take?.samples.length ?? 0) * PHYSICS_DT;
+  /** 再生中の記録がキーフレームから作ったものなら、その曲線(記録が変わったときだけ求め直す) */
+  let takeOf: unknown = undefined, takeKeys: KeyCurve | null = null;
+  function takeCurve(): KeyCurve | null {
+    const take = app.project.take;
+    if (take !== takeOf) { takeOf = take; takeKeys = take?.keys ? keyCurve(take.keys, app.project.camera.fov) : null; }
+    return takeKeys;
+  }
 
   /* ---------- 表示 ---------- */
   const setText = (el: Element, text: string) => { if (el.textContent !== text) el.textContent = text; };
   function refresh(): void {
-    const s = app.takeState, show = s !== 'idle' && !app.exporting;
+    const s = app.takeState, idle = s === 'idle', show = idle ? idleShown() : !app.exporting;
     if (bar.hidden === show) {
       // 隠すときにバーの中にフォーカスがあれば、3Dビューへ移す(居場所が分からなくならないように)
       if (!show && bar.contains(document.activeElement)) ui.view.focus({ preventScroll: true });
@@ -125,7 +175,12 @@ export function bindPlayBar(app: App): void {
     if (!show) return;
     const rec = s === 'recording', len = rec ? TAKE_MAX_SECONDS : length(), pos = rec ? app.takeLength : app.takePosition;
     bar.classList.toggle('recording', rec);
-    pause.hidden = loop.hidden = cam.hidden = rec;
+    bar.classList.toggle('idle', idle);
+    start.hidden = !idle;
+    stop.hidden = idle;
+    pause.hidden = rec || idle;
+    loop.hidden = rec;
+    cam.hidden = rec || idle;
     stop.setAttribute('aria-label', rec ? '記録を止める' : '停止');
     stop.title = rec ? '記録を止める (R)' : '再生を止める (L)';
     const paused = !rec && app.playPaused;
@@ -136,17 +191,17 @@ export function bindPlayBar(app: App): void {
     const p = len > 0 ? Math.min(1, pos / len) : 0;
     fill.style.width = `${p * 100}%`;
     head.style.left = `${p * 100}%`;
-    head.hidden = rec;
+    head.hidden = rec || idle; // 止まっている間は0秒の1番の番号に重なるので出さない
     track.setAttribute('aria-valuemax', fmt(len));
     // 読み上げの値は、進んでいる間は1秒ごとにだけ変える(しゃべり続けないように)
-    const spoken = rec || !paused ? Math.floor(pos).toFixed(0) : fmt(pos);
+    const spoken = rec || (!idle && !paused) ? Math.floor(pos).toFixed(0) : fmt(pos);
     if (track.getAttribute('aria-valuenow') !== spoken) {
       track.setAttribute('aria-valuenow', spoken);
       track.setAttribute('aria-valuetext', `${spoken}秒 / ${fmt(len)}秒`);
     }
     track.setAttribute('aria-disabled', String(rec));
     track.tabIndex = rec ? -1 : 0;
-    buildKeys(rec ? null : app.project.take);
+    buildKeys(rec ? null : idle ? draftCurve() : takeCurve());
   }
 
   app.on('take', refresh);
@@ -154,7 +209,7 @@ export function bindPlayBar(app: App): void {
   app.on('file', refresh);
   app.store.on('replace', refresh);
   app.store.on('project', ({ keys: k }) => { if (k.includes('take')) refresh(); });
-  // 進み具合は描画のたびに追う(書き換えは軽いので間引かない)
-  app.on('frame', () => { if (app.takeState !== 'idle') refresh(); });
+  // 進み具合と、止まっている間はタブの切り替え(キーフレームの部品が見えているか)を、描画のたびに追う
+  app.on('frame', refresh);
   refresh();
 }

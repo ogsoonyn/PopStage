@@ -95,7 +95,57 @@ test('再生の進み具合: 再生中だけ主ビューの下に出て、キー
 
   await page.locator('#playStop').click();
   expect(await app(page, a => [a.takeState, a.playPaused])).toEqual(['idle', false]);
+  // キーフレームが2つ以上でアニメーションタブを開いているので、止めてもバーは残る(0秒、▶ だけ)
+  await expect(bar).toBeVisible();
+  await expect(bar).toHaveClass(/idle/);
+  await expect(page.locator('#playTime')).toHaveText('0.0 / 3.0秒');
+  await expect(page.locator('#playStart')).toBeVisible();
+  await expect(page.locator('#playStop')).toBeHidden();
+});
+
+test('再生の進み具合: 止まっている間は、キーフレームが2つ以上でアニメーションタブを開いているときだけ出し、押すとその時刻から一時停止で始まる', async ({ page }) => {
+  await boot(page);
+  const bar = page.locator('#playBar');
+  await openTab(page, 'anim');
+  await setCam(page, {});
+  await page.locator('#keyAdd').click();
+  // 1つだけでは出さない
   await expect(bar).toBeHidden();
+  await setCam(page, { x: 300 });
+  await page.locator('#keyAdd').click();
+  await expect(bar).toBeVisible();
+  await expect(page.locator('#playTime')).toHaveText('0.0 / 2.0秒');
+  await expect(page.locator('#playKeys .play-key')).toHaveText(['1', '2']);
+  // 別のタブを開いている間・「シークバー」をオフにしたときは出さない
+  await openTab(page, 'layer');
+  await expect(bar).toBeHidden();
+  await openTab(page, 'anim');
+  await expect(bar).toBeVisible();
+  await page.locator('#playBarShow').uncheck();
+  await expect(bar).toBeHidden();
+  await page.locator('#playBarShow').check();
+  await expect(bar).toBeVisible();
+
+  // 2番を押すと、作ってから2番の時刻で一時停止した状態から始まる(離しても一時停止のまま)
+  await page.locator('#playKeys .play-key').nth(1).click();
+  expect(await app(page, a => [a.takeState, a.playPaused, !!a.project.take?.keys])).toEqual(['playing', true, true]);
+  expect(await app(page, a => a.takePosition)).toBeCloseTo(1, 1);
+  await expect.poll(() => app(page, a => a.playView.target.x)).toBeCloseTo(300, 0);
+  await app(page, a => { a.__take = a.project.take; });
+  // 止めて ▶ を押すと、一覧が同じなので作り直さずに初めから流れる
+  await page.locator('#playStop').click();
+  await page.locator('#playStart').click();
+  expect(await app(page, a => [a.takeState, a.playPaused])).toEqual(['playing', false]);
+  expect(await app(page, a => a.project.take === a.__take)).toBe(true);
+  await page.locator('#playStop').click();
+  // 一覧を変えてから押すと、作り直して始まる
+  await page.locator('#keyList .key-row[data-key="1"] [data-act=mode]').selectOption('bounce');
+  await page.locator('#playTrack').click();
+  expect(await app(page, a => [a.takeState, a.project.take === a.__take, a.project.take.keys[1].mode])).toEqual(['playing', false, 'bounce']);
+  // 再生中はタブを替えても出したまま
+  await openTab(page, 'layer');
+  await expect(bar).toBeVisible();
+  await expect(page.locator('#playStop')).toBeVisible();
 });
 
 test('再生の進み具合: 記録中は赤いバーで最長までの進みを出し、■ で止める。3面図が出ているときはその左まで', async ({ page }) => {
