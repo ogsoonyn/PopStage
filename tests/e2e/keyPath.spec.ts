@@ -26,13 +26,13 @@ test('キーフレームの経路: 枠・番号・矢印・秒数を重ね、番
   await expect(overlay).toBeVisible();
   await expect(overlay.locator('.kp-mark')).toHaveCount(3);
   await expect(overlay.locator('.kp-mark text')).toHaveText(['1', '2', '3']);
-  await expect(overlay.locator('.kp-frame')).toHaveCount(3);
-  await expect(overlay.locator('.kp-arrow')).toHaveCount(3);
-  await expect(overlay.locator('.kp-path.back')).toHaveCount(1);
+  await expect(overlay.locator('.kp-frame:not(.kp-halo)')).toHaveCount(3);
+  await expect(overlay.locator('.kp-arrow:not(.kp-halo)')).toHaveCount(3);
+  await expect(overlay.locator('.kp-path.back:not(.kp-halo)')).toHaveCount(1);
   await expect(overlay.locator('.kp-sec text')).toHaveText(['1.0秒', '2.5秒', '1.0秒']);
   // 番号の位置は、そのフレームで画面の中心に来る所(2番は右上へ動かした所なので、1番より右・上)
-  const pos = await overlay.locator('.kp-mark').evaluateAll(gs => gs.map(g => { const r = g.getBoundingClientRect(); return [r.x, r.y]; }));
-  expect(pos[1][0]).toBeGreaterThan(pos[0][0]); expect(pos[1][1]).toBeLessThan(pos[0][1]);
+  const marks = () => overlay.locator('.kp-mark').evaluateAll(gs => gs.map(g => { const r = g.getBoundingClientRect(); return [r.x, r.y]; }));
+  await expect.poll(async () => { const p = await marks(); return p[1][0] > p[0][0] && p[1][1] < p[0][1]; }).toBe(true);
   await page.screenshot({ path: test.info().outputPath('keypath.png') });
 
   // 番号を押すとその視点へ。今の視点のフレームは強める
@@ -49,6 +49,18 @@ test('キーフレームの経路: 枠・番号・矢印・秒数を重ね、番
   await expect(overlay).toBeHidden();
   await page.evaluate(() => (window as any).popstage.stopTake());
   await expect(overlay).toBeVisible();
+
+  // 書き出し中は消える
+  await page.evaluate(() => { const a = (window as any).popstage; a.exporting = true; a.emit('status', undefined); });
+  await expect(overlay).toBeHidden();
+  await page.evaluate(() => { const a = (window as any).popstage; a.exporting = false; a.emit('status', undefined); });
+  await expect(overlay).toBeVisible();
+
+  // 番号の上のホイールでもズームする
+  const z0 = await page.evaluate(() => (window as any).popstage.project.camera.zoom);
+  await overlay.locator('.kp-mark').nth(0).hover();
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => page.evaluate(() => (window as any).popstage.project.camera.zoom)).not.toBe(z0);
 
   // 別のタブでは消える
   await openTab(page, 'view');
@@ -73,8 +85,8 @@ test('キーフレームの経路: 回転・ズームだけのフレームは番
   await page.locator('#keyAdd').click();
   const overlay = page.locator('#keyPath');
   await expect(overlay.locator('.kp-mark')).toHaveCount(2);
-  await expect(overlay.locator('.kp-arrow')).toHaveCount(0);
+  await expect(overlay.locator('.kp-arrow:not(.kp-halo)')).toHaveCount(0);
   await expect(overlay.locator('.kp-sec')).toHaveCount(2);
-  const pos = await overlay.locator('.kp-mark').evaluateAll(gs => gs.map(g => { const r = g.getBoundingClientRect(); return [r.x, r.y]; }));
-  expect(pos[1][0] - pos[0][0]).toBeGreaterThan(15); expect(Math.abs(pos[1][1] - pos[0][1])).toBeLessThan(1);
+  const marks = () => overlay.locator('.kp-mark').evaluateAll(gs => gs.map(g => { const r = g.getBoundingClientRect(); return [r.x, r.y]; }));
+  await expect.poll(async () => { const p = await marks(); return p[1][0] - p[0][0] > 15 && Math.abs(p[1][1] - p[0][1]) < 1; }).toBe(true);
 });
