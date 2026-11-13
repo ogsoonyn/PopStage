@@ -1231,6 +1231,17 @@ export class App extends Emitter<AppEvents> {
     this.cameraChanged();
   }
 
+  /** ループ再生中に、見る視点を再生の基準の視点(撮影カメラ。記録の初めの視点)へ戻す。再生は続ける */
+  resetPlayView(): void {
+    const from = this.playFrom;
+    if (this.takeState !== 'playing' || !from) return;
+    const c = this.project.camera;
+    c.yaw = from.yaw; c.pitch = from.pitch; c.zoom = from.zoom; c.target = { ...from.target };
+    this.world.cutView(); // 視点が飛ぶだけなので揺らさない
+    this.emit('status', undefined);
+    this.cameraChanged();
+  }
+
   togglePlay(): void { if (this.takeState === 'playing') this.stopTake(); else this.playTake(); }
 
   /* ---------- キーフレームから動きを作る ---------- */

@@ -173,8 +173,11 @@
     <div id="dropHint" class="absolute inset-3 border-4 border-dashed border-primary rounded-box bg-base-100/70 hidden items-center justify-center text-lg font-bold pointer-events-none">
       ここに画像か .pukupop ファイルをドロップ
     </div>
-    <!-- 記録中・ループ再生中の印。押すと止める -->
-    <button id="takeBadge" class="btn btn-sm rounded-full hidden" type="button"></button>
+    <!-- 記録中・ループ再生中の印(押すと止める)と、再生中に撮影カメラへ戻すボタン -->
+    <div id="takeBar" class="flex items-center gap-2">
+      <button id="takeBadge" class="btn btn-sm rounded-full hidden" type="button"></button>
+      <button id="takeCam" class="btn btn-sm rounded-full hidden" type="button" data-cmd="resetPlayView">撮影カメラに戻す</button>
+    </div>
     <button id="mFine" class="m-only btn btn-sm rounded-full" aria-pressed="false" title="押すとオン・オフが切り替わります。オンの間は、回転・平行移動・ズーム・つかむ・揺らすの動きが 1/5 になります">微調整</button>
     <div id="busy" class="absolute inset-0 bg-base-100/60 hidden items-center justify-center"><span class="loading loading-spinner loading-lg"></span></div>
   </section>
@@ -291,6 +294,7 @@
           <ol id="keyList" class="flex flex-col gap-1" aria-label="キーフレーム一覧"></ol>
           <div class="flex items-center gap-2">
             <button id="keyMake" class="btn btn-sm btn-primary" title="今の記録と入れ替える(元に戻せる)">▶ 作成して再生</button>
+            <button id="keyStop" class="btn btn-sm" title="ループ再生を止める">■ 停止</button>
             <span id="keyTotal" class="text-xs opacity-70 tabular-nums"></span>
           </div>
         </section>
