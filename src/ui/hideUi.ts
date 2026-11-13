@@ -30,6 +30,9 @@ export function bindHideUi(app: App): void {
   ui.setHideFull.addEventListener('change', () => prefs.set(PREF, ui.setHideFull.checked));
   /** このアプリが隠すときに全画面にしたか(自分で入れた全画面だけを、戻すときにやめる) */
   let ownFull = false;
+  /** 全画面にする要求の途中 */
+  let fullReq: Promise<void> | null = null;
+  const exitFull = () => void document.exitFullscreen().catch(() => {});
 
   /* ---------- 状態 → 画面 ---------- */
   let shown = false;
@@ -45,11 +48,14 @@ export function bindHideUi(app: App): void {
       // キーやボタンを押した流れの中で呼ぶ(ブラウザは、操作に続くときだけ全画面を許す)
       if (canFull && ui.setHideFull.checked && !document.fullscreenElement) {
         ownFull = true;
-        root.requestFullscreen().catch(() => { ownFull = false; });
+        const req = fullReq = root.requestFullscreen()
+          .catch(() => { if (fullReq === req) ownFull = false; })
+          // 全画面に入る前に戻したときは、入ってからやめる
+          .then(() => { if (fullReq === req) fullReq = null; if (!app.uiHidden && document.fullscreenElement) exitFull(); });
       }
     } else {
       endPeek();
-      if (ownFull && document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+      if (ownFull && document.fullscreenElement) exitFull();
       ownFull = false;
     }
   }
@@ -83,6 +89,7 @@ export function bindHideUi(app: App): void {
   }
   function endPeek(): void {
     clearTimeout(timer);
+    over = false;
     root.classList.remove('ui-peek');
   }
   window.addEventListener('pointermove', e => {

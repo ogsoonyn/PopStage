@@ -65,6 +65,21 @@ test('入力欄やキーボードで移ってきたボタンでは、Tab はふ�
   await expect(page.locator('html')).not.toHaveClass(/ui-hidden/);
 });
 
+test('キーを押してから3Dビューやスライダーをマウスで触っても、Tab で隠せる', async ({ page }) => {
+  await boot(page);
+  await page.keyboard.press('V');
+  const box = (await page.locator('#view').boundingBox())!;
+  await page.mouse.click(box.x + 20, box.y + 20);
+  await page.keyboard.press('Tab');
+  await expect(page.locator('html')).toHaveClass(/ui-hidden/);
+  await page.keyboard.press('Tab');
+  await expect(page.locator('html')).not.toHaveClass(/ui-hidden/);
+  await page.keyboard.press('B');
+  await page.locator('#brushSize').click();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('html')).toHaveClass(/ui-hidden/);
+});
+
 test.describe('スマホ', () => {
   const { defaultBrowserType: _, ...pixel } = devices['Pixel 7'];
   test.use({ ...pixel, deviceScaleFactor: 1 });

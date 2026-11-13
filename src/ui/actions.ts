@@ -194,14 +194,22 @@ export function keyString(e: KeyboardEvent): string {
 const SLIDER_KEYS = new Set(['Home', 'End', 'PageUp', 'PageDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
 
 /**
- * Tab を「UIを隠す」に使わず、ふつうにフォーカスを移すときか。入力欄・選択欄にいるときと、
- * キーボードで移ってきた部品にいるとき(:focus-visible)。マウスで押したボタンや、どこにもフォーカスが無いときは隠すほうに使う。
- * Shift+Tab はいつもフォーカスを戻すのに使える
+ * Tab を「UIを隠す・戻す」に使わず、ふつうにフォーカスを移すときか。キーボードで移ってきた部品にいるとき(:focus-visible)。
+ * 文字を打つ欄は、この前に isTyping で除いている。マウス・指で押した部品(ボタン・スライダー・3Dビュー)や、どこにもフォーカスが無いときは
+ * 隠す・戻すほうに使う。スライダーや、押すとスクリプトでフォーカスを移す3Dビューは、直前にキーを押していると押しても
+ * :focus-visible になるので、押して付いたフォーカスかを自分で覚えておく。Shift+Tab はいつもフォーカスを戻すのに使える
  */
+let viaPointer = false, pointerFocused: EventTarget | null = null;
+/** 押して付いたフォーカスかを覚え始める(bindActions から1回呼ぶ) */
+function watchPointerFocus(): void {
+  addEventListener('pointerdown', () => { viaPointer = true; }, true);
+  addEventListener('keydown', () => { viaPointer = false; }, true);
+  addEventListener('focusin', e => { pointerFocused = viaPointer ? e.target : null; }, true);
+}
 function keyboardFocus(): boolean {
   const el = document.activeElement;
-  if (!el || el === document.body) return false;
-  return el.matches('input, select, textarea, [contenteditable]') || el.matches(':focus-visible');
+  if (!el || el === document.body || el === pointerFocused) return false;
+  return el.matches(':focus-visible');
 }
 
 const ariaKeys = (keys: string[]) => keys.map(k => k.replace(/\bCtrl\b/g, 'Control')).join(' ');
@@ -333,11 +341,12 @@ export function bindActions(app: App, deps: ActionDeps): void {
   }
   /** 画面を覆うダイアログ(確認・書き出しなど)が開いているか。膨らませるのパネルのように画面を覆わないものは含めない */
   const modalOpen = () => !!document.querySelector('dialog[open]:modal');
+  watchPointerFocus();
   window.addEventListener('keydown', e => {
     // 膨らませるのパネルを開いている間も、表示の切り替えなどは効かせる(できない操作は enabled で止める)
     if (isTyping(e) || modalOpen()) return;
     if (e.target instanceof HTMLInputElement && e.target.type === 'range' && SLIDER_KEYS.has(e.key)) return;
-    if (e.key === 'Tab' && !app.uiHidden && keyboardFocus()) return;
+    if (e.key === 'Tab' && keyboardFocus()) return;
     const name = byKey.get(keyString(e));
     if (!name) return;
     e.preventDefault();
