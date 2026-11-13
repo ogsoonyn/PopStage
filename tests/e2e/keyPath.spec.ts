@@ -8,7 +8,7 @@ const setCam = (page: Page, c: { yaw?: number; zoom?: number; x?: number; y?: nu
   cam.yaw = c.yaw ?? 0; cam.pitch = 0; cam.zoom = c.zoom ?? 1.5; cam.target = { x: c.x ?? 0, y: c.y ?? 0, z: 0 };
 }, c);
 
-test('キーフレームの経路: 枠・番号・矢印・秒数を重ね、番号でその視点へ移る。再生中・別のタブ・オフでは消える', async ({ page }) => {
+test('キーフレームの経路: 各フレームの絵のゴースト・輪郭・番号・矢印・秒数を重ね、番号でその視点へ移る。再生中・別のタブ・オフでは消える', async ({ page }) => {
   await boot(page);
   await openTab(page, 'anim');
   const overlay = page.locator('#keyPath');
@@ -26,13 +26,19 @@ test('キーフレームの経路: 枠・番号・矢印・秒数を重ね、番
   await expect(overlay).toBeVisible();
   await expect(overlay.locator('.kp-mark')).toHaveCount(3);
   await expect(overlay.locator('.kp-mark text')).toHaveText(['1', '2', '3']);
-  await expect(overlay.locator('.kp-frame:not(.kp-halo)')).toHaveCount(3);
+  await expect(overlay.locator('.kp-outline:not(.kp-halo)')).toHaveCount(3);
+  await expect(overlay.locator('canvas.kp-ghost')).toHaveCount(3);
   await expect(overlay.locator('.kp-arrow:not(.kp-halo)')).toHaveCount(3);
   await expect(overlay.locator('.kp-path.back:not(.kp-halo)')).toHaveCount(1);
   await expect(overlay.locator('.kp-sec text')).toHaveText(['1.0秒', '2.5秒', '1.0秒']);
-  // 番号の位置は、そのフレームで画面の中心に来る所(2番は右上へ動かした所なので、1番より右・上)
+  // 番号は、そのフレームで画面に映る絵の中心(2番は注視点を右上へ動かしたので、絵は左下に映る)
   const marks = () => overlay.locator('.kp-mark').evaluateAll(gs => gs.map(g => { const r = g.getBoundingClientRect(); return [r.x, r.y]; }));
-  await expect.poll(async () => { const p = await marks(); return p[1][0] > p[0][0] && p[1][1] < p[0][1]; }).toBe(true);
+  await expect.poll(async () => { const p = await marks(); return p[1][0] < p[0][0] && p[1][1] > p[0][1]; }).toBe(true);
+  // 今の視点を動かしても、重ねた絵と番号は動かない
+  const before = await marks();
+  await setCam(page, { zoom: 1.2, yaw: 0.5 });
+  await page.waitForTimeout(200);
+  expect(await marks()).toEqual(before);
   await page.screenshot({ path: test.info().outputPath('keypath.png') });
 
   // 番号を押すとその視点へ。今の視点のフレームは強める
