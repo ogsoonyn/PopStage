@@ -46,8 +46,10 @@ export function coefficients(p: PhysicsParams): { k: number; m: number; c: numbe
 
 /** 物理に伝える視点(注視点は viewTarget で別に入れる)。画角は使わない */
 export interface ViewAngles { yaw: number; pitch: number; zoom: number }
-/** 1刻み前の視点(正規化座標の注視点)と、レイヤーごとのならした速度(カメラから見た向き) */
-interface BaseState { target: Vec3; view: ViewAngles; vel: [string, Vec3][] }
+/** 視点(注視点はワールド座標)。viewRig で使う */
+export interface ViewPoint { target: Vec3; view: ViewAngles }
+/** 1刻み前のカメラの位置と向き(正規化座標)と、レイヤーごとのならした速度(カメラから見た向き) */
+interface BaseState { pose: Pose; vel: [string, Vec3][] }
 export interface WorldSnapshot { time: number; acc: number; states: [string, SpringState][]; base?: BaseState | null }
 
 export class PhysicsWorld {
@@ -67,6 +69,12 @@ export class PhysicsWorld {
   /** 視点の向きとズーム。回転とズームでも揺らす。刻みの前に毎回入れる */
   viewAngles: ViewAngles = { yaw: 0, pitch: 0, zoom: 1 };
   /**
+   * 記録の再生中に画像のほうを動かすときの、画像の動き。画像から見た視点が from から to へ動いたのと同じだけ画像が動き、
+   * それを viewTarget・viewAngles の視点(見る人の視点)から見る。null なら画像は動かない。
+   * 見る人の視点が from のままなら、画像から見た視点は to とちょうど同じになる(今までの再生と同じ揺れ)
+   */
+  viewRig: { from: ViewPoint; to: ViewPoint } | null = null;
+  /**
    * レイヤーのウェイトの重心(正規化座標、画像のローカル座標の x, y)。回転で揺れる大きさを決める。
    * 無ければ画像の中央とみなす
    */
@@ -79,7 +87,7 @@ export class PhysicsWorld {
   private anchor = v3();
   private anchorPrev = v3();
   /** 1刻み前の視点と、レイヤーごとのならした速度。null は「次の刻みで今の視点から測り直す」 */
-  private base: { target: Vec3; view: ViewAngles; vel: Map<string, Vec3> } | null = null;
+  private base: { pose: Pose; vel: Map<string, Vec3> } | null = null;
   private drive = v3();
   private piston = [v3(), v3(), v3()];
 
@@ -188,13 +196,15 @@ export class PhysicsWorld {
    * 測り直しのときは null(この刻みでは視点の動きで揺らさない)
    */
   private viewMotion(): { from: Pose; to: Pose; vel: Map<string, Vec3>; still: boolean } | null {
-    const u = this.unitPx || 1, t = this.viewTarget, a = this.viewAngles;
-    const target = v3(t.x / u, t.y / u, t.z / u), view = { yaw: a.yaw, pitch: a.pitch, zoom: a.zoom };
+    const u = this.unitPx || 1, rig = this.viewRig;
+    const at = (t: Vec3, a: ViewAngles) => pose(v3(t.x / u, t.y / u, t.z / u), a);
+    let to = at(this.viewTarget, this.viewAngles);
+    if (rig) to = rigPose(at(rig.from.target, rig.from.view), at(rig.to.target, rig.to.view), to);
     const b = this.base;
-    this.base = { target, view, vel: b?.vel ?? new Map() };
+    this.base = { pose: to, vel: b?.vel ?? new Map() };
     if (!b) return null;
-    const still = sameVec(b.target, target) && b.view.yaw === view.yaw && b.view.pitch === view.pitch && b.view.zoom === view.zoom;
-    return { from: pose(b.target, b.view), to: pose(target, view), vel: b.vel, still };
+    const p = b.pose, still = sameVec(p.e, to.e) && sameVec(p.r, to.r) && sameVec(p.u, to.u) && sameVec(p.b, to.b);
+    return { from: p, to, vel: b.vel, still };
   }
 
   /**
@@ -239,7 +249,7 @@ export class PhysicsWorld {
     return {
       time: this.time, acc: this.acc,
       states: [...this.states].map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v }, r: s.r, rv: s.rv }]),
-      base: b ? { target: { ...b.target }, view: { ...b.view }, vel: [...b.vel].map(([id, v]) => [id, { ...v }]) } : null,
+      base: b ? { pose: copyPose(b.pose), vel: [...b.vel].map(([id, v]) => [id, { ...v }]) } : null,
     };
   }
 
@@ -247,7 +257,7 @@ export class PhysicsWorld {
     this.time = snap.time; this.acc = snap.acc;
     this.states = new Map(snap.states.map(([id, s]) => [id, { s: { ...s.s }, v: { ...s.v }, r: s.r ?? 0, rv: s.rv ?? 0 }]));
     const b = snap.base;
-    this.base = b ? { target: { ...b.target }, view: { ...b.view }, vel: new Map(b.vel.map(([id, v]) => [id, { ...v }])) } : null;
+    this.base = b ? { pose: copyPose(b.pose), vel: new Map(b.vel.map(([id, v]) => [id, { ...v }])) } : null;
   }
 }
 
@@ -255,16 +265,34 @@ function zero(v: Vec3): void { v.x = v.y = v.z = 0; }
 const sameVec = (a: Vec3, b: Vec3) => a.x === b.x && a.y === b.y && a.z === b.z;
 
 /** カメラの位置と向き。r, u, b は画面の右・上・手前(画像の向きで表す)。e はカメラの位置 */
-interface Pose { e: Vec3; r: Vec3; u: Vec3; b: Vec3 }
+export interface Pose { e: Vec3; r: Vec3; u: Vec3; b: Vec3 }
 
 /**
  * 視点からカメラの位置と向きを求める(stage.ts の applyCamera と同じ向き)。注視点からの距離は ZOOM_DEPTH で決める。
  * 回転の揺れは距離によらない(カメラから見た位置の、距離の分は奥行きが一定なだけ)ので、距離はズームの変化だけを表せばよい
  */
-function pose(target: Vec3, view: ViewAngles): Pose {
+export function pose(target: Vec3, view: ViewAngles): Pose {
   const sy = Math.sin(view.yaw), cy = Math.cos(view.yaw), sp = Math.sin(view.pitch), cp = Math.cos(view.pitch);
   const b = v3(sy * cp, sp, cy * cp), d = ZOOM_DEPTH * Math.log(Math.max(1e-3, view.zoom));
   return { e: v3(target.x + d * b.x, target.y + d * b.y, target.z + d * b.z), r: v3(cy, 0, -sy), u: v3(-sy * sp, cp, -cy * sp), b };
+}
+
+const copyPose = (p: Pose): Pose => ({ e: { ...p.e }, r: { ...p.r }, u: { ...p.u }, b: { ...p.b } });
+
+/**
+ * 画像から見たカメラが from から to へ動いたのと同じだけ画像を動かしたとき、カメラ v を画像から見た位置と向き。
+ * from を to へ重ねる動き(回転と平行移動)を v にかける。v が from なら to になる。向きは傾き(ロール)を含んでよい
+ */
+export function rigPose(from: Pose, to: Pose, v: Pose): Pose {
+  // from の向きから見た成分に直してから、to の向きで戻す
+  const map = (d: Vec3): Vec3 => {
+    const x = from.r.x * d.x + from.r.y * d.y + from.r.z * d.z;
+    const y = from.u.x * d.x + from.u.y * d.y + from.u.z * d.z;
+    const z = from.b.x * d.x + from.b.y * d.y + from.b.z * d.z;
+    return v3(to.r.x * x + to.u.x * y + to.b.x * z, to.r.y * x + to.u.y * y + to.b.y * z, to.r.z * x + to.u.z * y + to.b.z * z);
+  };
+  const d = map(v3(v.e.x - from.e.x, v.e.y - from.e.y, v.e.z - from.e.z));
+  return { e: v3(to.e.x + d.x, to.e.y + d.y, to.e.z + d.z), r: map(v.r), u: map(v.u), b: map(v.b) };
 }
 
 /** 点 p をカメラから見た位置(画面の右・上・手前の成分) */
