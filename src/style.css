@@ -161,7 +161,7 @@ html.mobile #playBar .btn { min-height: 2.25rem; height: 2.25rem; }
 html.mobile #playTime { min-width: 5.5rem; }
 html.mobile .play-cam-label { display: none; }
 /* 塗って直すモードの帯(#mModeBar)が出ているときは、その上へ */
-html.mobile[data-mset="paint"] #playBar { bottom: 3.75rem; }
+html.mobile[data-mset="paint"] #playBar { bottom: calc(var(--m-modebar, 2.25rem) + 1rem); }
 #mFine { position: absolute; top: .625rem; right: max(.625rem, env(safe-area-inset-right, 0px)); z-index: 5; }
 #mFine[aria-pressed="true"] { background: var(--color-primary); color: var(--color-primary-content); border-color: transparent; }
 

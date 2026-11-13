@@ -70,9 +70,27 @@ test('再生の進み具合: 再生中だけ主ビューの下に出て、キー
   expect(await app(page, a => a.takePosition)).toBe(0);
   await page.keyboard.press('ArrowRight');
   expect(await app(page, a => a.takePosition)).toBeCloseTo(0.5, 2);
+  // PageDown・PageUp は次・前の番号の時刻へ
+  await page.keyboard.press('PageDown');
+  expect(await app(page, a => a.takePosition)).toBeCloseTo(1, 1);
+  await page.keyboard.press('PageDown');
+  expect(await app(page, a => a.takePosition)).toBeCloseTo(2, 1);
+  await page.keyboard.press('PageUp');
+  expect(await app(page, a => a.takePosition)).toBeCloseTo(1, 1);
+  // 修飾キー付きはショートカットに渡す(Shift+Home はカメラを戻す。位置は変えない)
+  await app(page, a => { a.project.camera.yaw = 0.7; });
+  await page.keyboard.press('Shift+Home');
+  expect(await app(page, a => a.project.camera.yaw)).toBe(0);
+  expect(await app(page, a => a.takePosition)).toBeCloseTo(1, 1);
+
+  // Shift+L でも一時停止を切り替えられる
+  await page.keyboard.press('Shift+L');
+  await expect(page.locator('#playPause')).toHaveAttribute('aria-pressed', 'false');
+  await page.keyboard.press('Shift+L');
+  await expect(page.locator('#playPause')).toHaveAttribute('aria-pressed', 'true');
 
   await page.locator('#playPause').click();
-  await expect.poll(() => app(page, a => a.takePosition)).not.toBeCloseTo(0.5, 2);
+  await expect.poll(() => app(page, a => a.takePosition)).not.toBeCloseTo(1, 1);
   await expect(page.locator('#takeInfo')).toHaveText('再生中');
 
   await page.locator('#playStop').click();

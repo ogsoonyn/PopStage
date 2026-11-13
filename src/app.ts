@@ -1125,12 +1125,14 @@ export class App extends Emitter<AppEvents> {
       if (!this.playPaused) this.playIndex = i + 1;
       // 「直前の操作を再生」の書き出しには、記録の視点で残す(見る視点を動かした分は入らない)
       // 見る視点を動かしていれば、控えの「1刻み前の視点」は見る視点のものなので、測り直す印にして残す(書き出しの初めで弾まないように)
-      const moved = !sameView(c, from);
-      this.recorder.record({ ...smp, camera: { ...this.playCam, target: { ...this.playCam.target } } }, () => {
+      // シークで跳んだ刻みは、揺れを消して視点を測り直したことも残す(書き出しで跳んだ分が揺れにならないように)
+      const moved = !sameView(c, from), seeked = this.playSeeked;
+      this.playSeeked = false;
+      this.recorder.record({ ...smp, ...(w.viewCut ? { viewCut: true } : {}), camera: { ...this.playCam, target: { ...this.playCam.target } } }, () => {
         const snap = w.snapshot();
         if (moved) snap.base = null;
         return snap;
-      });
+      }, seeked);
       return;
     }
     // 平行移動・回転・ズームでも、「揺らす」で振っても揺らす
@@ -1161,6 +1163,8 @@ export class App extends Emitter<AppEvents> {
   get takeLength(): number { return this.takeState === 'recording' ? this.takeRaw.length * PHYSICS_DT : takeSeconds(this.project.take); }
   /** ループ再生を一時停止しているか(シークバーの ⏸。揺れの一時停止とは別で、物理は進む) */
   playPaused = false;
+  /** シークで揺れを消した直後か(次の刻みで操作の記録に控えを取る) */
+  private playSeeked = false;
 
   /** ループ再生を一時停止する・続ける(再生中だけ) */
   setPlayPaused(on: boolean): void {
@@ -1179,7 +1183,8 @@ export class App extends Emitter<AppEvents> {
     const i = Math.round(seconds / PHYSICS_DT);
     this.playIndex = ((i % n) + n) % n;
     this.world.reset();
-    this.emit('take', this.takeState);
+    this.playSeeked = true;
+    // 位置はバーが描画のたびに追うので、ここでは 'take' を送らない(ドラッグの間、ほかの部品を描き直さない)
   }
 
   /** ループ再生中の位置(秒) */
