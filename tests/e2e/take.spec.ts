@@ -53,22 +53,39 @@ test('操作の記録: R で記録し、L でループ再生。画面を触る�
   expect(len).toBeGreaterThan(0.5);
   await expect(page.locator('#takePlay')).toBeEnabled();
 
-  // ループ再生すると視点が記録どおりに動く
+  // ループ再生すると、視点は記録の初めへ動き、画像のほうが記録どおりに動く(画像から見た視点が記録の範囲を動く)
   const yaw0 = await app(page, a => a.project.take.samples[0].camera.yaw);
   await app(page, a => { a.project.camera.yaw = 2; });
   await page.keyboard.press('l');
   expect(await app(page, a => a.takeState)).toBe('playing');
+  expect(await app(page, a => a.project.camera.yaw)).toBe(yaw0);
   await expect(page.locator('#takeBadge')).toContainText('▶');
-  await expect.poll(() => app(page, a => a.project.camera.yaw)).not.toBe(2);
-  // 記録の範囲の中の向きになる
   const yaws = await app(page, a => a.project.take.samples.map((s: any) => s.camera.yaw));
   const lo = Math.min(...yaws) - 1e-6, hi = Math.max(...yaws) + 1e-6;
-  const now = await app(page, a => a.project.camera.yaw);
+  await expect.poll(() => app(page, a => a.playView.yaw)).not.toBe(yaw0);
+  const now = await app(page, a => a.playView.yaw);
   expect(now).toBeGreaterThanOrEqual(lo); expect(now).toBeLessThanOrEqual(hi);
-  expect(yaw0).toBeGreaterThanOrEqual(lo);
-  // 画面を触ると止まる
+  // 再生中でも、右ドラッグで回す・ホイールでズームする・視点リセットでは止まらず、見る視点だけが動く
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.5, { steps: 10 });
+  await page.mouse.up({ button: 'right' });
+  expect(await app(page, a => a.takeState)).toBe('playing');
+  expect(await app(page, a => a.project.camera.yaw)).not.toBeCloseTo(yaw0, 3);
+  const zoom0 = await app(page, a => a.project.camera.zoom);
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => app(page, a => a.project.camera.zoom)).not.toBeCloseTo(zoom0, 3);
+  expect(await app(page, a => a.takeState)).toBe('playing');
+  await page.keyboard.press('Home');
+  expect(await app(page, a => [a.takeState, a.project.camera.yaw])).toEqual(['playing', 0]);
+  // ブラシで画面を触ると止まる。視点を動かしていたので、その視点のまま
   await page.mouse.click(box.x + 5, box.y + 5);
-  expect(await app(page, a => a.takeState)).toBe('idle');
+  expect(await app(page, a => [a.takeState, a.project.camera.yaw, a.playView])).toEqual(['idle', 0, null]);
+  // 視点を動かさずに止めたときは、止めた所の記録の視点になる(画面はそのまま)
+  await page.keyboard.press('l');
+  await expect.poll(() => app(page, a => a.playView.yaw)).not.toBe(yaw0);
+  const stopped = await app(page, a => { const v = a.playView.yaw; a.stopTake(); return [v, a.project.camera.yaw]; });
+  expect(stopped[1]).toBe(stopped[0]);
 
   // 記録はアンドゥで消え、やり直しで戻る
   await page.keyboard.press('Control+z');
@@ -178,8 +195,8 @@ test('キーフレーム: 視点を追加・登録・見る・削除し、つな
   await page.locator('#keyMake').click();
   expect(await app(page, a => [a.takeState, a.takeLength, a.project.take.keys.length])).toEqual(['playing', 5.5, 2]);
   await expect(page.locator('#takeInfo')).toContainText('▶');
-  // 再生中は視点がフレームの間を動き、画像の位置が動くので揺れる
-  await expect.poll(() => app(page, a => a.project.camera.yaw), { timeout: 8000 }).toBeGreaterThan(0.2);
+  // 再生中は画像から見た視点がフレームの間を動き、画像が動くので揺れる
+  await expect.poll(() => app(page, a => a.playView.yaw), { timeout: 8000 }).toBeGreaterThan(0.2);
   await expect.poll(() => app(page, a => Math.abs(a.world.displacement(a.doc.layers[0].id).x)), { timeout: 8000 }).toBeGreaterThan(0.001);
   // アンドゥで記録が消えて止まる
   await app(page, a => a.history.undo());
