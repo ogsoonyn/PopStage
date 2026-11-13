@@ -13,7 +13,8 @@ export const UI_IDS = {
   tInflKind: 'select', tInflProfile: 'select', tInflSoft: 'input', tInflSoftO: 'output', tInflAngle: 'input', tInflAngleO: 'output', tInflBlend: 'select',
   tSwing: 'input', tAuto: 'input',
   // ツールバー・3Dビュー
-  toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', keyPath: 'div', takeBadge: 'button', takeCam: 'button', mFine: 'button', busy: 'div',
+  toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', keyPath: 'div', takeCam: 'button',
+  playBar: 'div', playStart: 'button', playStop: 'button', playPause: 'button', playTime: 'span', playTrack: 'div', playKeys: 'div', playLoop: 'span', playCam: 'button', mFine: 'button', busy: 'div',
   // レイヤー一覧
   layerCount: 'span', layerList: 'ul',
   layerSelBar: 'div', layerSelText: 'span', layerSelAll: 'button', layerSelOne: 'button', layerSelDone: 'button',
@@ -25,7 +26,7 @@ export const UI_IDS = {
   pHard: 'input', pHardO: 'output', pMass: 'input', pMassO: 'output', pDamp: 'input', pDampO: 'output', pWeight: 'input', pWeightO: 'output',
   pAuto: 'input', pPeriod: 'input', pPeriodO: 'output', pAutoStr: 'input', pAutoStrO: 'output',
   takeInfo: 'span', takeRec: 'button', takePlay: 'button', takeClear: 'button',
-  keySection: 'section', keyCount: 'span', keyPathShow: 'input', keyGhostShow: 'input', keyAdd: 'button', keyList: 'ol', keyMake: 'button', keyTotal: 'span',
+  keySection: 'section', keyCount: 'span', keyPathShow: 'input', keyGhostShow: 'input', playBarShow: 'input', keyAdd: 'button', keyList: 'ol', keyMake: 'button', keyTotal: 'span',
   favCount: 'span', favAdd: 'button', favEmpty: 'p', favList: 'ol',
   vOverlayOff: 'input', vOverlaySel: 'input', vOverlayAll: 'input', vAutoOverlay: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
   pFov: 'input', pFovO: 'output', pBgTransparent: 'input', pBgColor: 'input',

@@ -426,7 +426,7 @@ export class App extends Emitter<AppEvents> {
     clearTimeout(this.cameraTimer); this.cameraTimer = 0; // 前の作業の視点変更を、新しく開いた作業の変更として数えない
     try {
       // 記録中・再生中の操作は前の作業のものなので捨てる
-      this.takeRaw = []; this.playIndex = 0;
+      this.takeRaw = []; this.playIndex = 0; this.playPaused = false;
       if (this.takeState !== 'idle') { this.takeState = 'idle'; this.world.grab = null; this.world.grabGains.clear(); this.emit('take', 'idle'); }
       this.playFrom = this.playCam = null; this.world.viewRig = null; this.stage.setRig(null);
       this.store.replace(project);
@@ -1121,15 +1121,18 @@ export class App extends Emitter<AppEvents> {
       w.viewTarget = { ...c.target };
       w.viewAngles = angles(c);
       this.playCam = { ...smp.camera, fov: c.fov, target: { ...smp.camera.target } };
-      this.playIndex = i + 1;
+      // 一時停止中(シークバーで止めた・ドラッグしている間)は同じ所にとどまる。揺れはそのまま落ち着いていく
+      if (!this.playPaused) this.playIndex = i + 1;
       // 「直前の操作を再生」の書き出しには、記録の視点で残す(見る視点を動かした分は入らない)
       // 見る視点を動かしていれば、控えの「1刻み前の視点」は見る視点のものなので、測り直す印にして残す(書き出しの初めで弾まないように)
-      const moved = !sameView(c, from);
-      this.recorder.record({ ...smp, camera: { ...this.playCam, target: { ...this.playCam.target } } }, () => {
+      // シークで跳んだ刻みは、揺れを消して視点を測り直したことも残す(書き出しで跳んだ分が揺れにならないように)
+      const moved = !sameView(c, from), seeked = this.playSeeked;
+      this.playSeeked = false;
+      this.recorder.record({ ...smp, ...(w.viewCut ? { viewCut: true } : {}), camera: { ...this.playCam, target: { ...this.playCam.target } } }, () => {
         const snap = w.snapshot();
         if (moved) snap.base = null;
         return snap;
-      });
+      }, seeked);
       return;
     }
     // 平行移動・回転・ズームでも、「揺らす」で振っても揺らす
@@ -1158,6 +1161,32 @@ export class App extends Emitter<AppEvents> {
 
   /** 記録中なら記録した長さ、それ以外は保存してある記録の長さ(秒) */
   get takeLength(): number { return this.takeState === 'recording' ? this.takeRaw.length * PHYSICS_DT : takeSeconds(this.project.take); }
+  /** ループ再生を一時停止しているか(シークバーの ⏸。揺れの一時停止とは別で、物理は進む) */
+  playPaused = false;
+  /** シークで揺れを消した直後か(次の刻みで操作の記録に控えを取る) */
+  private playSeeked = false;
+
+  /** ループ再生を一時停止する・続ける(再生中だけ) */
+  setPlayPaused(on: boolean): void {
+    if (this.takeState !== 'playing' || this.playPaused === on) return;
+    this.playPaused = on;
+    this.emit('take', this.takeState);
+  }
+
+  /**
+   * ループ再生の位置を移す(秒。1周の中に丸める)。跳んだ先の揺れは落ち着いた状態から始める
+   * (記録に揺れの途中の状態は残っていないため)。視点が飛ぶ分でも揺らさない
+   */
+  seekTake(seconds: number): void {
+    const n = this.project.take?.samples.length ?? 0;
+    if (this.takeState !== 'playing' || !n || !Number.isFinite(seconds)) return;
+    const i = Math.round(seconds / PHYSICS_DT);
+    this.playIndex = ((i % n) + n) % n;
+    this.world.reset();
+    this.playSeeked = true;
+    // 位置はバーが描画のたびに追うので、ここでは 'take' を送らない(ドラッグの間、ほかの部品を描き直さない)
+  }
+
   /** ループ再生中の位置(秒) */
   get takePosition(): number {
     const n = this.project.take?.samples.length ?? 0;
@@ -1199,6 +1228,7 @@ export class App extends Emitter<AppEvents> {
     if (this.takeState === 'recording') this.stopRecording();
     if (this.paused) this.setPaused(false);
     this.playIndex = 0;
+    this.playPaused = false;
     // 視点を記録の初めへ動かし、そこを画像を動かす基準にする(始めは画像が元の置き場所にある)
     const c = this.project.camera, s0 = take.samples[0].camera;
     c.yaw = s0.yaw; c.pitch = s0.pitch; c.zoom = s0.zoom; c.target = { ...s0.target };
@@ -1220,6 +1250,7 @@ export class App extends Emitter<AppEvents> {
     const c = this.project.camera, from = this.playFrom, at = this.playCam;
     if (from && at && sameView(c, from)) { c.yaw = at.yaw; c.pitch = at.pitch; c.zoom = at.zoom; c.target = { ...at.target }; }
     this.playFrom = this.playCam = null;
+    this.playPaused = false;
     this.world.viewRig = null;
     this.stage.setRig(null);
     // 画面を触って止めたときは、すぐ後の当たり判定(pick)が今の視点で行われるようにする

@@ -41,9 +41,9 @@ export class MotionRecorder {
 
   clear(): void { this.samples = []; this.counter = 0; }
 
-  /** 物理を1刻み進める直前に呼ぶ。snap はその時点の物理状態を返す関数。 */
-  record(sample: RecordSample, snap: () => WorldSnapshot): void {
-    if (this.samples.length === 0 || this.counter % SNAP_EVERY === 0) sample.snap = snap();
+  /** 物理を1刻み進める直前に呼ぶ。snap はその時点の物理状態を返す関数。force なら間隔によらず控えを取る(揺れを消したときなど) */
+  record(sample: RecordSample, snap: () => WorldSnapshot, force = false): void {
+    if (force || this.samples.length === 0 || this.counter % SNAP_EVERY === 0) sample.snap = snap();
     this.counter++;
     this.samples.push(sample);
     const max = Math.round(MAX_SECONDS / PHYSICS_DT);

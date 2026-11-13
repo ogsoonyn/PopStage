@@ -17,6 +17,17 @@ import { ui } from './ids';
 
 type Pt = { x: number; y: number };
 
+/**
+ * キーフレームの部品が見えているか(右パネル・スマホのシートで「アニメーション」を開いているか)。
+ * 重ね表示と、止まっている間の再生のバー(ui/playBar.ts)が使う
+ */
+export function keySectionShown(): boolean {
+  // スマホでシートを畳んでいるときは、キーフレームの部品は見えていない
+  if (document.documentElement.classList.contains('mobile') && ui.mSheet.dataset.state === 'closed') return false;
+  const section = ui.keySection;
+  return section.checkVisibility?.() ?? section.offsetParent !== null;
+}
+
 const NS = 'http://www.w3.org/2000/svg';
 /** 番号の円の半径(px) */
 const R = 10;
@@ -91,7 +102,7 @@ type World = { x: number; y: number; z: number };
 interface Shape { frames: (World[] | null)[]; centers: (World | null)[]; paths: World[][]; seconds: number[]; modes: KeyMode[]; rigs: ReturnType<App['stage']['rigMatrix']>[] }
 
 export function bindKeyPath(app: App): void {
-  const host = ui.keyPath, toggle = ui.keyPathShow, section = ui.keySection;
+  const host = ui.keyPath, toggle = ui.keyPathShow;
   const svg = el('svg', { class: 'key-path', 'aria-hidden': 'true' }, host);
   toggle.checked = prefs.get<boolean>(PREF) ?? true;
   toggle.addEventListener('change', () => { prefs.set(PREF, toggle.checked); hideIfNeeded(); });
@@ -131,9 +142,7 @@ export function bindKeyPath(app: App): void {
   let last = '', shapeSig = '', shape: Shape | null = null;
   function visible(): boolean {
     if ((!toggle.checked && !ghost.checked) || !app.keyDraft.length || !app.doc || app.exporting || app.takeState !== 'idle') return false;
-    // スマホでシートを畳んでいるときは、キーフレームの部品は見えていない
-    if (document.documentElement.classList.contains('mobile') && ui.mSheet.dataset.state === 'closed') return false;
-    return section.checkVisibility?.() ?? section.offsetParent !== null;
+    return keySectionShown();
   }
 
   /**

@@ -15,6 +15,7 @@ import { bindRecentDialog } from './ui/recentDialog';
 import { bindSettingsDialog } from './ui/settingsDialog';
 import { bindMobileLayout } from './ui/mobile';
 import { bindTakeControls } from './ui/take';
+import { bindPlayBar } from './ui/playBar';
 import { bindKeyPath } from './ui/keyPath';
 import { bindFavoriteControls } from './ui/favorites';
 import { isTool } from './ui/tools';
@@ -52,6 +53,7 @@ bindStageInput(app, canvas);
 const multiView = bindMultiView(app, canvas);
 bindPanels(app);
 bindTakeControls(app);
+bindPlayBar(app);
 bindKeyPath(app);
 bindFavoriteControls(app);
 
