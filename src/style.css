@@ -14,8 +14,12 @@
 
 .prop { display: grid; grid-template-columns: 6.25rem 1fr 3.25rem; align-items: center; gap: .5rem; }
 .prop output { text-align: right; font-variant-numeric: tabular-nums; }
-/* キーフレームの行: 番号(押すとその視点を見る)・次まで・通り方・今の視点で上書き・削除 */
-.key-row { display: grid; grid-template-columns: 1.75rem 4.75rem 1fr 1.75rem 1.5rem; align-items: center; gap: .375rem; }
+/* キーフレームの行: 番号(押すとその視点を見る)・通り方・今の視点で上書き・削除。間の行は次までの秒数で、行の間にあると分かるよう半分ずらす */
+.key-row { display: grid; grid-template-columns: 1.75rem 1fr 1.75rem 1.5rem; align-items: center; gap: .375rem; }
+.key-gap { display: flex; align-items: center; gap: .375rem; padding-left: .5rem; margin: -.125rem 0; }
+.key-gap .key-arrow { width: 1.25rem; text-align: center; opacity: .6; }
+.key-gap.back, .key-back { opacity: .5; }
+.key-back .key-no { text-align: center; font-size: .75rem; }
 .key-row .key-set svg { width: 1rem; height: 1rem; }
 .key-head { padding: 0 .125rem; }
 /* お気に入りの行: 今の状態と同じ印・名前と中身・適用・今の状態で上書き・削除 */

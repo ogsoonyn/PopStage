@@ -280,8 +280,8 @@
             <label class="flex items-center gap-1 text-xs ml-auto" title="各フレームの見え方と動きの道筋を3Dビューに重ねる"><input id="keyPathShow" type="checkbox" class="checkbox checkbox-xs"> 経路</label>
             <button id="keyAdd" class="btn btn-xs" title="今の視点を末尾に追加">＋ 追加</button>
           </div>
-          <p id="keyHelp" class="help-text" hidden>視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す動きを作ります。画像の位置が動くと揺れます。「次まで」は次のフレームまでの秒数です。「通り方」は、なめらか(止まらず通り抜ける)か、弾む(急に止まって揺れる)かを選びます。作った動きは今の記録と入れ替わります(元に戻せます)。「経路」をオンにすると、各フレームで画面に映る絵を薄く重ね、順番を番号で、絵の動く道筋を矢印と秒数で出します。視点を動かしても重ねた絵は動きません(番号を押すとその視点へ移ります。記録中・再生中は消えます)。</p>
-          <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span>次まで</span><span>通り方</span><span></span><span></span></div>
+          <p id="keyHelp" class="help-text" hidden>視点(回転・ズーム・画像の位置)を順に通り、最後から最初へ戻ってくり返す動きを作ります。画像の位置が動くと揺れます。フレームの間の秒数は、次のフレームまでの時間です(最後の後の ↩ は、最初へ戻るまでの時間)。「通り方」は、そのフレームを、なめらか(止まらず通り抜ける)か、弾む(勢いよく着いて止まり、揺れる)かを選びます。作った動きは今の記録と入れ替わります(元に戻せます)。「経路」をオンにすると、各フレームで画面に映る絵を薄く重ね、順番を番号で、絵の動く道筋を矢印と秒数で出します。視点を動かしても重ねた絵は動きません(番号を押すとその視点へ移ります。記録中・再生中は消えます)。</p>
+          <div class="key-row key-head text-xs opacity-60" aria-hidden="true"><span>#</span><span>通り方</span><span></span><span></span></div>
           <ol id="keyList" class="flex flex-col gap-1" aria-label="キーフレーム一覧"></ol>
           <div class="flex items-center gap-2">
             <button id="keyMake" class="btn btn-sm btn-primary" title="今の記録と入れ替える(元に戻せる)">▶ 作成して再生</button>

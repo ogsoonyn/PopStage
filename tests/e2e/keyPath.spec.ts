@@ -19,8 +19,8 @@ test('キーフレームの経路: 各フレームの絵のゴースト・輪郭
   await page.locator('#keyAdd').click();
   await setCam(page, { zoom: 2.5, x: -350, y: -200 });
   await page.locator('#keyAdd').click();
-  await page.locator('#keyList > li').nth(1).locator('[data-act=sec]').fill('2.5');
-  await page.locator('#keyList > li').nth(1).locator('[data-act=sec]').dispatchEvent('change');
+  await page.locator('#keyList > li.key-gap').nth(1).locator('[data-act=sec]').fill('2.5');
+  await page.locator('#keyList > li.key-gap').nth(1).locator('[data-act=sec]').dispatchEvent('change');
   // 全体が見える視点から確かめる
   await setCam(page, { zoom: 4 });
   await expect(overlay).toBeVisible();
@@ -47,7 +47,7 @@ test('キーフレームの経路: 各フレームの絵のゴースト・輪郭
   await expect(overlay.locator('.kp-mark').nth(1)).toHaveClass(/strong/);
 
   // 一覧の行に乗せたフレームを強める
-  await page.locator('#keyList > li').nth(2).hover();
+  await page.locator('#keyList > li.key-row:not(.key-back)').nth(2).hover();
   await expect(overlay.locator('.kp-mark').nth(2)).toHaveClass(/strong/);
 
   // 再生中は消える
