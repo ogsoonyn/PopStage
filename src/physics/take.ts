@@ -103,41 +103,66 @@ function blendTail(s: RecordSample[]): void {
 /** 補間する値の並び: [yaw, pitch, log(zoom), tx, ty, tz]。ズームは比で補間する(拡大・縮小の速さが見た目でそろう) */
 const channels = (v: ViewKey): number[] => [v.yaw, v.pitch, Math.log(v.zoom), v.target.x, v.target.y, v.target.z];
 
+/** キーフレームの動きの曲線。at(t) は1周の始まりから t 秒の視点(0 ≦ t < total) */
+export interface KeyCurve {
+  readonly keys: readonly KeyFrame[];
+  /** 1周の秒数 */
+  readonly total: number;
+  /** 各フレームを通る時刻(秒) */
+  readonly starts: readonly number[];
+  at(t: number): CameraState;
+}
+
 /**
- * キーフレームを順に通り、最後のフレームから最初のフレームへ戻ってくり返す記録を作る(2フレーム以上)。
+ * キーフレームを順に通り、最後のフレームから最初のフレームへ戻る曲線(2フレーム以上。足りなければ null)。
  * 区間は3次エルミート曲線。各フレームの速さ(接線)は
  * - なめらか: 前後のフレームを結ぶ向き(時間で重み付けした Catmull-Rom)。止まらずに通り抜ける
  * - 弾む: 出ていく速さは 0。入ってくる区間は、出発の速さから加速し続ける2次の動きにして、着いた所で急に止める
- * 1周の刻み数は TAKE_STEP_MULTIPLE の倍数にそろえ、区間の時間はその比で少し伸び縮みさせる。
+ * 記録を作るのにも、画面に経路を描くのにも使う(描いた経路と実際の動きがずれないように)。
  */
-export function takeFromKeys(input: readonly KeyFrame[], fov: number): Take | null {
+export function keyCurve(input: readonly KeyFrame[], fov: number): KeyCurve | null {
   const keys = normalizeKeys(input);
   const n = keys.length;
-  // 短すぎる動きは保存すると読めないので作らない
-  if (n < 2 || keys.reduce((a, k) => a + k.seconds, 0) < TAKE_MIN_SECONDS - 1e-9) return null;
+  if (n < 2) return null;
   const P = keys.map(k => channels(k.view)), D = keys.map(k => k.seconds);
   const total = D.reduce((a, b) => a + b, 0);
   const at = (i: number) => (i + n) % n;
   // 各フレームの出ていく速さ(1秒あたり)。なめらかは前後を結ぶ向き、弾むは 0
   const out = P.map((p, i) => keys[i].mode === 'bounce' ? p.map(() => 0)
     : p.map((_, c) => (P[at(i + 1)][c] - P[at(i - 1)][c]) / (D[at(i - 1)] + D[i])));
-  const steps = Math.max(TAKE_STEP_MULTIPLE, Math.round(total / PHYSICS_DT / TAKE_STEP_MULTIPLE) * TAKE_STEP_MULTIPLE);
   const starts: number[] = []; let acc = 0;
   for (const d of D) { starts.push(acc); acc += d; }
+  return {
+    keys, total, starts,
+    at(t: number): CameraState {
+      let seg = 0;
+      while (seg < n - 1 && t >= starts[seg + 1]) seg++;
+      const d = D[seg], u = Math.max(0, Math.min(1, (t - starts[seg]) / d)), a = P[seg], b = P[at(seg + 1)], next = keys[at(seg + 1)];
+      const v = a.map((p0, c) => {
+        const m0 = out[seg][c] * d, delta = b[c] - p0;
+        // 着く側の速さ。弾むは出発の速さから加速して着く(2次の動き)、なめらかは次のフレームの速さ
+        const m1 = next.mode === 'bounce' ? 2 * delta - m0 : out[at(seg + 1)][c] * d;
+        const u2 = u * u, u3 = u2 * u;
+        return (2 * u3 - 3 * u2 + 1) * p0 + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * b[c] + (u3 - u2) * m1;
+      });
+      return { fov, yaw: v[0], pitch: Math.max(-1.45, Math.min(1.45, v[1])), zoom: Math.exp(v[2]), target: { x: v[3], y: v[4], z: v[5] } };
+    },
+  };
+}
+
+/**
+ * キーフレームを順に通り、最後のフレームから最初のフレームへ戻ってくり返す記録を作る(2フレーム以上)。動きは keyCurve。
+ * 1周の刻み数は TAKE_STEP_MULTIPLE の倍数にそろえ、区間の時間はその比で少し伸び縮みさせる。
+ */
+export function takeFromKeys(input: readonly KeyFrame[], fov: number): Take | null {
+  const curve = keyCurve(input, fov);
+  // 短すぎる動きは保存すると読めないので作らない
+  if (!curve || curve.total < TAKE_MIN_SECONDS - 1e-9) return null;
+  const { keys, total } = curve;
+  const steps = Math.max(TAKE_STEP_MULTIPLE, Math.round(total / PHYSICS_DT / TAKE_STEP_MULTIPLE) * TAKE_STEP_MULTIPLE);
   const samples: RecordSample[] = [];
-  let seg = 0;
   for (let s = 0; s < steps; s++) {
-    const t = (s / steps) * total;
-    while (seg < n - 1 && t >= starts[seg + 1]) seg++;
-    const d = D[seg], u = (t - starts[seg]) / d, a = P[seg], b = P[at(seg + 1)], next = keys[at(seg + 1)];
-    const v = a.map((p0, c) => {
-      const m0 = out[seg][c] * d, delta = b[c] - p0;
-      // 着く側の速さ。弾むは出発の速さから加速して着く(2次の動き)、なめらかは次のフレームの速さ
-      const m1 = next.mode === 'bounce' ? 2 * delta - m0 : out[at(seg + 1)][c] * d;
-      const u2 = u * u, u3 = u2 * u;
-      return (2 * u3 - 3 * u2 + 1) * p0 + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * b[c] + (u3 - u2) * m1;
-    });
-    const camera: CameraState = { fov, yaw: v[0], pitch: Math.max(-1.45, Math.min(1.45, v[1])), zoom: Math.exp(v[2]), target: { x: v[3], y: v[4], z: v[5] } };
+    const camera = curve.at((s / steps) * total);
     samples.push({ grab: null, grabGains: [], camera, viewTarget: { ...camera.target } });
   }
   return { samples, keys };

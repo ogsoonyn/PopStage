@@ -14,6 +14,7 @@ import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
 import { bindMobileLayout } from './ui/mobile';
 import { bindTakeControls } from './ui/take';
+import { bindKeyPath } from './ui/keyPath';
 import { bindFavoriteControls } from './ui/favorites';
 import { isTool } from './ui/tools';
 import { bindHelp } from './ui/help';
@@ -50,6 +51,7 @@ bindStageInput(app, canvas);
 const multiView = bindMultiView(app, canvas);
 bindPanels(app);
 bindTakeControls(app);
+bindKeyPath(app);
 bindFavoriteControls(app);
 
 /* ---------- 右のパネルのタブ(レイヤー・アニメーション・画像と表示)。選んだタブはブラウザに覚える ---------- */
