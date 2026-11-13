@@ -153,22 +153,26 @@ test('キーフレーム: 視点を追加・登録・見る・削除し、つな
   await page.locator('#keyAdd').click();
   await page.evaluate(() => { const c = (window as any).popstage.project.camera; c.yaw = 0.3; });
   await page.locator('#keyAdd').click();
-  await expect(page.locator('#keyList > li')).toHaveCount(3);
+  await expect(page.locator('#keyList > li.key-row:not(.key-back)')).toHaveCount(3);
   await expect(page.locator('#keyCount')).toHaveText('3/12');
+  // 秒数はフレームの行の間。最後の後は最初へ戻るまでで、薄い「1」の行が続く
+  await expect(page.locator('#keyList > li')).toHaveClass([/key-row/, /key-gap/, /key-row/, /key-gap/, /key-row/, /key-gap back/, /key-back/]);
+  await expect(page.locator('#keyList > li.key-gap .key-arrow')).toHaveText(['↓', '↓', '↩']);
+  await expect(page.locator('#keyList > li.key-back .key-no')).toHaveText('1');
   // 3つ目を消し、2つ目を登録し直す
-  await page.locator('#keyList > li').nth(2).locator('[data-act=del]').click();
+  await page.locator('#keyList > li.key-row:not(.key-back)').nth(2).locator('[data-act=del]').click();
   await page.evaluate(() => { const c = (window as any).popstage.project.camera; c.yaw = 0.9; });
-  await page.locator('#keyList > li').nth(1).locator('[data-act=set]').click();
+  await page.locator('#keyList > li.key-row:not(.key-back)').nth(1).locator('[data-act=set]').click();
   // 見る: 1つ目の視点へ
-  await page.locator('#keyList > li').nth(0).locator('[data-act=go]').click();
+  await page.locator('#keyList > li.key-row:not(.key-back)').nth(0).locator('[data-act=go]').click();
   expect(await app(page, a => [a.project.camera.yaw, a.project.camera.target.x])).toEqual([0, 0]);
   // 時間とつなぎ方(時間は 5 秒までに丸める)
-  await page.locator('#keyList > li').nth(0).locator('[data-act=sec]').fill('9');
-  await page.locator('#keyList > li').nth(0).locator('[data-act=sec]').dispatchEvent('change');
-  await expect(page.locator('#keyList > li').nth(0).locator('[data-act=sec]')).toHaveValue('5.0');
-  await page.locator('#keyList > li').nth(1).locator('[data-act=sec]').fill('0.5');
-  await page.locator('#keyList > li').nth(1).locator('[data-act=sec]').dispatchEvent('change');
-  await page.locator('#keyList > li').nth(1).locator('[data-act=mode]').selectOption('bounce');
+  await page.locator('#keyList > li.key-gap').nth(0).locator('[data-act=sec]').fill('9');
+  await page.locator('#keyList > li.key-gap').nth(0).locator('[data-act=sec]').dispatchEvent('change');
+  await expect(page.locator('#keyList > li.key-gap').nth(0).locator('[data-act=sec]')).toHaveValue('5.0');
+  await page.locator('#keyList > li.key-gap').nth(1).locator('[data-act=sec]').fill('0.5');
+  await page.locator('#keyList > li.key-gap').nth(1).locator('[data-act=sec]').dispatchEvent('change');
+  await page.locator('#keyList > li.key-row:not(.key-back)').nth(1).locator('[data-act=mode]').selectOption('bounce');
   expect(await app(page, a => a.keyDraft.map((k: any) => [k.view.yaw, k.seconds, k.mode]))).toEqual([[0, 5, 'smooth'], [0.9, 0.5, 'bounce']]);
   await expect(page.locator('#keyTotal')).toHaveText('1周 5.5秒');
   await page.locator('#keyMake').click();
@@ -190,5 +194,5 @@ test('キーフレーム: 視点を追加・登録・見る・削除し、つな
     return { cleared, keys: a.keyDraft.map((k: any) => [k.seconds, k.mode]), len: a.takeLength };
   });
   expect(r).toEqual({ cleared: 0, keys: [[5, 'smooth'], [0.5, 'bounce']], len: 5.5 });
-  await expect(page.locator('#keyList > li')).toHaveCount(2);
+  await expect(page.locator('#keyList > li.key-row:not(.key-back)')).toHaveCount(2);
 });

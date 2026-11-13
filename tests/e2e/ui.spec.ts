@@ -656,11 +656,11 @@ test('fps・頂点数は ?debug のときだけ出す。キーフレームの上
   await expect(page.locator('#sFps')).toBeHidden();
   await expect(page.locator('#sVerts')).toBeHidden();
   await expect(page.locator('#sZoom')).toBeVisible();
-  // キーフレームの行: 番号・次まで・通り方・上書き・削除の順
+  // キーフレームの行: 番号・通り方・上書き・削除の順(次までの秒数は行の間)
   await openTab(page, 'anim');
   await page.locator('#keyAdd').click();
-  const acts = await page.locator('#keyList > li').first().locator('[data-act]').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.act));
-  expect(acts).toEqual(['go', 'sec', 'mode', 'set', 'del']);
+  const acts = await page.locator('#keyList > li.key-row:not(.key-back)').first().locator('[data-act]').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.act));
+  expect(acts).toEqual(['go', 'mode', 'set', 'del']);
   await expect(page.locator('#keyList [data-act=set]').first()).toHaveAttribute('aria-label', '今の視点で上書き');
   // メニュー: ↓ で最初の項目へ、↓↑ で前後へ、→ で隣のメニューへ、Esc で閉じる
   const file = page.locator('#menubar .dropdown').first();

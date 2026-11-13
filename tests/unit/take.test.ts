@@ -121,6 +121,23 @@ describe('キーフレームから動きを作る', () => {
     expect(t.keys?.length).toBe(2);
   });
 
+  it('経路を描く曲線は各フレームの時刻にそのフレームを通り、記録と同じ動きになる', async () => {
+    const { keyCurve, takeFromKeys } = await import('../../src/physics/take');
+    const keys = [
+      { view: view(0, 1, 0), seconds: 1, mode: 'smooth' as const }, { view: view(1, 2, 50), seconds: 0.5, mode: 'bounce' as const },
+      { view: view(-1, 1.5, -30), seconds: 1.5, mode: 'smooth' as const },
+    ];
+    const c = keyCurve(keys, 30)!;
+    expect(c.total).toBeCloseTo(3); expect(c.starts).toEqual([0, 1, 1.5]);
+    keys.forEach((k, i) => {
+      const v = c.at(c.starts[i]);
+      expect(v.yaw).toBeCloseTo(k.view.yaw); expect(v.zoom).toBeCloseTo(k.view.zoom); expect(v.target.x).toBeCloseTo(k.view.target.x);
+    });
+    const s = takeFromKeys(keys, 30)!.samples, i = 100;
+    expect(s[i].camera.yaw).toBeCloseTo(c.at((i / s.length) * c.total).yaw, 6);
+    expect(keyCurve(keys.slice(0, 1), 30)).toBeNull();
+  });
+
   it('なめらかは止まらずに通り抜け、弾むは同じ向きのまま着いて急に止まる', async () => {
     const { takeFromKeys } = await import('../../src/physics/take');
     const k = (mode: 'smooth' | 'bounce') => takeFromKeys([
