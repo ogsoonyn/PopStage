@@ -12,6 +12,8 @@ export const ICONS = {
   view: '<path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/>',
   pan: '<path d="M12 3v18M3 12h18"/><path d="m9 6 3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',
   // その場で効く操作
+  // 最近開いたファイル(時計)
+  recent: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   multi: '<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M12 4v16M3 12h18"/>',
   overlay: '<path d="m12 4 9 4.5-9 4.5-9-4.5z"/><path d="m3 12.5 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/>',
   fade: '<rect x="3" y="4" width="18" height="16" rx="1.5" stroke-dasharray="3 2.5"/><path d="m6 17 4-5 3 3 2-2 3 4"/>',

@@ -32,6 +32,7 @@
       <li><button data-cmd="save">保存</button></li>
       <li><button data-cmd="export">書き出し…</button></li>
       <li><button data-cmd="sample">サンプルを開く</button></li>
+      <li><button data-cmd="settings">設定…</button></li>
       <li><button data-cmd="help">操作方法</button></li>
       <li><button data-cmd="about">PukuPop について</button></li>
     </ul>
@@ -109,6 +110,7 @@
     </ul>
   </div>
   <span id="docTitle" class="ml-auto opacity-70 truncate px-2"></span>
+  <button class="btn btn-ghost btn-sm btn-square" data-cmd="settings" aria-label="設定"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 </header>
 
 <!-- ツールオプション: 選択中のツールの設定(ブラシ・膨らみ)と操作のヒント。ツールに合わせて中身を入れ替える(ui/toolOptions.ts) -->
@@ -305,8 +307,6 @@
               <input id="vOverlayAll" type="radio" name="vOverlay" class="join-item btn btn-xs" aria-label="全レイヤー">
             </div></div>
           <p id="vOverlayHelp" class="help-text" hidden>塗った所を色で重ねます。「選択中」は選んでいるレイヤーだけ、「全レイヤー」は表示中のレイヤー全部を、一覧の色の印と同じ色で重ねます(選んだレイヤーは濃く、ほかは薄く)。W キーと左のツールバーの「ウェイト」は、押すたびに OFF → 選択中 → 全レイヤーと切り替えます。</p>
-          <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlay">塗るときは自動でON</label><button type="button" class="help-btn" data-help="vAutoOverlayHelp"></button></span><input id="vAutoOverlay" type="checkbox" class="toggle toggle-sm"></div>
-          <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。ほかのツールに移っても自動ではOFFにしません。</p>
           <div class="toggle-row"><span class="prop-name"><label for="vFade">画像を薄く</label><button type="button" class="help-btn" data-help="vFadeHelp"></button></span><input id="vFade" type="checkbox" class="toggle toggle-sm"></div>
           <p id="vFadeHelp" class="help-text" hidden>画像を薄くして、塗りを見やすくします(書き出しには影響しません)。</p>
           <div class="toggle-row"><span class="prop-name"><label for="vFlat">ポップを一時OFF</label><button type="button" class="help-btn" data-help="vFlatHelp"></button></span><input id="vFlat" type="checkbox" class="toggle toggle-sm"></div>
@@ -529,6 +529,28 @@
   <form method="dialog" class="modal-backdrop"><button>close</button></form>
 </dialog>
 
+<!-- ツール全体の設定(ui/settingsDialog.ts)。このブラウザに覚え、ファイルには書かない -->
+<dialog id="settingsDialog" class="modal">
+  <div class="modal-box max-w-xl">
+    <h3 class="font-bold text-lg mb-3">設定</h3>
+    <section class="flex flex-col gap-2">
+      <h4 class="font-bold">ウェイトの重ね表示</h4>
+      <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlay">塗るときは自動でON</label><button type="button" class="help-btn" data-help="vAutoOverlayHelp"></button></span><input id="vAutoOverlay" type="checkbox" class="toggle toggle-sm"></div>
+      <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。ほかのツールに移っても自動ではOFFにしません。</p>
+    </section>
+    <section class="d-only flex flex-col gap-2 mt-4">
+      <div class="flex items-center gap-2">
+        <h4 class="font-bold"><span id="setToolbarLabel">左のツールバーに出すボタン</span></h4><button type="button" class="help-btn" data-help="setToolbarHelp"></button>
+        <button id="setToolbarReset" type="button" class="btn btn-xs btn-ghost ml-auto">すべて出す</button>
+      </div>
+      <p id="setToolbarHelp" class="help-text" hidden>チェックを外したボタンは左のツールバーから隠します。隠してもショートカットとメニューからは使えます(隠したツールを選んでいる間は、ツールバーに選んだ印が出ません)。</p>
+      <div id="setToolbarList" class="set-list" role="group" aria-labelledby="setToolbarLabel"></div>
+    </section>
+    <div class="modal-action"><form method="dialog"><button class="btn btn-sm">閉じる</button></form></div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
 <!-- 操作方法 -->
 <dialog id="helpDialog" class="modal">
   <div class="modal-box max-w-2xl">
@@ -542,6 +564,7 @@
       <span class="font-bold">レイヤーを複数選ぶ</span><span>一覧で長押しすると選択モード。タップで足す・外し、「完了」で抜ける</span>
       <span class="font-bold">膨らみ・塗る・消す</span><span>シートの「レイヤー」→「塗って直す」</span>
       <span class="font-bold">操作の記録</span><span>シートの「アニメ」→「操作の記録」で記録・ループ再生。画面を触ると再生が止まる</span>
+      <span class="font-bold">設定</span><span>右上の「…」→「設定…」</span>
     </div>
     <ol class="d-only list-decimal pl-5 leading-relaxed mb-3">
       <li>画像をウィンドウへドロップする(PNG / JPEG / WebP)。</li>
@@ -560,7 +583,8 @@
       <span>画像ごと上下に動かす</span><span>揺らし方「ピストン」(プリセット「ずんずん」)</span>
       <span>膨らませる範囲を正円・正方形に</span><span>膨らみで Shift + ドラッグ</span>
       <span>一時的に消しゴム</span><span>ブラシ中に Alt</span>
-      <span>最近開いたファイル</span><span>ファイル → 最近開いたファイル…</span>
+      <span>最近開いたファイル</span><span>左のツールバーの「最近」/ ファイル → 最近開いたファイル…</span>
+      <span>左のツールバーに出すボタンを選ぶ</span><span>右上の歯車(設定)</span>
       <span>3面図の正面・右から・下から</span><span>ドラッグで平行移動 / ホイールでズーム(3つ共通)</span>
       <span>3面図の自由角度</span><span>ドラッグで回転 / 中ドラッグ・Shift+ドラッグで平行移動 / ホイールでズーム</span>
       <span>3面図の視点を戻す</span><span>その図をダブルクリック</span>

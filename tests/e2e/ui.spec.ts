@@ -305,8 +305,11 @@ test('塗るツールを選ぶと重ね表示を自動でONにする。設定で
     await page.goto('/?e2e');
     await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
   };
-  await openTab(page, 'view');
+  // 設定は右上の歯車から開く
+  const openSettings = () => page.locator('#menubar [data-cmd=settings]').click();
+  await openSettings();
   await expect(page.locator('#vAutoOverlay')).toBeChecked();
+  await page.keyboard.press('Escape');
   await page.locator('#view').focus();
 
   // 塗るツールに切り替えるとONになる
@@ -340,15 +343,16 @@ test('塗るツールを選ぶと重ね表示を自動でONにする。設定で
   expect(await app(a => [a.tool, a.view.overlay, a.autoOverlay])).toEqual(['brush', false, true]);
 
   // 設定を切ると入らない。切ったことは覚える
-  await openTab(page, 'view');
+  await openSettings();
   await page.locator('#vAutoOverlay').uncheck();
+  await page.keyboard.press('Escape');
   await page.locator('#view').focus();
   await page.keyboard.press('g');
   await page.keyboard.press('b');
   expect(await overlay()).toBe(false);
   await reboot();
   expect(await app(a => a.autoOverlay)).toBe(false);
-  await openTab(page, 'view');
+  await openSettings();
   await expect(page.locator('#vAutoOverlay')).not.toBeChecked();
 });
 
@@ -538,10 +542,11 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(9);
-  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(9);
+  await expect(acts).toHaveCount(10);
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(10);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
-  await expect(page.locator('#toolNav [role=group]')).toHaveText([/表示/, /レイヤー/, /アニメ/]);
+  // 最近開いたファイルは、ツールより上に置く
+  await expect(page.locator('#toolNav [role=group]')).toHaveText([/ファイル/, /表示/, /レイヤー/, /アニメ/]);
   await page.locator('#toolNav [data-cmd=cleanView]').click();
   await expect(page.locator('#toolNav [data-cmd=cleanView]')).not.toHaveAttribute('aria-pressed', /.*/);
 

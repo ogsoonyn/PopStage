@@ -72,6 +72,8 @@ html.mobile #blurDialog { left: 50%; right: auto; transform: translateX(-50%); b
 .nav-group { width: 4.5rem; display: flex; flex-direction: column; gap: 2px; padding: 4px 0 2px; border-radius: 6px; border: 1px dashed color-mix(in oklab, var(--color-base-content) 22%, transparent); }
 /* 枠の線の分だけ広がらないよう、中のボタンは枠の内側に合わせる(ツールバーの幅はツールのボタンと同じ) */
 #toolNav .nav-group .nav-act { width: 100%; }
+/* 設定で隠したボタン(と、中が空になったまとまり・要らなくなった区切り)。ui/settingsDialog.ts */
+#toolNav .nav-off, #toolNav.nav-off { display: none !important; }
 .nav-group-label { font-size: 10px; text-align: center; opacity: .6; line-height: 1; }
 /* ボタンの右上に出すショートカット */
 .tool-key { position: absolute; top: 1px; right: 3px; font: 600 9px/1 ui-monospace, monospace; opacity: .55; }
@@ -202,6 +204,12 @@ output.is-mixed { font-size: .7rem; opacity: .8; }
 /* 左のツールバーの「ウェイト」: 全レイヤー表示の印 */
 .nav-badge { position: absolute; top: 2px; right: 4px; font-size: .6rem; line-height: 1; padding: 1px 3px; border-radius: 4px; background: var(--color-secondary); color: var(--color-secondary-content); }
 .nav-badge[hidden] { display: none; }
+
+/* 設定の、左のツールバーに出すボタンの一覧(まとまりごとに枠で囲む) */
+.set-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .5rem; }
+.set-group { border: 1px solid var(--color-base-300); border-radius: 6px; padding: .25rem .5rem .5rem; display: flex; flex-direction: column; gap: .25rem; }
+.set-group legend { font-size: .75rem; opacity: .7; padding: 0 .25rem; }
+.set-group label { display: flex; align-items: center; gap: .5rem; cursor: pointer; }
 
 /* キーフレームの枠と経路(ui/keyPath.ts)。画像の明暗どちらの上でも読めるよう、線の下に暗い太い線(kp-halo)を敷く。主ビューの外へははみ出させない */
 #keyPath { z-index: 4; overflow: hidden; }

@@ -12,6 +12,7 @@ import { bindToolOptions } from './ui/toolOptions';
 import { bindMenus } from './ui/menus';
 import { bindMultiView } from './ui/multiView';
 import { bindRecentDialog } from './ui/recentDialog';
+import { bindSettingsDialog } from './ui/settingsDialog';
 import { bindMobileLayout } from './ui/mobile';
 import { bindTakeControls } from './ui/take';
 import { bindKeyPath } from './ui/keyPath';
@@ -126,9 +127,12 @@ bindActions(app, {
   openRecent: () => recentDialog.open(),
   openExport: () => exportDialog.open(),
   openBlur: () => blurDialog.open(),
+  openSettings: () => settingsDialog.open(),
   togglePerf,
 });
 bindMenus();
+// 左のツールバーを作ったあとに、隠すボタンを映す
+const settingsDialog = bindSettingsDialog();
 // スマホの配置。右パネルなどの部品を移すので、ほかの部品を結び付けたあとに呼ぶ
 bindMobileLayout(app);
 
