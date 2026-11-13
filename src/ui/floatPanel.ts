@@ -72,8 +72,8 @@ export function bindFloatPanels(panels: { dialog: HTMLDialogElement; handle: HTM
       if (drag?.id !== e.pointerId) return;
       const { moved } = drag;
       drag = null;
-      // 押しただけ(ダブルクリックを含む)のときや、スマホに替わったときは覚えない
-      if (!moved || isMobile()) return;
+      // 押しただけ(ダブルクリックを含む)のとき、スマホに替わったとき、ドラッグ中に閉じたとき(大きさが 0 になる)は覚えない
+      if (!moved || isMobile() || !dlg.open) return;
       const r = dlg.getBoundingClientRect();
       prefs.set(KEY, { right: Math.round(window.innerWidth - r.right), bottom: Math.round(window.innerHeight - r.bottom) });
     };

@@ -54,7 +54,7 @@ html.mobile #favList { max-height: 10rem; }
 html.mobile .float-handle { cursor: auto; touch-action: auto; }
 html.mobile .float-handle::before { content: none; }
 /* スマホでは下のバーの上に出す(膨らませるはシートの中に置くので除く) */
-html.mobile #blurDialog { bottom: calc(var(--m-tools) + .5rem); }
+html.mobile #blurDialog { left: 50%; right: auto; transform: translateX(-50%); bottom: calc(var(--m-tools) + .5rem); }
 
 /*
  * 左のツールバー(ui/actions.ts が作る)。押すと選んだ状態になるツールは塗りつぶしのボタン、
