@@ -500,7 +500,7 @@ export class Stage {
    * 指定サイズでオフスクリーンに描き、上の行から並んだ RGBA(ストレートアルファ)を返す。
    * ウェイト重ね表示・グリッド・ブラシカーソル・画像を薄く・ポップ一時OFF は反映しない。
    */
-  renderFrame(width: number, height: number, cam: CameraState, background: string | null, out?: Uint8ClampedArray): Uint8ClampedArray {
+  renderFrame(width: number, height: number, cam: CameraState, background: string | null, out?: Uint8ClampedArray, still = false): Uint8ClampedArray {
     if (!this.exportTarget || this.exportTarget.width !== width || this.exportTarget.height !== height) {
       this.exportTarget?.dispose();
       this.exportTarget = new THREE.WebGLRenderTarget(width, height, { samples: 4, depthBuffer: true });
@@ -508,7 +508,11 @@ export class Stage {
     const u = this.uniforms, viewOnly = [u.uOverlay, u.uGrid, u.uBrushOn, u.uFade, u.uFlat];
     const saved = viewOnly.map(x => x.value);
     for (const x of viewOnly) x.value = 0;
-    this.place(true);
+    // still: 揺れ・広がり・画像全体のずれ(ピストン)を消して、止まった形で描く(キーフレームのゴースト用)
+    const swings = u.uSwing.value as THREE.Vector3[], spreads = u.uSpread.value as number[];
+    const keptSwing = still ? swings.map(v => v.clone()) : null, keptSpread = still ? [...spreads] : null;
+    if (still) { for (const v of swings) v.set(0, 0, 0); spreads.fill(0); }
+    this.place(!still);
     const clear = new THREE.Color(), clearAlpha = this.renderer.getClearAlpha();
     this.renderer.getClearColor(clear);
     this.setBackground(background);
@@ -523,6 +527,7 @@ export class Stage {
     this.renderer.setClearColor(clear, clearAlpha);
     this.camera.aspect = aspect;
     viewOnly.forEach((x, i) => { x.value = saved[i]; });
+    if (keptSwing && keptSpread) { swings.forEach((v, i) => v.copy(keptSwing[i])); keptSpread.forEach((r, i) => { spreads[i] = r; }); }
     this.place(this.uniforms.uFlat.value === 0);
 
     // 下から上へ並んでいるので反転し、乗算済みの色をストレートアルファへ戻す

@@ -164,13 +164,16 @@ export function bindKeyPath(app: App): void {
     return { outlines, centers, paths, seconds: keys.map(k => k.seconds) };
   }
 
-  /** 各キーフレームの視点で絵を描き、ゴーストの画像にする */
+  let buf = new Uint8ClampedArray(0);
+  /** 各キーフレームの視点で絵を描き、ゴーストの画像にする(揺れとピストンは消し、輪郭と合わせる) */
   function renderGhosts(): void {
     const m = app.stage.mainView(), fov = app.project.camera.fov;
     const k = Math.min(1, GHOST_MAX / Math.max(m.w, m.h)), w = Math.max(1, Math.round(m.w * k)), h = Math.max(1, Math.round(m.h * k));
     app.flushWeights();
+    // 読み出しの配列は使い回す(putImageData が写すので、キーごとに作らなくてよい)
+    if (buf.length !== w * h * 4) buf = new Uint8ClampedArray(w * h * 4);
     const list = app.keyDraft.map((key, i) => {
-      const px = app.stage.renderFrame(w, h, { ...key.view, fov }, null);
+      const px = app.stage.renderFrame(w, h, { ...key.view, fov }, null, buf, true);
       const c = document.createElement('canvas');
       c.width = w; c.height = h; c.className = 'kp-ghost'; c.dataset.key = String(i);
       c.getContext('2d')!.putImageData(new ImageData(px as Uint8ClampedArray<ArrayBuffer>, w, h), 0, 0);
@@ -184,9 +187,10 @@ export function bindKeyPath(app: App): void {
   let shown = false, ghostSig = '', ghostDirty = 0, svgSig = '', shape: Shape | null = null;
   function hide(): void {
     if (!shown) return;
+    // ゴーストは捨てずに持っておき、また出すときに形もドキュメントも同じなら描き直さない(タブの行き来で止まらないように)
     shown = false; host.hidden = true;
-    ghosts.replaceChildren(); svg.replaceChildren();
-    ghostSig = ''; svgSig = '';
+    svg.replaceChildren(); svgSig = '';
+    if (ghostDirty) { ghosts.replaceChildren(); ghostSig = ''; ghostDirty = 0; }
   }
 
   function update(): void {
@@ -197,14 +201,19 @@ export function bindKeyPath(app: App): void {
     const gs = JSON.stringify([app.keyDraft, c.fov, m.w, m.h, d.position, d.rotation, d.scale, app.stage.imageDims]);
     const now = performance.now();
     if (gs !== ghostSig || !shown) {
-      // 形はすぐ描き直し、ゴーストは変わり終わるのを少し待ってから描く(初めて出すときはすぐ描く)
+      // 形はすぐ描き直し、ゴーストは変わり終わるのを少し待ってから描く。
+      // 出し始め・キーの数が変わったときは、古いゴーストと番号が食い違わないようすぐ描く
+      const same = gs === ghostSig && docRev === lastRev && ghosts.childElementCount === app.keyDraft.length;
       ghostSig = gs; shape = buildShape(c.fov); svgSig = '';
-      if (shown) ghostDirty = now;
-      else { shown = true; host.hidden = false; renderGhosts(); ghostDirty = 0; lastRev = docRev; }
+      if (!shown || ghosts.childElementCount !== app.keyDraft.length) {
+        shown = true; host.hidden = false;
+        if (!same) { renderGhosts(); ghostDirty = 0; lastRev = docRev; }
+      } else ghostDirty = now;
       Object.assign(host.style, { left: `${m.x}px`, top: `${m.y}px`, width: `${m.w}px`, height: `${m.h}px` });
       svg.setAttribute('viewBox', `0 0 ${m.w} ${m.h}`);
     }
-    if (docRev !== lastRev && !ghostDirty) { ghostDirty = now; lastRev = docRev; }
+    // ドキュメントが変わり続けている間は待ち、変わり終わってから描く
+    if (docRev !== lastRev) { ghostDirty = now; lastRev = docRev; }
     if (ghostDirty && now - ghostDirty >= GHOST_WAIT) { ghostDirty = 0; lastRev = docRev; renderGhosts(); svgSig = ''; }
     const current = app.keyDraft.findIndex(k => sameView(k.view, c));
     const strong = hover >= 0 ? hover : current;

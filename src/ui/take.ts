@@ -59,6 +59,8 @@ export function bindTakeControls(app: App): void {
   function gapRow(): HTMLLIElement {
     const li = document.createElement('li');
     li.className = 'key-gap';
+    // 読み上げの一覧の数はフレームの数に合わせる(秒数の欄は aria-label で読める)
+    li.setAttribute('role', 'presentation');
     li.innerHTML = `<span class="key-arrow" aria-hidden="true"></span>`
       + `<label class="flex items-center gap-0.5"><input data-act="sec" type="number" min="${KEY_SECONDS.min}" max="${KEY_SECONDS.max}" step="0.1" class="input input-xs w-14 text-right"><span class="text-xs">秒</span></label>`;
     return li;
