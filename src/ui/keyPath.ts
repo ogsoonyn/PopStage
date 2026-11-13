@@ -11,7 +11,7 @@
  * - 番号を押すとその視点へ移る。一覧の行にポインタを乗せる・フォーカスすると、そのフレームを強める。
  */
 import type { App } from '../app';
-import { keyCurve, type ViewKey } from '../physics/take';
+import { keyCurve, type KeyMode, type ViewKey } from '../physics/take';
 import { prefs } from '../storage/prefs';
 import { ui } from './ids';
 
@@ -81,14 +81,14 @@ function spread(points: readonly (Pt | null)[]): (Pt | null)[] {
     const group = points.flatMap((q, j) => (q && !done.has(j) && Math.hypot(q.x - p.x, q.y - p.y) < R * 1.6 ? [j] : []));
     group.forEach(j => done.add(j));
     if (group.length < 2) return;
-    group.forEach((j, k) => { out[j] = { x: p.x + (k - (group.length - 1) / 2) * (R * 2 + 3), y: p.y }; });
+    group.forEach((j, k) => { out[j] = { x: p.x + (k - (group.length - 1) / 2) * (R * 2.6 + 3), y: p.y }; });
   });
   return out;
 }
 
 type World = { x: number; y: number; z: number };
 /** 今の視点には関わらない、ワールド座標の形(キーフレーム・画角・主ビューの縦横比・画像の置き方が同じなら使い回す) */
-interface Shape { frames: (World[] | null)[]; centers: (World | null)[]; paths: World[][]; seconds: number[]; rigs: ReturnType<App['stage']['rigMatrix']>[] }
+interface Shape { frames: (World[] | null)[]; centers: (World | null)[]; paths: World[][]; seconds: number[]; modes: KeyMode[]; rigs: ReturnType<App['stage']['rigMatrix']>[] }
 
 export function bindKeyPath(app: App): void {
   const host = ui.keyPath, toggle = ui.keyPathShow, section = ui.keySection;
@@ -158,7 +158,7 @@ export function bindKeyPath(app: App): void {
         paths.push(pts);
       });
     }
-    return { frames: placed.map(p => p.corners), centers: placed.map(p => p.center), paths, seconds: keys.map(k => k.seconds), rigs };
+    return { frames: placed.map(p => p.corners), centers: placed.map(p => p.center), paths, seconds: keys.map(k => k.seconds), modes: keys.map(k => k.mode), rigs };
   }
 
   function update(): void {
@@ -242,9 +242,12 @@ export function bindKeyPath(app: App): void {
 
     centers.forEach((c, i) => {
       if (!c) return;
-      const g = el('g', { class: `kp-mark${i === strong ? ' strong' : ''}`, 'data-key': i, transform: `translate(${fmt(c.x)},${fmt(c.y)})` }, marks);
-      el('title', {}, g).textContent = `${i + 1}: この視点を見る`;
-      el('circle', { r: R }, g);
+      // 通り方は形で見分ける: なめらかは丸、弾む(そこで急に止まる)はひし形
+      const bounce = sh.modes[i] === 'bounce', D = R * 1.3;
+      const g = el('g', { class: `kp-mark${i === strong ? ' strong' : ''}`, 'data-key': i, 'data-mode': sh.modes[i], transform: `translate(${fmt(c.x)},${fmt(c.y)})` }, marks);
+      el('title', {}, g).textContent = `${i + 1}(${bounce ? '弾む' : 'なめらか'}): この視点を見る`;
+      if (bounce) el('polygon', { class: 'kp-shape', points: `0,${-D} ${D},0 0,${D} ${-D},0` }, g);
+      else el('circle', { class: 'kp-shape', r: R }, g);
       el('text', { 'text-anchor': 'middle', 'dominant-baseline': 'central' }, g).textContent = String(i + 1);
     });
   }

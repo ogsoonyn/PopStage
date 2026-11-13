@@ -68,6 +68,15 @@ test('キーフレームの経路: 枠・番号・矢印・秒数を重ね、番
   await expect.poll(async () => (await ghosts())?.length).toBe(2);
   await page.locator('#keyPathShow').check();
 
+  // 番号の形は通り方で変わる(なめらかは丸、弾むはひし形)
+  await expect(overlay.locator('.kp-mark .kp-shape')).toHaveCount(3);
+  await expect(overlay.locator('.kp-mark circle')).toHaveCount(3);
+  await page.locator('#keyList > li.key-row:not(.key-back)').nth(1).locator('[data-act=mode]').selectOption('bounce');
+  await expect(overlay.locator('.kp-mark').nth(1)).toHaveAttribute('data-mode', 'bounce');
+  await expect(overlay.locator('.kp-mark').nth(1).locator('polygon')).toHaveCount(1);
+  await expect(overlay.locator('.kp-mark circle')).toHaveCount(2);
+  await expect(overlay.locator('.kp-mark').nth(1).locator('title')).toHaveText('2(弾む): この視点を見る');
+
   // 一覧の行に乗せたフレームを強める
   await page.locator('#keyList > li.key-row:not(.key-back)').nth(2).hover();
   await expect(overlay.locator('.kp-mark').nth(2)).toHaveClass(/strong/);
