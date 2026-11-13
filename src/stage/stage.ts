@@ -39,6 +39,8 @@ export interface PickResult {
   inside: boolean;
 }
 
+const IDENTITY = new THREE.Matrix4();
+
 export class Stage {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -135,6 +137,8 @@ export class Stage {
     this.uniforms.uMap.value = tex;
     this.imageSize = { w: imageW, h: imageH };
     for (const m of this.ghostMats) { m.map = tex; m.needsUpdate = true; }
+    // 板は新しい画像の大きさで作り直す。次の setGhosts までは出さない
+    this.ghosts.visible = false;
     this.ghostGeo?.dispose(); this.ghostGeo = null;
   }
 
@@ -194,7 +198,7 @@ export class Stage {
 
   /**
    * キーフレームのゴーストを置く。各行列で動かした画像を、平らな半透明で主ビューにだけ重ねる(3面図・書き出しには出さない)。
-   * strong の番号は濃くする。null か空で消す
+   * strong の番号は濃くする。null か空で消す。動かさない(単位行列の)ものは画像そのものと重なるので出さない
    */
   setGhosts(rigs: readonly THREE.Matrix4[] | null, strong = -1): void {
     const g = this.ghosts;
@@ -210,7 +214,7 @@ export class Stage {
     }
     g.children.forEach((o, i) => {
       const mesh = o as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
-      mesh.visible = i < rigs.length;
+      mesh.visible = i < rigs.length && !rigs[i].equals(IDENTITY);
       if (!mesh.visible) return;
       mesh.geometry = this.ghostGeo!;
       mesh.matrix.multiplyMatrices(rigs[i], this.restMatrix);
@@ -507,34 +511,7 @@ export class Stage {
   /** 主ビューの矩形(キャンバス左上からの CSS ピクセル) */
   mainView(): ViewRect { return { ...this.main() }; }
 
-  private projCam = new THREE.PerspectiveCamera(40, 1, 1, 1e6);
-  private restInv = new THREE.Matrix4();
   private projV = new THREE.Vector3();
-
-  /**
-   * 視点 cam で主ビューに映る範囲を、画像の面(持ち上げる前の平面。揺れやピストンでは動かない)の上で求める(キーフレームの枠と経路を描く用)。
-   * 縦横比は今の主ビューのもの(書き出しの縦横比ではない)。点はワールド座標で、今の視点には関わらないので、視点が動くたびに求め直さなくてよい。
-   * corners は左上・右上・右下・左下の順で、1つでも面に当たらなければ null。center は画面の中心が当たる点
-   */
-  viewFootprint(cam: CameraState, withCorners = true): { center: Vec3 | null; corners: Vec3[] | null } {
-    if (!this.mesh) return { center: null, corners: null };
-    const pc = this.projCam;
-    this.applyCamera(cam, this.camera.aspect, pc);
-    this.restInv.copy(this.restMatrix).invert();
-    const limit = this.cameraDistance(cam) * 50 / Math.max(1e-6, this.mesh.scale.x);
-    const at = (nx: number, ny: number): Vec3 | null => {
-      this.ndc.set(nx, ny);
-      this.ray.setFromCamera(this.ndc, pc);
-      const local = this.pickRay.copy(this.ray.ray).applyMatrix4(this.restInv);
-      if (!local.intersectPlane(this.plane, this.hit) || this.hit.distanceTo(local.origin) > limit) return null;
-      const w = this.projV.copy(this.hit).applyMatrix4(this.restMatrix);
-      return { x: w.x, y: w.y, z: w.z };
-    };
-    const center = at(0, 0);
-    if (!withCorners) return { center, corners: null };
-    const corners = [at(-1, 1), at(1, 1), at(1, -1), at(-1, -1)];
-    return { center, corners: corners.every(c => c) ? corners as Vec3[] : null };
-  }
 
   /** ワールドの点を今の主ビューの画面(主ビューの左上からの CSS ピクセル)へ。直前の render の視点を使う。カメラの後ろなら null */
   toMainScreen(p: Vec3): { x: number; y: number } | null {

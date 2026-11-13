@@ -55,17 +55,17 @@ test('キーフレームの経路: 枠・番号・矢印・秒数を重ね、番
     return f.every(([x, y], k) => Math.abs(x - o[k].x) < 1 && Math.abs(y - o[k].y) < 1);
   }).toBe(true);
 
-  // ゴースト: オンにすると、各フレームの画像を主ビューに半透明で重ねる(強めたフレームは濃い)。経路をオフにしても出せる
+  // ゴースト: オンにすると、各フレームの画像を主ビューに半透明で重ねる(強めたフレームは濃い)。1番は画像そのものと重なるので出さない。経路をオフにしても出せる
   const ghosts = () => page.evaluate(() => {
     const g = (window as any).popstage.stage.ghosts;
     return g.visible ? g.children.filter((m: any) => m.visible).map((m: any) => m.material.opacity) : null;
   });
   expect(await ghosts()).toBeNull();
   await page.locator('#keyGhostShow').check();
-  await expect.poll(ghosts).toEqual([0.28, 0.55, 0.28]);
+  await expect.poll(ghosts).toEqual([0.55, 0.28]);
   await page.locator('#keyPathShow').uncheck();
   await expect(overlay.locator('.kp-mark')).toHaveCount(0);
-  await expect.poll(async () => (await ghosts())?.length).toBe(3);
+  await expect.poll(async () => (await ghosts())?.length).toBe(2);
   await page.locator('#keyPathShow').check();
 
   // 一覧の行に乗せたフレームを強める
