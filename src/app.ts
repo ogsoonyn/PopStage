@@ -428,6 +428,7 @@ export class App extends Emitter<AppEvents> {
       // 記録中・再生中の操作は前の作業のものなので捨てる
       this.takeRaw = []; this.playIndex = 0;
       if (this.takeState !== 'idle') { this.takeState = 'idle'; this.world.grab = null; this.world.grabGains.clear(); this.emit('take', 'idle'); }
+      this.playFrom = this.playCam = null; this.world.viewRig = null; this.stage.setRig(null);
       this.store.replace(project);
       this.history.clear();
       this.world.reset();
@@ -1122,7 +1123,13 @@ export class App extends Emitter<AppEvents> {
       this.playCam = { ...smp.camera, fov: c.fov, target: { ...smp.camera.target } };
       this.playIndex = i + 1;
       // 「直前の操作を再生」の書き出しには、記録の視点で残す(見る視点を動かした分は入らない)
-      this.recorder.record({ ...smp, camera: { ...this.playCam, target: { ...this.playCam.target } } }, () => w.snapshot());
+      // 見る視点を動かしていれば、控えの「1刻み前の視点」は見る視点のものなので、測り直す印にして残す(書き出しの初めで弾まないように)
+      const moved = !sameView(c, from);
+      this.recorder.record({ ...smp, camera: { ...this.playCam, target: { ...this.playCam.target } } }, () => {
+        const snap = w.snapshot();
+        if (moved) snap.base = null;
+        return snap;
+      });
       return;
     }
     // 平行移動・回転・ズームでも、「揺らす」で振っても揺らす
@@ -1376,7 +1383,9 @@ export class App extends Emitter<AppEvents> {
     this.flushWeights();
     if (p) t = p.lap('upload', t, performance.now());
     // ループ再生中は、視点の代わりに画像を動かす
-    if (this.takeState === 'playing' && this.playFrom && this.playCam) this.stage.setRig(this.playFrom, this.playCam);
+    // 画角は今のものにそろえる(再生中に画角を変えても、画像が近づいたり離れたりしないように)
+    const fov = this.project.camera.fov;
+    if (this.takeState === 'playing' && this.playFrom && this.playCam) this.stage.setRig({ ...this.playFrom, fov }, { ...this.playCam, fov });
     else this.stage.setRig(null);
     this.stage.render(this.project.camera, this.multiCam, this.multiOrtho);
     if (p) p.lap('render', t, performance.now());
