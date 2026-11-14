@@ -81,6 +81,12 @@ function defineActions(app: App, d: ActionDeps) {
       desc: '見栄えを確かめるため、編集用の表示をまとめて切る(ウェイトの重ね表示・画像を薄く・ポップを一時OFF・揺れを一時停止・グリッド)。押すたびに切るだけで、元には戻さない',
     },
     resetView: { label: '視点リセット(正面)', keys: ['Home'], run: () => app.resetView(), duringPreview: true },
+    toggleUi: {
+      label: 'UIを隠す', helpLabel: 'UIを隠す・戻す(Esc でも戻る)', keys: ['Tab'], desc: '3Dビューのほかを隠して、画面いっぱいに見せる。もう一度押すか Esc で戻す',
+      run: () => app.setUiHidden(!app.uiHidden), duringPreview: true,
+      // スマホでは膨らませるのパネルが下のシートの中にあり、隠すと適用・キャンセルを押せなくなる
+      enabled: () => !(app.previewing && document.documentElement.classList.contains('mobile')),
+    },
     // アニメーション
     toggleRecording: {
       label: '操作の記録', helpLabel: '操作の記録(開始・停止)', keys: ['R'], desc: 'つかむ・揺らす・移動・視点の操作を覚える(最長 60 秒)',
@@ -90,6 +96,15 @@ function defineActions(app: App, d: ActionDeps) {
       label: 'ループ再生', helpLabel: 'ループ再生(開始・停止。再生中は画面を触っても止まる)', keys: ['L'], desc: '画面を触ると止まる',
       run: () => app.togglePlay(), enabled: () => !!app.project.take && app.takeState !== 'recording' && !app.exporting,
     },
+    resetPlayView: {
+      label: 'カメラを戻す', helpLabel: 'カメラを戻す(ループ再生中に動かした視点を戻す)', keys: ['Shift+Home'], desc: 'ループ再生中に動かした視点を、再生を始めた視点(記録の初めの視点。キーフレームなら1番の視点)へ戻す。再生は続ける',
+      run: () => app.resetPlayView(), enabled: () => app.takeState === 'playing',
+    },
+    togglePlayPause: {
+      label: '一時停止', helpLabel: 'ループ再生の一時停止(続ける)', keys: ['Shift+L'], desc: 'ループ再生を一時停止する・続ける(揺れはそのまま落ち着いていく)',
+      run: () => app.setPlayPaused(!app.playPaused), enabled: () => app.takeState === 'playing',
+    },
+    stopPlay: { label: '停止', helpLabel: 'ループ再生を止める', desc: 'ループ再生を止める', run: () => app.stopTake(), enabled: () => app.takeState === 'playing' },
     clearTake: { label: '記録を消す', desc: '元に戻せる', run: () => app.clearTake(), enabled: () => !!app.project.take && app.takeState !== 'recording' },
     // レイヤー
     addLayer: { label: '新規レイヤー', run: () => app.addLayer(), enabled: () => !!app.doc },
@@ -176,6 +191,25 @@ export function keyString(e: KeyboardEvent): string {
 
 /** スライダーにフォーカスがあるときは、スライダーを動かすキーをショートカットに使わない */
 const SLIDER_KEYS = new Set(['Home', 'End', 'PageUp', 'PageDown', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
+
+/**
+ * Tab を「UIを隠す・戻す」に使わず、ふつうにフォーカスを移すときか。キーボードで移ってきた部品にいるとき(:focus-visible)。
+ * 文字を打つ欄は、この前に isTyping で除いている。マウス・指で押した部品(ボタン・スライダー・3Dビュー)や、どこにもフォーカスが無いときは
+ * 隠す・戻すほうに使う。スライダーや、押すとスクリプトでフォーカスを移す3Dビューは、直前にキーを押していると押しても
+ * :focus-visible になるので、押して付いたフォーカスかを自分で覚えておく。Shift+Tab はいつもフォーカスを戻すのに使える
+ */
+let viaPointer = false, pointerFocused: EventTarget | null = null;
+/** 押して付いたフォーカスかを覚え始める(bindActions から1回呼ぶ) */
+function watchPointerFocus(): void {
+  addEventListener('pointerdown', () => { viaPointer = true; }, true);
+  addEventListener('keydown', () => { viaPointer = false; }, true);
+  addEventListener('focusin', e => { pointerFocused = viaPointer ? e.target : null; }, true);
+}
+function keyboardFocus(): boolean {
+  const el = document.activeElement;
+  if (!el || el === document.body || el === pointerFocused) return false;
+  return el.matches(':focus-visible');
+}
 
 const ariaKeys = (keys: string[]) => keys.map(k => k.replace(/\bCtrl\b/g, 'Control')).join(' ');
 
@@ -306,10 +340,12 @@ export function bindActions(app: App, deps: ActionDeps): void {
   }
   /** 画面を覆うダイアログ(確認・書き出しなど)が開いているか。膨らませるのパネルのように画面を覆わないものは含めない */
   const modalOpen = () => !!document.querySelector('dialog[open]:modal');
+  watchPointerFocus();
   window.addEventListener('keydown', e => {
     // 膨らませるのパネルを開いている間も、表示の切り替えなどは効かせる(できない操作は enabled で止める)
     if (isTyping(e) || modalOpen()) return;
     if (e.target instanceof HTMLInputElement && e.target.type === 'range' && SLIDER_KEYS.has(e.key)) return;
+    if (e.key === 'Tab' && keyboardFocus()) return;
     const name = byKey.get(keyString(e));
     if (!name) return;
     e.preventDefault();

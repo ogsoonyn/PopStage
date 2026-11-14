@@ -39,6 +39,8 @@ export interface PickResult {
   inside: boolean;
 }
 
+const IDENTITY = new THREE.Matrix4();
+
 export class Stage {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -71,6 +73,20 @@ export class Stage {
   /** 画像全体がいちばん上がったときのずれ(元画像のピクセル)。3面図の図に、上がった画像も収まるようにする */
   private baseReach = 0;
   private tmp = new THREE.Vector3();
+  /**
+   * 記録の再生中に画像を動かす行列(setRig)。画像はこの中に置く。再生していないときは単位行列。
+   * 主ビューは自由に動かせる視点から見るので、画像のほうが動いて見える。3面図の図は画像と一緒に動かし、今までどおり画像に付いた図にする
+   */
+  private rig = new THREE.Group();
+  private rigOn = false;
+  private rigCamA = new THREE.PerspectiveCamera(40, 1, 1, 1e6);
+  private rigCamB = new THREE.PerspectiveCamera(40, 1, 1, 1e6);
+  private rigInv = new THREE.Matrix4();
+  private rigRest = new THREE.Matrix4();
+  /** キーフレームのゴースト(主ビューだけに出す、平らな半透明の画像)。setGhosts で置く */
+  private ghosts = new THREE.Group();
+  private ghostGeo: THREE.PlaneGeometry | null = null;
+  private ghostMats: THREE.MeshBasicMaterial[] = [];
   vertexCount = 0;
   /** ウェイトを部分転送・全面転送した回数(部分転送が効いているかの確認用) */
   partialUploads = 0;
@@ -98,6 +114,10 @@ export class Stage {
       uniforms: this.uniforms, vertexShader, fragmentShader,
       transparent: true, side: THREE.DoubleSide, depthWrite: true,
     });
+    this.rig.matrixAutoUpdate = false;
+    this.scene.add(this.rig);
+    this.ghosts.visible = false;
+    this.scene.add(this.ghosts);
   }
 
   get maxTextureSize(): number { return this.renderer.capabilities.maxTextureSize; }
@@ -116,16 +136,20 @@ export class Stage {
     this.mapTex = tex;
     this.uniforms.uMap.value = tex;
     this.imageSize = { w: imageW, h: imageH };
+    for (const m of this.ghostMats) { m.map = tex; m.needsUpdate = true; }
+    // 板は新しい画像の大きさで作り直す。次の setGhosts までは出さない
+    this.ghosts.visible = false;
+    this.ghostGeo?.dispose(); this.ghostGeo = null;
   }
 
   rebuildMesh(density: number): void {
     const { w, h } = this.imageSize;
     const nx = w >= h ? density : Math.max(2, Math.round((density * w) / h));
     const ny = h > w ? density : Math.max(2, Math.round((density * h) / w));
-    if (this.mesh) { this.scene.remove(this.mesh); this.mesh.geometry.dispose(); }
+    if (this.mesh) { this.rig.remove(this.mesh); this.mesh.geometry.dispose(); }
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h, nx, ny), this.material);
     this.mesh.frustumCulled = false;
-    this.scene.add(this.mesh);
+    this.rig.add(this.mesh);
     this.gridN.set(nx, ny);
     this.vertexCount = (nx + 1) * (ny + 1);
   }
@@ -149,7 +173,78 @@ export class Stage {
     const m = this.mesh; if (!m) return;
     m.position.copy(this.restPos);
     if (offset) m.position.add(this.tmp.copy(this.baseOffset).applyQuaternion(m.quaternion).multiplyScalar(m.scale.x));
-    m.updateMatrixWorld();
+    this.rig.updateMatrixWorld(true);
+  }
+
+  /**
+   * 視点が from から to へ動いて見えるのと同じだけ画像を動かす行列(ワールド座標)。setRig と同じ計算で、縦横比は主ビューのもの。
+   * キーフレームを「from の視点のカメラを止めたまま、画像のほうを動かした」形で描くのに使う
+   */
+  rigMatrix(from: CameraState, to: CameraState, out = new THREE.Matrix4()): THREE.Matrix4 {
+    this.applyCamera(from, this.camera.aspect, this.rigCamA);
+    this.applyCamera(to, this.camera.aspect, this.rigCamB);
+    return out.multiplyMatrices(this.rigCamA.matrixWorld, this.rigInv.copy(this.rigCamB.matrixWorld).invert());
+  }
+
+  /**
+   * 画像を rig の行列で動かしたときの、画像の四隅(左上・右上・右下・左下)と中心(ワールド座標)。
+   * 持ち上げる前の平面で、揺れやピストンでは動かない
+   */
+  placedOutline(rig: THREE.Matrix4): { corners: Vec3[]; center: Vec3 } {
+    const { w, h } = this.imageSize, m = this.rigRest.multiplyMatrices(rig, this.restMatrix);
+    const at = (x: number, y: number): Vec3 => { const v = this.projV.set(x, y, 0).applyMatrix4(m); return { x: v.x, y: v.y, z: v.z }; };
+    return { corners: [at(-w / 2, h / 2), at(w / 2, h / 2), at(w / 2, -h / 2), at(-w / 2, -h / 2)], center: at(0, 0) };
+  }
+
+  /**
+   * キーフレームのゴーストを置く。各行列で動かした画像を、平らな半透明で主ビューにだけ重ねる(3面図・書き出しには出さない)。
+   * strong の番号は濃くする。null か空で消す。動かさない(単位行列の)ものは画像そのものと重なるので出さない
+   */
+  setGhosts(rigs: readonly THREE.Matrix4[] | null, strong = -1): void {
+    const g = this.ghosts;
+    if (!rigs?.length || !this.mapTex) { g.visible = false; return; }
+    const { w, h } = this.imageSize;
+    this.ghostGeo ??= new THREE.PlaneGeometry(w, h);
+    while (g.children.length < rigs.length) {
+      const mat = new THREE.MeshBasicMaterial({ map: this.mapTex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+      this.ghostMats.push(mat);
+      const mesh = new THREE.Mesh(this.ghostGeo, mat);
+      mesh.matrixAutoUpdate = false; mesh.frustumCulled = false;
+      g.add(mesh);
+    }
+    g.children.forEach((o, i) => {
+      const mesh = o as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+      mesh.visible = i < rigs.length && !rigs[i].equals(IDENTITY);
+      if (!mesh.visible) return;
+      mesh.geometry = this.ghostGeo!;
+      mesh.matrix.multiplyMatrices(rigs[i], this.restMatrix);
+      mesh.material.opacity = i === strong ? 0.55 : 0.28;
+      // 後のキーほど上に重ねる
+      mesh.renderOrder = 1 + i;
+    });
+    g.visible = true;
+    g.updateMatrixWorld(true);
+  }
+
+  /**
+   * 記録の再生中に、視点の代わりに画像を動かす。視点が from から to へ動いて見えるのと同じだけ画像を動かす
+   * (画像から見た視点が to になる)。見る視点が from のままなら、画面は視点を to にしたときとまったく同じ。
+   * 縦横比は主ビューのもの。null で画像を元の置き場所へ戻す
+   */
+  setRig(from: CameraState | null, to?: CameraState | null): void {
+    const g = this.rig;
+    if (!from || !to) {
+      if (!this.rigOn) return;
+      this.rigOn = false;
+      g.matrix.identity();
+    } else {
+      this.applyCamera(from, this.camera.aspect, this.rigCamA);
+      this.applyCamera(to, this.camera.aspect, this.rigCamB);
+      g.matrix.multiplyMatrices(this.rigCamA.matrixWorld, this.rigInv.copy(this.rigCamB.matrixWorld).invert());
+      this.rigOn = true;
+    }
+    g.matrixWorldNeedsUpdate = true;
+    g.updateMatrixWorld(true);
   }
 
   /** ウェイトのテクスチャ配列を作り直して全レイヤーを転送する。 */
@@ -327,7 +422,7 @@ export class Stage {
    * 拡大率と中心のずれ(view)も3つで共有するので、正面と右・下の図で位置の対応が崩れない
    */
   private orthoCamera(kind: Exclude<SubViewKind, 'free'>, rect: ViewRect, scale: number, view: OrthoView): THREE.OrthographicCamera {
-    const c = this.orthoCam, m = this.restMatrix, { min, max } = this.depthRange();
+    const c = this.orthoCam, m = this.rigRest.multiplyMatrices(this.rig.matrix, this.restMatrix), { min, max } = this.depthRange();
     const { dir, up } = ORTHO_DIRS[kind], p = view.pan;
     const center = new THREE.Vector3(p.x, p.y, (min + max) / 2 + p.z).applyMatrix4(m);
     const d = new THREE.Vector3().copy(dir).transformDirection(m);
@@ -416,34 +511,7 @@ export class Stage {
   /** 主ビューの矩形(キャンバス左上からの CSS ピクセル) */
   mainView(): ViewRect { return { ...this.main() }; }
 
-  private projCam = new THREE.PerspectiveCamera(40, 1, 1, 1e6);
-  private restInv = new THREE.Matrix4();
   private projV = new THREE.Vector3();
-
-  /**
-   * 視点 cam で主ビューに映る範囲を、画像の面(持ち上げる前の平面。揺れやピストンでは動かない)の上で求める(キーフレームの枠と経路を描く用)。
-   * 縦横比は今の主ビューのもの(書き出しの縦横比ではない)。点はワールド座標で、今の視点には関わらないので、視点が動くたびに求め直さなくてよい。
-   * corners は左上・右上・右下・左下の順で、1つでも面に当たらなければ null。center は画面の中心が当たる点
-   */
-  viewFootprint(cam: CameraState, withCorners = true): { center: Vec3 | null; corners: Vec3[] | null } {
-    if (!this.mesh) return { center: null, corners: null };
-    const pc = this.projCam;
-    this.applyCamera(cam, this.camera.aspect, pc);
-    this.restInv.copy(this.restMatrix).invert();
-    const limit = this.cameraDistance(cam) * 50 / Math.max(1e-6, this.mesh.scale.x);
-    const at = (nx: number, ny: number): Vec3 | null => {
-      this.ndc.set(nx, ny);
-      this.ray.setFromCamera(this.ndc, pc);
-      const local = this.pickRay.copy(this.ray.ray).applyMatrix4(this.restInv);
-      if (!local.intersectPlane(this.plane, this.hit) || this.hit.distanceTo(local.origin) > limit) return null;
-      const w = this.projV.copy(this.hit).applyMatrix4(this.restMatrix);
-      return { x: w.x, y: w.y, z: w.z };
-    };
-    const center = at(0, 0);
-    if (!withCorners) return { center, corners: null };
-    const corners = [at(-1, 1), at(1, 1), at(1, -1), at(-1, -1)];
-    return { center, corners: corners.every(c => c) ? corners as Vec3[] : null };
-  }
 
   /** ワールドの点を今の主ビューの画面(主ビューの左上からの CSS ピクセル)へ。直前の render の視点を使う。カメラの後ろなら null */
   toMainScreen(p: Vec3): { x: number; y: number } | null {
@@ -484,7 +552,9 @@ export class Stage {
     }
     r.setScissorTest(true);
     this.drawIn(this.main(), this.camera);
-    // 横の図は形を見るためのものなので、ブラシの円・ウェイトの重ね表示・画像を薄く・グリッドは効かせない
+    // 横の図は形を見るためのものなので、ブラシの円・ウェイトの重ね表示・画像を薄く・グリッド・ゴーストは効かせない
+    const ghosts = this.ghosts.visible;
+    this.ghosts.visible = false;
     const u = this.uniforms, brush = u.uBrushOn.value, overlay = u.uOverlay.value, fade = u.uFade.value, grid = u.uGrid.value;
     u.uBrushOn.value = 0; u.uOverlay.value = 0; u.uFade.value = 0; u.uGrid.value = 0;
     const scale = this.orthoScale();
@@ -492,12 +562,19 @@ export class Stage {
       if (v.kind === 'free') {
         if (!free) continue;
         this.applyCamera(free, v.rect.w / Math.max(1, v.rect.h), this.freeCam);
+        // 自由角度の図も画像と一緒に動かす(再生中も画像に付いた図のまま)
+        if (this.rigOn) {
+          const fc = this.freeCam;
+          fc.matrix.multiplyMatrices(this.rig.matrix, fc.matrixWorld).decompose(fc.position, fc.quaternion, fc.scale);
+          fc.updateMatrixWorld(true);
+        }
         this.drawIn(v.rect, this.freeCam);
       } else {
         this.drawIn(v.rect, this.orthoCamera(v.kind, v.rect, scale, ortho));
       }
     }
     u.uBrushOn.value = brush; u.uOverlay.value = overlay; u.uFade.value = fade; u.uGrid.value = grid;
+    this.ghosts.visible = ghosts;
     r.setScissorTest(false);
   }
 
@@ -522,6 +599,11 @@ export class Stage {
     const u = this.uniforms, viewOnly = [u.uOverlay, u.uGrid, u.uBrushOn, u.uFade, u.uFlat];
     const saved = viewOnly.map(x => x.value);
     for (const x of viewOnly) x.value = 0;
+    const ghosts = this.ghosts.visible;
+    this.ghosts.visible = false;
+    // 書き出しは記録の視点そのもので撮るので、画像は元の置き場所に置く
+    const rigSaved = this.rigOn ? this.rig.matrix.clone() : null;
+    this.rig.matrix.identity(); this.rig.matrixWorldNeedsUpdate = true;
     this.place(true);
     const clear = new THREE.Color(), clearAlpha = this.renderer.getClearAlpha();
     this.renderer.getClearColor(clear);
@@ -537,6 +619,8 @@ export class Stage {
     this.renderer.setClearColor(clear, clearAlpha);
     this.camera.aspect = aspect;
     viewOnly.forEach((x, i) => { x.value = saved[i]; });
+    if (rigSaved) { this.rig.matrix.copy(rigSaved); this.rig.matrixWorldNeedsUpdate = true; }
+    this.ghosts.visible = ghosts;
     this.place(this.uniforms.uFlat.value === 0);
 
     // 下から上へ並んでいるので反転し、乗算済みの色をストレートアルファへ戻す
@@ -557,6 +641,7 @@ export class Stage {
   dispose(): void {
     this.mapTex?.dispose(); this.weightTex?.dispose(); this.exportTarget?.dispose();
     this.mesh?.geometry.dispose(); this.material.dispose(); this.renderer.dispose();
+    this.ghostGeo?.dispose(); for (const m of this.ghostMats) m.dispose();
   }
 }
 

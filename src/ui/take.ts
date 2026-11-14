@@ -1,6 +1,6 @@
 /**
  * 操作の記録・ループ再生とキーフレームの部品(右のパネルの「アニメーション」。スマホではシートの「アニメ」タブへ移す)と、
- * 3Dビューの左上の印。説明は文章で並べず、状態は短いラベル、詳しいことはツールチップに置く。
+ * 右パネルの見出しの横の状態。進み具合は3Dビューの下のバー(ui/playBar.ts)に出す。説明は文章で並べず、状態は短いラベル、詳しいことはツールチップに置く。
  * 記録・再生・消すのボタンはコマンド(data-cmd。押したときの処理・使えるか・ツールチップは ui/actions.ts)で、ここは表示だけを変える。
  */
 import type { App } from '../app';
@@ -11,10 +11,8 @@ import { KEY_SECONDS, MAX_KEYS, TAKE_MIN_SECONDS, takeSeconds, type KeyMode } fr
 const sec = (v: number) => `${v.toFixed(1)}秒`;
 
 export function bindTakeControls(app: App): void {
-  const { takeRec: rec, takePlay: play, takeInfo: info, takeBadge: badge } = ui;
+  const { takeRec: rec, takePlay: play, takeInfo: info } = ui;
   const label = (b: HTMLElement) => b.querySelector<HTMLElement>('[data-label]')!;
-
-  badge.addEventListener('click', () => { if (app.takeState === 'recording') app.stopRecording(); else app.stopTake(); });
 
   /* ---------- キーフレーム ---------- */
   const { keyList: list, keyAdd: add, keyMake: make } = ui;
@@ -113,7 +111,6 @@ export function bindTakeControls(app: App): void {
     ui.keyTotal.textContent = keys.length < 2 ? '2つ以上' : total < TAKE_MIN_SECONDS - 1e-9 ? `1周 ${TAKE_MIN_SECONDS}秒以上` : `1周 ${sec(total)}`;
   }
 
-  let shown = '';
   function refresh(): void {
     const s = app.takeState, has = !!app.project.take, len = app.takeLength;
     label(rec).textContent = s === 'recording' ? '停止' : '記録';
@@ -122,17 +119,9 @@ export function bindTakeControls(app: App): void {
     label(play).textContent = s === 'playing' ? '停止' : '再生';
     play.setAttribute('aria-pressed', String(s === 'playing'));
     info.textContent = s === 'recording' ? `● ${sec(len)} / 60秒`
-      : s === 'playing' ? `▶ ${app.takePosition.toFixed(1)} / ${sec(len)}`
+      : s === 'playing' ? (app.playPaused ? '一時停止中' : '再生中')
       : has ? `${app.project.take?.keys ? 'キーフレーム' : '記録'} ${sec(takeSeconds(app.project.take))}` : 'なし';
     info.classList.toggle('badge-error', s === 'recording');
-    const text = s === 'recording' ? `記録中 ${sec(len)} ■` : s === 'playing' ? `▶ ${app.takePosition.toFixed(1)}/${sec(len)} ■` : '';
-    if (text !== shown) {
-      shown = text;
-      badge.textContent = text;
-      badge.classList.toggle('hidden', !text);
-      badge.classList.toggle('recording', s === 'recording');
-      badge.title = s === 'recording' ? '記録を止める (R)' : '再生を止める (L)';
-    }
     refreshKeys();
   }
 
@@ -141,10 +130,10 @@ export function bindTakeControls(app: App): void {
   app.on('file', refresh);
   app.store.on('project', ({ keys }) => { if (keys.includes('take')) refresh(); });
   app.store.on('replace', refresh);
-  // 記録中・再生中は秒数を進める(表示が変わったときだけ書き換える)
+  // 記録中は秒数を進める
   let last = 0;
   app.on('frame', () => {
-    if (app.takeState === 'idle') return;
+    if (app.takeState !== 'recording') return;
     const now = performance.now();
     if (now - last < 100) return;
     last = now;

@@ -131,12 +131,37 @@ html.mobile #mTop:not([hidden]) { display: flex !important; }
 
 /* 3Dビューは、シートに隠れない所までに縮める(画像がシートの下に入らないように) */
 html.mobile #stageWrap { margin-bottom: var(--m-sheet); }
-/* 記録中・ループ再生中の印(3Dビューの左上) */
-#takeBadge { position: absolute; top: .625rem; left: max(.625rem, env(safe-area-inset-left, 0px)); z-index: 5; gap: .375rem; }
-#takeBadge.recording { background: var(--color-error); color: var(--color-error-content); border-color: transparent; }
-#takeBadge.recording::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; animation: take-blink 1s steps(2, start) infinite; }
-@keyframes take-blink { to { visibility: hidden; } }
-@media (prefers-reduced-motion: reduce) { #takeBadge.recording::before { animation: none; } }
+/* 再生・記録の進み具合(ui/playBar.ts)。主ビューの下に浮かべる。3面図が出ているときはその左まで */
+#playBar { position: absolute; left: max(.75rem, env(safe-area-inset-left, 0px)); right: .75rem; bottom: .75rem; z-index: 5; height: 2.25rem; padding: 0 .375rem; display: flex; align-items: center; gap: .25rem; border-radius: .75rem; background: color-mix(in oklab, var(--color-base-100) 82%, transparent); backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgb(0 0 0 / .12); font-size: .75rem; }
+#playBar[hidden] { display: none; }
+#multiView:not(.hidden) ~ #playBar { right: calc(clamp(170px, 24%, 340px) + .75rem); }
+#playBar .btn { flex-shrink: 0; }
+#playBar [hidden] { display: none !important; }
+#playTime { flex-shrink: 0; min-width: 6.5rem; text-align: center; }
+#playTrack { position: relative; flex: 1; min-width: 4rem; height: 100%; cursor: pointer; touch-action: none; outline: none; }
+#playTrack:focus-visible .play-rail { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+#playTrack[aria-disabled="true"] { cursor: default; }
+.play-rail { position: absolute; left: 0; right: 0; top: 50%; height: .25rem; margin-top: -.125rem; border-radius: 999px; background: color-mix(in oklab, var(--color-base-content) 18%, transparent); overflow: hidden; }
+.play-fill { height: 100%; background: var(--color-primary); }
+.play-head { position: absolute; top: 50%; width: .875rem; height: .875rem; margin: -.4375rem 0 0 -.4375rem; border-radius: 50%; background: var(--color-primary); border: 2px solid var(--color-base-100); box-shadow: 0 1px 3px rgb(0 0 0 / .3); pointer-events: none; z-index: 2; }
+.play-keys { position: absolute; inset: 0; }
+/* キーフレームの番号。形は枠表示と同じ(なめらかは丸、弾むはひし形) */
+.play-key { position: absolute; top: 50%; width: 1.125rem; height: 1.125rem; margin: -.5625rem 0 0 -.5625rem; display: grid; place-items: center; font-size: .625rem; font-weight: 700; line-height: 1; color: var(--color-base-100); z-index: 1; cursor: pointer; }
+.play-key::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 50%; background: color-mix(in oklab, var(--color-base-content) 70%, transparent); }
+.play-key[data-mode="bounce"]::before { border-radius: 2px; transform: scale(.8) rotate(45deg); }
+.play-loop { flex-shrink: 0; padding: 0 .25rem; font-size: .9375rem; opacity: .6; }
+.play-cam-icon { display: inline-flex; }
+.play-cam-icon svg { width: 1rem; height: 1rem; }
+/* 記録中は赤いバーで最長までの進みを出す */
+#playBar.recording { background: color-mix(in oklab, var(--color-error) 14%, var(--color-base-100)); }
+#playBar.recording #playTime { color: var(--color-error); font-weight: 600; }
+#playBar.recording .play-fill { background: var(--color-error); }
+html.mobile #playBar { height: 2.75rem; left: max(.625rem, env(safe-area-inset-left, 0px)); right: max(.625rem, env(safe-area-inset-right, 0px)); bottom: .625rem; }
+html.mobile #playBar .btn { min-height: 2.25rem; height: 2.25rem; }
+html.mobile #playTime { min-width: 5.5rem; }
+html.mobile .play-cam-label { display: none; }
+/* 塗って直すモードの帯(#mModeBar)が出ているときは、その上へ */
+html.mobile[data-mset="paint"] #playBar { bottom: calc(var(--m-modebar, 2.25rem) + 1rem); }
 #mFine { position: absolute; top: .625rem; right: max(.625rem, env(safe-area-inset-right, 0px)); z-index: 5; }
 #mFine[aria-pressed="true"] { background: var(--color-primary); color: var(--color-primary-content); border-color: transparent; }
 
@@ -212,7 +237,8 @@ output.is-mixed { font-size: .7rem; opacity: .8; }
 .set-group label { display: flex; align-items: center; gap: .5rem; cursor: pointer; }
 
 /* キーフレームの枠と経路(ui/keyPath.ts)。画像の明暗どちらの上でも読めるよう、線の下に暗い太い線(kp-halo)を敷く。主ビューの外へははみ出させない */
-#keyPath { z-index: 4; overflow: hidden; }
+/* 止まっている間の再生のバー(z-index 5)より上にして、バーの所に来た番号も押せるようにする(線や枠はポインタを通す) */
+#keyPath { z-index: 6; overflow: hidden; }
 #keyPath[hidden] { display: none; }
 #keyPath .key-path { width: 100%; height: 100%; --kp: #fbbf24; }
 .key-path .kp-frame { fill: none; stroke: var(--kp); stroke-width: 1.25; stroke-dasharray: 6 4; }
@@ -229,6 +255,22 @@ output.is-mixed { font-size: .7rem; opacity: .8; }
 .key-path .kp-sec text { fill: #fff; font-size: 10px; font-variant-numeric: tabular-nums; }
 .key-path .kp-sec.back text { fill: rgb(255 255 255 / .75); }
 .key-path .kp-mark { pointer-events: auto; cursor: pointer; }
-.key-path .kp-mark circle { fill: var(--kp); stroke: rgb(0 0 0 / .7); stroke-width: 1.5; }
+.key-path .kp-mark .kp-shape { fill: var(--kp); stroke: rgb(0 0 0 / .7); stroke-width: 1.5; }
 .key-path .kp-mark text { fill: #1f1300; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; }
-.key-path .kp-mark.strong circle { stroke: #fff; stroke-width: 2.5; }
+.key-path .kp-mark.strong .kp-shape { stroke: #fff; stroke-width: 2.5; }
+
+/* ---------- UIを隠す(ui/hideUi.ts が html に .ui-hidden を付ける)。スマホの部品の出し方より後に置き、強さも揃えて上書きする ---------- */
+html.ui-hidden #menubar, html.ui-hidden #toolOptions, html.ui-hidden #toolNav, html.ui-hidden body > main > aside, html.ui-hidden body > footer,
+html.mobile.ui-hidden #mTop, html.mobile.ui-hidden #mSheet, html.mobile.ui-hidden #mTools, html.mobile.ui-hidden #mModeBar, html.mobile.ui-hidden #mFine { display: none !important; }
+html.ui-hidden #stageWrap { margin-bottom: 0; }
+html.ui-hidden body > main { padding-bottom: 0; }
+/* 右上の「UIを戻す」に重ねない */
+html.mobile.ui-hidden #toasts { top: calc(env(safe-area-inset-top, 0px) + 3.25rem); }
+html.mobile.ui-hidden[data-mset] #playBar { bottom: calc(env(safe-area-inset-bottom, 0px) + .625rem); }
+/* PC ではマウスを動かしている間だけ、戻すボタンとシークバーを出す(キーボードで触っている間も出す) */
+#uiRestore { display: none; }
+html.ui-hidden #uiRestore { display: inline-flex; position: fixed; top: max(.75rem, env(safe-area-inset-top, 0px)); right: max(.75rem, env(safe-area-inset-right, 0px)); z-index: 45; gap: .375rem; background: color-mix(in oklab, var(--color-base-100) 82%, transparent); backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgb(0 0 0 / .12); }
+html.ui-hidden #uiRestore, html.ui-hidden #playBar { transition: opacity .2s; }
+html.ui-hidden:not(.mobile):not(.ui-peek) #uiRestore:not(:focus-visible),
+html.ui-hidden:not(.mobile):not(.ui-peek) #playBar:not(:has(:focus-visible)) { opacity: 0; pointer-events: none; }
+html.mobile.ui-hidden #uiRestore { opacity: .75; }

@@ -144,17 +144,19 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   };
 
   canvas.addEventListener('pointerdown', e => {
-    // ループ再生中に画面を触ったら、再生をやめて手の操作を優先する
-    app.stopTake();
+    // 指では、画像の外をなぞると回転する(右ドラッグの代わり)。ループ再生中は動いている画像で決める
+    const outside = e.pointerType === 'touch' && app.tool !== 'pan' && !app.stage.pick(e.clientX, e.clientY)?.inside;
+    const orbit = e.button === 2 || (e.button === 0 && (app.tool === 'view' || outside) && !space);
+    const pan = !orbit && (e.button === 1 || (e.button === 0 && (space || app.tool === 'pan')));
+    // ループ再生中に画面を触ったら、再生をやめて手の操作を優先する。視点の操作(回転・平行移動)は再生したまま動かせる
+    if (!orbit && !pan) app.stopTake();
     if (drag.mode || !app.doc) return;
     canvas.focus({ preventScroll: true });
     canvas.setPointerCapture(e.pointerId);
     drag.id = e.pointerId; drag.lx = drag.sx = e.clientX; drag.ly = drag.sy = e.clientY;
     alt = e.altKey;
-    // 指では、画像の外をなぞると回転する(右ドラッグの代わり)
-    const outside = e.pointerType === 'touch' && app.tool !== 'pan' && !app.stage.pick(e.clientX, e.clientY)?.inside;
-    if (e.button === 2 || (e.button === 0 && (app.tool === 'view' || outside) && !space)) drag.mode = 'orbit';
-    else if (e.button === 1 || (e.button === 0 && (space || app.tool === 'pan'))) { drag.mode = 'pan'; e.preventDefault(); }
+    if (orbit) drag.mode = 'orbit';
+    else if (pan) { drag.mode = 'pan'; e.preventDefault(); }
     // 振る向きは主ビューの画面の向きで決まるので、主ビューの中から始めたときだけ振る
     else if (e.button === 0 && app.tool === 'shake') { if (app.stage.inMainView(e.clientX, e.clientY)) drag.mode = 'shake'; }
     else if (e.button === 0 && app.tool === 'grab') startGrab(e);
@@ -240,8 +242,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     app.cameraChanged();
   };
   const wheelZoom = smoothZoom({ get: () => app.project.camera.zoom, set: setZoom, owner: () => app.project.camera, min: ZOOM_MIN, max: ZOOM_MAX });
+  // ズームはループ再生中でも止めない(見る視点だけを動かす)
   canvas.addEventListener('wheel', e => {
-    app.stopTake();
     e.preventDefault();
     const d = wheelDelta(e) * 0.0012 * wheelFineFactor(e);
     if (isPinchWheel(e)) setZoom(clampZoom(app.project.camera.zoom * Math.exp(d)));

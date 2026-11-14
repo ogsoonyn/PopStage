@@ -18,7 +18,8 @@ export function bindMultiView(app: App, canvas: HTMLCanvasElement): { layout: ()
   const cells = [...panel.querySelectorAll<HTMLElement>('.mv-cell')];
 
   function layout(): void {
-    const on = app.view.multi;
+    // UIを隠している間は、主ビューを画面いっぱいに出す
+    const on = app.view.multi && !app.uiHidden;
     panel.classList.toggle('hidden', !on);
     panel.classList.toggle('flex', on);
     if (!on) { app.stage.setLayout(null, []); return; }

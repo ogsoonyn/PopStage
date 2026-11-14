@@ -200,6 +200,9 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
 
   /* ---------- ツールと「塗って直す」 ---------- */
 
+  // 塗って直すモードの帯の高さ(折り返すと変わる)を、3Dビューの下の再生のバーを上へ逃がすのに使う(style.css の #playBar)
+  new ResizeObserver(() => root.style.setProperty('--m-modebar', `${ui.mModeBar.offsetHeight}px`)).observe(ui.mModeBar);
+
   let lastMain: Tool = 'grab';
   function setPaintMode(on: boolean): void {
     root.dataset.mset = on ? 'paint' : 'main';

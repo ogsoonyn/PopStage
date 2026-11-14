@@ -1,6 +1,9 @@
 /**
- * キーフレームの枠と経路の重ね表示。各キーフレームの視点で映る範囲を細い枠で、順番を番号で、
- * フレームからフレームへの動き(実際に再生する曲線と同じ keyCurve)を矢印と秒数で、3Dビューの上に SVG で重ねる。
+ * キーフレームの枠と経路の重ね表示。1番のキーフレームの視点を撮影カメラとして止めたまま、画像のほうを動かしたと
+ * みなし(ループ再生で画像を動かすのと同じ計算)、各キーフレームで画像が来る所を輪郭の枠で、順番を番号で、
+ * 画像の中心の動き(実際に再生する曲線と同じ keyCurve)を矢印と秒数で、3Dビューの上に SVG で重ねる。
+ * 枠と経路は空間に置いたものなので、視点を動かすと横や上からも見られる。1番の視点から見ると、撮影カメラで映る並びになる。
+ * 「ゴースト」をオンにすると、同じ所に画像そのものを平らな半透明で重ねる(主ビューだけ)。
  *
  * - キーフレームの部品が見えているとき(右パネル・スマホのシートで「アニメーション」を開いているとき)だけ出す。
  *   記録中・再生中・書き出し中は出さない。「経路」の切り替えはブラウザに覚える(ファイルには書かない)。
@@ -8,11 +11,22 @@
  * - 番号を押すとその視点へ移る。一覧の行にポインタを乗せる・フォーカスすると、そのフレームを強める。
  */
 import type { App } from '../app';
-import { keyCurve, type ViewKey } from '../physics/take';
+import { keyCurve, type KeyMode, type ViewKey } from '../physics/take';
 import { prefs } from '../storage/prefs';
 import { ui } from './ids';
 
 type Pt = { x: number; y: number };
+
+/**
+ * キーフレームの部品が見えているか(右パネル・スマホのシートで「アニメーション」を開いているか)。
+ * 重ね表示と、止まっている間の再生のバー(ui/playBar.ts)が使う
+ */
+export function keySectionShown(): boolean {
+  // スマホでシートを畳んでいるときは、キーフレームの部品は見えていない
+  if (document.documentElement.classList.contains('mobile') && ui.mSheet.dataset.state === 'closed') return false;
+  const section = ui.keySection;
+  return section.checkVisibility?.() ?? section.offsetParent !== null;
+}
 
 const NS = 'http://www.w3.org/2000/svg';
 /** 番号の円の半径(px) */
@@ -20,6 +34,7 @@ const R = 10;
 /** 1区間の経路を何点で描くか */
 const SAMPLES = 32;
 const PREF = 'keyPath';
+const GHOST_PREF = 'keyGhost';
 
 const near = (a: number, b: number, eps: number) => Math.abs(a - b) <= eps;
 const sameView = (a: ViewKey, b: ViewKey) => near(a.yaw, b.yaw, 1e-4) && near(a.pitch, b.pitch, 1e-4) && near(a.zoom, b.zoom, 1e-4)
@@ -74,23 +89,26 @@ function spread(points: readonly (Pt | null)[]): (Pt | null)[] {
   const done = new Set<number>();
   points.forEach((p, i) => {
     if (!p || done.has(i)) return;
-    const group = points.flatMap((q, j) => (q && !done.has(j) && Math.hypot(q.x - p.x, q.y - p.y) < R * 1.6 ? [j] : []));
+    const group = points.flatMap((q, j) => (q && !done.has(j) && Math.hypot(q.x - p.x, q.y - p.y) < R * 2.6 ? [j] : []));
     group.forEach(j => done.add(j));
     if (group.length < 2) return;
-    group.forEach((j, k) => { out[j] = { x: p.x + (k - (group.length - 1) / 2) * (R * 2 + 3), y: p.y }; });
+    group.forEach((j, k) => { out[j] = { x: p.x + (k - (group.length - 1) / 2) * (R * 2.6 + 3), y: p.y }; });
   });
   return out;
 }
 
 type World = { x: number; y: number; z: number };
 /** 今の視点には関わらない、ワールド座標の形(キーフレーム・画角・主ビューの縦横比・画像の置き方が同じなら使い回す) */
-interface Shape { frames: (World[] | null)[]; centers: (World | null)[]; paths: World[][]; seconds: number[] }
+interface Shape { frames: (World[] | null)[]; centers: (World | null)[]; paths: World[][]; seconds: number[]; modes: KeyMode[]; rigs: ReturnType<App['stage']['rigMatrix']>[] }
 
 export function bindKeyPath(app: App): void {
-  const host = ui.keyPath, toggle = ui.keyPathShow, section = ui.keySection;
+  const host = ui.keyPath, toggle = ui.keyPathShow;
   const svg = el('svg', { class: 'key-path', 'aria-hidden': 'true' }, host);
   toggle.checked = prefs.get<boolean>(PREF) ?? true;
   toggle.addEventListener('change', () => { prefs.set(PREF, toggle.checked); hideIfNeeded(); });
+  const ghost = ui.keyGhostShow;
+  ghost.checked = prefs.get<boolean>(GHOST_PREF) ?? false;
+  ghost.addEventListener('change', () => { prefs.set(GHOST_PREF, ghost.checked); hideIfNeeded(); });
 
   // 番号を押して(ずらさずに)離すとその視点へ。押したときに一覧のフォーカスが外れて描き直しても届くよう、押した番号を覚えておく
   let press: { key: number; x: number; y: number; id: number } | null = null;
@@ -123,44 +141,49 @@ export function bindKeyPath(app: App): void {
 
   let last = '', shapeSig = '', shape: Shape | null = null;
   function visible(): boolean {
-    if (!toggle.checked || !app.keyDraft.length || !app.doc || app.exporting || app.takeState !== 'idle') return false;
-    // スマホでシートを畳んでいるときは、キーフレームの部品は見えていない
-    if (document.documentElement.classList.contains('mobile') && ui.mSheet.dataset.state === 'closed') return false;
-    return section.checkVisibility?.() ?? section.offsetParent !== null;
+    if ((!toggle.checked && !ghost.checked) || !app.keyDraft.length || !app.doc || app.exporting || app.takeState !== 'idle') return false;
+    return keySectionShown();
   }
 
-  /** キーフレームの枠・画面の中心・経路を、ワールド座標で求める(実際の動きの曲線を区間ごとに細かく取る) */
+  /**
+   * 各キーフレームで画像が来る所(輪郭と中心)と、画像の中心の経路を、ワールド座標で求める。
+   * 1番の視点を止めたまま、そこから見て各キーフレームの視点で見たとおりに映るよう画像を動かす(実際の動きの曲線を区間ごとに細かく取る)
+   */
   function buildShape(fov: number): Shape {
     const stage = app.stage, curve = keyCurve(app.keyDraft, fov);
     const keys = curve?.keys ?? app.keyDraft.slice(0, 1);
-    const views = keys.map(k => stage.viewFootprint({ ...k.view, fov }));
+    const base = { ...keys[0].view, fov, target: { ...keys[0].view.target } };
+    const rigs = keys.map(k => stage.rigMatrix(base, { ...k.view, fov }));
+    const placed = rigs.map(m => stage.placedOutline(m));
     const paths: World[][] = [];
     if (curve) {
+      const m = stage.rigMatrix(base, base);
       keys.forEach((k, i) => {
         const pts: World[] = [];
         for (let s = 0; s <= SAMPLES; s++) {
-          const p = stage.viewFootprint(curve.at(Math.min(curve.starts[i] + (k.seconds * s) / SAMPLES, curve.total - 1e-6)), false).center;
-          if (p) pts.push(p);
+          stage.rigMatrix(base, curve.at(Math.min(curve.starts[i] + (k.seconds * s) / SAMPLES, curve.total - 1e-6)), m);
+          pts.push(stage.placedOutline(m).center);
         }
         paths.push(pts);
       });
     }
-    return { frames: views.map(v => v.corners), centers: views.map(v => v.center), paths, seconds: keys.map(k => k.seconds) };
+    return { frames: placed.map(p => p.corners), centers: placed.map(p => p.center), paths, seconds: keys.map(k => k.seconds), modes: keys.map(k => k.mode), rigs };
   }
 
   function update(): void {
     if (!visible()) {
-      if (last !== 'off') { host.hidden = true; svg.replaceChildren(); last = 'off'; }
+      if (last !== 'off') { host.hidden = true; svg.replaceChildren(); app.stage.setGhosts(null); last = 'off'; }
       return;
     }
     const m = app.stage.mainView(), c = app.project.camera, d = app.doc!;
     if (hover >= app.keyDraft.length) hover = -1;
     const ss = JSON.stringify([app.keyDraft, c.fov, m.w, m.h, d.position, d.rotation, d.scale]);
-    const sig = `${ss}|${m.x},${m.y}|${c.yaw},${c.pitch},${c.zoom},${c.target.x},${c.target.y},${c.target.z}|${hover}`;
+    const sig = `${ss}|${m.x},${m.y}|${c.yaw},${c.pitch},${c.zoom},${c.target.x},${c.target.y},${c.target.z}|${hover}|${ghost.checked}|${toggle.checked}`;
     if (sig === last) return;
     last = sig;
     if (ss !== shapeSig || !shape) { shapeSig = ss; shape = buildShape(c.fov); }
-    host.hidden = false;
+    // ゴーストだけのときは、重ね表示(SVG)は隠す
+    host.hidden = !toggle.checked;
     Object.assign(host.style, { left: `${m.x}px`, top: `${m.y}px`, width: `${m.w}px`, height: `${m.h}px` });
     svg.setAttribute('viewBox', `0 0 ${m.w} ${m.h}`);
     draw(shape);
@@ -173,7 +196,9 @@ export function bindKeyPath(app: App): void {
     const toScreen = (w: World | null) => (w ? stage.toMainScreen(w) : null);
     const current = app.keyDraft.findIndex(k => sameView(k.view, cam));
     const strong = hover >= 0 ? hover : current;
+    stage.setGhosts(ghost.checked ? sh.rigs : null, strong);
     svg.replaceChildren();
+    if (!toggle.checked) return;
     const frames = el('g', { class: 'kp-frames' }, svg), paths = el('g', { class: 'kp-paths' }, svg);
     const labels = el('g', { class: 'kp-labels' }, svg), marks = el('g', { class: 'kp-marks' }, svg);
     // 順番は濃さでも表す(最初が濃く、あとほど薄く)
@@ -226,10 +251,14 @@ export function bindKeyPath(app: App): void {
 
     centers.forEach((c, i) => {
       if (!c) return;
-      const g = el('g', { class: `kp-mark${i === strong ? ' strong' : ''}`, 'data-key': i, transform: `translate(${fmt(c.x)},${fmt(c.y)})` }, marks);
-      el('title', {}, g).textContent = `${i + 1}: この視点を見る`;
-      el('circle', { r: R }, g);
-      el('text', { 'text-anchor': 'middle', 'dominant-baseline': 'central' }, g).textContent = String(i + 1);
+      // 通り方は形で見分ける: なめらかは丸、弾む(そこで急に止まる)はひし形
+      const bounce = sh.modes[i] === 'bounce', D = R * 1.3;
+      const g = el('g', { class: `kp-mark${i === strong ? ' strong' : ''}`, 'data-key': i, 'data-mode': sh.modes[i], transform: `translate(${fmt(c.x)},${fmt(c.y)})` }, marks);
+      el('title', {}, g).textContent = `${i + 1}(${bounce ? '弾む' : 'なめらか'}): この視点を見る`;
+      if (bounce) el('polygon', { class: 'kp-shape', points: `0,${-D} ${D},0 0,${D} ${-D},0` }, g);
+      else el('circle', { class: 'kp-shape', r: R }, g);
+      // 2けたはひし形の縁にかからないよう小さくする
+      el('text', { 'text-anchor': 'middle', 'dominant-baseline': 'central', ...(i >= 9 ? { style: 'font-size: 9px' } : {}) }, g).textContent = String(i + 1);
     });
   }
 

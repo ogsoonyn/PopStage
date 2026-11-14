@@ -474,12 +474,12 @@ test('コマンドの表から、メニューのキー表記・ボタンのツ�
   await expect(page.locator('#takeClear')).toBeDisabled();
   await dragOnStage(page, [0.5, 0.5], [0.6, 0.55], 'right');
   await page.waitForTimeout(1100);
-  await page.locator('#takeBadge').click();
+  await page.locator('#playStop').click();
   await expect.poll(() => app(a => !!a.project.take)).toBe(true);
   await menu.locator('[role=button]').click();
   await menu.locator('button[data-cmd=togglePlay]').click();
   expect(await app(a => a.takeState)).toBe('playing');
-  await page.locator('#takeBadge').click();
+  await page.locator('#playStop').click();
   expect(await app(a => a.takeState)).toBe('idle');
   // メニューの外のボタンは、キーボードで押してもフォーカスを残す(続けて押せる)
   await openTab(page, 'anim');

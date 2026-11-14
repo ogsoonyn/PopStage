@@ -36,8 +36,8 @@ test('操作の記録: R で記録し、L でループ再生。画面を触る�
   await page.locator('#view').focus();
   await page.keyboard.press('r');
   expect(await app(page, a => [a.takeState, a.paused])).toEqual(['recording', false]);
-  await expect(page.locator('#takeBadge')).toBeVisible();
-  await expect(page.locator('#takeBadge')).toHaveClass(/recording/);
+  await expect(page.locator('#playBar')).toBeVisible();
+  await expect(page.locator('#playBar')).toHaveClass(/recording/);
   // 記録中に右ドラッグで視点を回す
   const box = (await page.locator('#view').boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5);
@@ -48,27 +48,45 @@ test('操作の記録: R で記録し、L でループ再生。画面を触る�
   await page.locator('#view').focus();
   await page.keyboard.press('r');
   expect(await app(page, a => a.takeState)).toBe('idle');
-  await expect(page.locator('#takeBadge')).toBeHidden();
+  await expect(page.locator('#playBar')).toBeHidden();
   const len = await app(page, a => a.takeLength);
   expect(len).toBeGreaterThan(0.5);
   await expect(page.locator('#takePlay')).toBeEnabled();
 
-  // ループ再生すると視点が記録どおりに動く
+  // ループ再生すると、視点は記録の初めへ動き、画像のほうが記録どおりに動く(画像から見た視点が記録の範囲を動く)
   const yaw0 = await app(page, a => a.project.take.samples[0].camera.yaw);
   await app(page, a => { a.project.camera.yaw = 2; });
   await page.keyboard.press('l');
   expect(await app(page, a => a.takeState)).toBe('playing');
-  await expect(page.locator('#takeBadge')).toContainText('▶');
-  await expect.poll(() => app(page, a => a.project.camera.yaw)).not.toBe(2);
-  // 記録の範囲の中の向きになる
+  expect(await app(page, a => a.project.camera.yaw)).toBe(yaw0);
+  await expect(page.locator('#playBar')).not.toHaveClass(/recording/);
+  await expect(page.locator('#playTime')).toContainText('秒');
   const yaws = await app(page, a => a.project.take.samples.map((s: any) => s.camera.yaw));
   const lo = Math.min(...yaws) - 1e-6, hi = Math.max(...yaws) + 1e-6;
-  const now = await app(page, a => a.project.camera.yaw);
+  await expect.poll(() => app(page, a => a.playView.yaw)).not.toBe(yaw0);
+  const now = await app(page, a => a.playView.yaw);
   expect(now).toBeGreaterThanOrEqual(lo); expect(now).toBeLessThanOrEqual(hi);
-  expect(yaw0).toBeGreaterThanOrEqual(lo);
-  // 画面を触ると止まる
+  // 再生中でも、右ドラッグで回す・ホイールでズームする・視点リセットでは止まらず、見る視点だけが動く
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.5, { steps: 10 });
+  await page.mouse.up({ button: 'right' });
+  expect(await app(page, a => a.takeState)).toBe('playing');
+  expect(await app(page, a => a.project.camera.yaw)).not.toBeCloseTo(yaw0, 3);
+  const zoom0 = await app(page, a => a.project.camera.zoom);
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => app(page, a => a.project.camera.zoom)).not.toBeCloseTo(zoom0, 3);
+  expect(await app(page, a => a.takeState)).toBe('playing');
+  await page.keyboard.press('Home');
+  expect(await app(page, a => [a.takeState, a.project.camera.yaw])).toEqual(['playing', 0]);
+  // ブラシで画面を触ると止まる。視点を動かしていたので、その視点のまま
   await page.mouse.click(box.x + 5, box.y + 5);
-  expect(await app(page, a => a.takeState)).toBe('idle');
+  expect(await app(page, a => [a.takeState, a.project.camera.yaw, a.playView])).toEqual(['idle', 0, null]);
+  // 視点を動かさずに止めたときは、止めた所の記録の視点になる(画面はそのまま)
+  await page.keyboard.press('l');
+  await expect.poll(() => app(page, a => a.playView.yaw)).not.toBe(yaw0);
+  const stopped = await app(page, a => { const v = a.playView.yaw; a.stopTake(); return [v, a.project.camera.yaw]; });
+  expect(stopped[1]).toBe(stopped[0]);
 
   // 記録はアンドゥで消え、やり直しで戻る
   await page.keyboard.press('Control+z');
@@ -78,19 +96,19 @@ test('操作の記録: R で記録し、L でループ再生。画面を触る�
   expect(await app(page, a => a.takeLength)).toBeCloseTo(len, 5);
 });
 
-test('操作の記録: ボタンで記録・再生・消す。再生中のボタンの印で止められる', async ({ page }) => {
+test('操作の記録: ボタンで記録・再生・消す。3Dビューの下のバーの停止で止められる', async ({ page }) => {
   await boot(page);
   await page.locator('#pTabs [data-ptab=anim]').click();
   await page.locator('#takeRec').click();
   expect(await app(page, a => a.takeState)).toBe('recording');
   await expect(page.locator('#takeRec')).toContainText('停止');
   await app(page, a => { a.world.grab = { x: 0.2, y: 0, z: 0 }; for (let i = 0; i < 60; i++) a.frame(1 / 60); a.world.grab = null; for (let i = 0; i < 30; i++) a.frame(1 / 60); });
-  await page.locator('#takeBadge').click();
+  await page.locator('#playStop').click();
   expect(await app(page, a => a.takeState)).toBe('idle');
   expect(await app(page, a => !!a.project.take)).toBe(true);
   await page.locator('#takePlay').click();
   expect(await app(page, a => a.takeState)).toBe('playing');
-  await page.locator('#takeBadge').click();
+  await page.locator('#playStop').click();
   expect(await app(page, a => a.takeState)).toBe('idle');
   await page.locator('#takeClear').click();
   expect(await app(page, a => a.project.take)).toBeNull();
@@ -177,10 +195,23 @@ test('キーフレーム: 視点を追加・登録・見る・削除し、つな
   await expect(page.locator('#keyTotal')).toHaveText('1周 5.5秒');
   await page.locator('#keyMake').click();
   expect(await app(page, a => [a.takeState, a.takeLength, a.project.take.keys.length])).toEqual(['playing', 5.5, 2]);
-  await expect(page.locator('#takeInfo')).toContainText('▶');
-  // 再生中は視点がフレームの間を動き、画像の位置が動くので揺れる
-  await expect.poll(() => app(page, a => a.project.camera.yaw), { timeout: 8000 }).toBeGreaterThan(0.2);
+  await expect(page.locator('#takeInfo')).toHaveText('再生中');
+  // 再生中は画像から見た視点がフレームの間を動き、画像が動くので揺れる
+  await expect.poll(() => app(page, a => a.playView.yaw), { timeout: 8000 }).toBeGreaterThan(0.2);
   await expect.poll(() => app(page, a => Math.abs(a.world.displacement(a.doc.layers[0].id).x)), { timeout: 8000 }).toBeGreaterThan(0.001);
+  // 再生中に動かした視点は「撮影カメラに戻す」で再生を始めた視点へ戻る(再生は続く)。「停止」で止まる
+  await expect(page.locator('#takeCam')).toBeEnabled();
+  const start = await app(page, a => a.project.take.samples[0].camera.yaw);
+  await app(page, a => { a.project.camera.yaw += 1; });
+  await page.locator('#takeCam').click();
+  expect(await app(page, a => [a.takeState, a.project.camera.yaw])).toEqual(['playing', start]);
+  await expect(page.locator('#keyStop')).toBeEnabled();
+  await page.locator('#keyStop').click();
+  expect(await app(page, a => a.takeState)).toBe('idle');
+  await expect(page.locator('#keyStop')).toBeDisabled();
+  await expect(page.locator('#takeCam')).toBeDisabled();
+  await app(page, a => a.playTake());
+  expect(await app(page, a => a.takeState)).toBe('playing');
   // アンドゥで記録が消えて止まる
   await app(page, a => a.history.undo());
   expect(await app(page, a => [a.takeState, a.project.take])).toEqual(['idle', null]);
