@@ -294,6 +294,8 @@ export function bindPanels(app: App): { refresh: () => void } {
     const doc = app.doc;
     // 作り直してもキーボードのフォーカスを失わないよう、一覧にフォーカスがあったかを覚えておく
     const hadFocus = list.contains(document.activeElement) && document.activeElement?.tagName === 'LI';
+    // Ctrl+↑↓ で塗りの先と別の行へ移っていることがあるので、フォーカスのあった行を覚えておく
+    const focusRow = hadFocus ? (document.activeElement as HTMLElement).dataset.id : undefined;
     // 重ね方・揺れのボタンにあったフォーカスは、作り直したあと同じ行のボタンへ戻す(続けて押せるように)
     const focusBtn = list.contains(document.activeElement) ? ['blend-btn', 'swing-btn'].find(c => document.activeElement?.classList.contains(c)) : undefined;
     const btnFocus = focusBtn ? document.activeElement?.closest('li')?.dataset.id : undefined;
@@ -372,7 +374,10 @@ export function bindPanels(app: App): { refresh: () => void } {
       list.prepend(li);
     });
     updateSelection();
-    if (hadFocus) list.querySelector<HTMLElement>('li.is-primary-focus')?.focus();
+    if (hadFocus) {
+      const li = (focusRow && list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(focusRow)}"]`)) || list.querySelector<HTMLElement>('li.is-primary-focus');
+      if (li) { for (const x of list.querySelectorAll<HTMLElement>('li')) x.tabIndex = x === li ? 0 : -1; li.focus(); }
+    }
     if (btnFocus) list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(btnFocus)}"] .${focusBtn}`)?.focus();
   }
 
@@ -449,10 +454,9 @@ export function bindPanels(app: App): { refresh: () => void } {
     // Ctrl+Space: フォーカスしている行を足す・外す(クリックの Ctrl と同じ)。3Dビューの平行移動(Space)に回さない
     if (ctrl && e.code === 'Space' && !e.shiftKey && !e.altKey) {
       e.preventDefault(); e.stopPropagation();
+      if (e.repeat) return; // 押し続けても足す・外すを繰り返さない
       const id = (e.target as HTMLElement).dataset.id;
       if (id && !app.previewing) toggleLayer(id);
-      // 外して塗りの先が別の行へ移っても、フォーカスと Tab の止まる先はこの行に残す(続けて Ctrl+↑↓ で移れるように)
-      for (const li of items) li.tabIndex = li === e.target ? 0 : -1;
       return;
     }
     // Ctrl+↑↓: 選択は変えずにフォーカスだけ移す(離れた行へ移ってから Ctrl+Space で足すため)
@@ -472,6 +476,7 @@ export function bindPanels(app: App): { refresh: () => void } {
       const o = order(), a = o.indexOf(anchor), b = o.indexOf(id);
       app.selectLayers(o.slice(Math.min(a, b), Math.max(a, b) + 1), id);
     } else if (id) { anchor = id; if (id !== app.activeLayerId || app.multiSelected) app.setActiveLayer(id); }
+    for (const li of items) li.tabIndex = li === next ? 0 : -1;
     next.focus();
   });
 
@@ -482,6 +487,8 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   function updateSelection(): void {
     const ids = app.selectedLayerIds;
+    // Ctrl+↑↓ で移った行にフォーカスがあるなら、Tab の止まる先もその行に残す
+    const focused = document.activeElement instanceof HTMLElement && document.activeElement.tagName === 'LI' && list.contains(document.activeElement) ? document.activeElement : null;
     list.querySelectorAll<HTMLElement>('li').forEach(li => {
       const on = ids.has(li.dataset.id!), primary = li.dataset.id === app.activeLayerId;
       li.setAttribute('aria-selected', String(on));
@@ -489,7 +496,7 @@ export function bindPanels(app: App): { refresh: () => void } {
       li.classList.toggle('is-primary', primary && ids.size > 1);
       li.classList.toggle('is-primary-focus', primary);
       // 一覧の中では最後に押した項目だけを Tab で止め、矢印キーで移る(roving tabindex)
-      li.tabIndex = primary ? 0 : -1;
+      li.tabIndex = (focused ? li === focused : primary) ? 0 : -1;
     });
     const n = ids.size;
     ui.layerSelBar.hidden = n < 2 && !selectMode;

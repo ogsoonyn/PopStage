@@ -119,7 +119,7 @@ export function rgbaToPng(rgba: Uint8ClampedArray, w: number, h: number): Promis
   return new Promise((res, rej) => c.toBlob(async b => (b ? res(new Uint8Array(await b.arrayBuffer())) : rej(new Error('PNG化に失敗しました'))), 'image/png'));
 }
 
-/** レイヤー一覧用の小さなウェイト画像。color(#rrggbb)は重ね表示と同じレイヤーの色で、塗りが濃いほどその色に近づく */
+/** レイヤー一覧用の小さなウェイト画像。color(#rrggbb)は重ね表示と同じレイヤーの色で、塗りが濃いほど濃く出る */
 export function drawWeightThumb(canvas: HTMLCanvasElement, data: Uint8Array, w: number, h: number, color = '#ff3380'): void {
   const n = parseInt(color.slice(1), 16), r = (n >> 16) & 255, gr = (n >> 8) & 255, b = n & 255;
   const s = Math.min(canvas.width / w, canvas.height / h);
@@ -130,9 +130,8 @@ export function drawWeightThumb(canvas: HTMLCanvasElement, data: Uint8Array, w: 
     const sy = Math.min(h - 1, Math.floor((y + 0.5) / s));
     for (let x = 0; x < tw; x++) {
       const v = data[sy * w + Math.min(w - 1, Math.floor((x + 0.5) / s))], i = (y * tw + x) * 4;
-      // 塗っていないところは薄い色、塗るほど白く明るくしながら濃くする(前のピンク一色のときと同じ明るさの付け方)
-      const t = v / 255;
-      img.data[i] = r + (255 - r) * t * 0.8; img.data[i + 1] = gr + (255 - gr) * t * 0.8; img.data[i + 2] = b + (255 - b) * t * 0.8; img.data[i + 3] = 40 + v * 0.84;
+      // 色はレイヤーの色のまま、塗るほど濃くする(白に寄せるとレイヤーどうしで見分けにくくなるため)
+      img.data[i] = r; img.data[i + 1] = gr; img.data[i + 2] = b; img.data[i + 3] = 40 + v * 0.84;
     }
   }
   g.clearRect(0, 0, canvas.width, canvas.height);
