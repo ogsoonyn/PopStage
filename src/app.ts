@@ -231,7 +231,7 @@ export class App extends Emitter<AppEvents> {
    * 画面に出している画像全体のずれ(ピストン、元画像のピクセル)。ライブ表示だけの値で、物理と書き出しには関わらない。
    * 塗り・膨らませる範囲のドラッグ中は止めて(held)、当たり判定がずれないようにする。設定の切り替えで飛ぶ分は fix でならす
    */
-  private base = { shown: { x: 0, y: 0, z: 0 }, live: { x: 0, y: 0, z: 0 }, fix: { x: 0, y: 0, z: 0 }, key: '', held: null as Vec3 | null };
+  private base = freshBase();
   private get centers(): Map<string, { x: number; y: number }> { return this.tab.centers; }
   /** まだ GPU へ送っていない、レイヤーごとの変わった矩形 */
   private pendingUploads = new Map<string, Rect>();
@@ -270,6 +270,8 @@ export class App extends Emitter<AppEvents> {
   }
 
   private loading = false;
+  /** タブを表に出している最中(Store の差し替えで、そのタブの控えを捨てない) */
+  private switching = false;
   private stroke: { stroke: Stroke; layerId: string; label: string } | null = null;
   private syncToken = 0;
   fps = 0;
@@ -311,7 +313,8 @@ export class App extends Emitter<AppEvents> {
       if (keys.includes('pop') || keys.includes('visible') || keys.includes('blend')) this.stage.setLayerParams(f.index, f.layer);
       if (keys.includes('visible') && this.view.overlayAll) this.syncView(); // 全レイヤー表示では、隠したレイヤーを重ねない
     });
-    s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); this.syncKeyDraft(true); });
+    // タブを表に出すとき(enterTab)は、そのタブが預けていた PNG・重心・キーフレームの下書きをそのまま使う(裏にいる間は中身が変わらないため)
+    s.on('replace', () => { if (this.switching) return; this.pngCache.clear(); this.centers.clear(); this.syncKeyDraft(true); });
     s.on('layers', () => {
       const doc = this.doc; if (!doc) return;
       // 並べ替え・追加・削除ではウェイトは変わらないので、PNG は作り直さない(無くなったレイヤーの分だけ捨てる)
@@ -589,8 +592,10 @@ export class App extends Emitter<AppEvents> {
       // 置き換える作業の自動保存はもう要らない
       this.dropTabAutosave(old);
     } else this.leaveTab();
-    const tab = createTab(project, { id: opts.tabId, order: opts.order, sample: opts.sample, fileName: opts.fileName ?? null, fileHandle: opts.handle ?? null, dirty: !!opts.dirty });
-    const i = this.tabs.indexOf(old);
+    // 並び: 置き換えなら同じ位置、新しいタブなら今のタブの右隣(自動保存から戻すときもこの並びにする)
+    const i = this.tabs.indexOf(old), right = this.tabs[i + 1];
+    const order = opts.order ?? (replace ? old.order : right ? (old.order + right.order) / 2 : Math.max(Date.now(), old.order + 1));
+    const tab = createTab(project, { id: opts.tabId, order, sample: opts.sample, fileName: opts.fileName ?? null, fileHandle: opts.handle ?? null, dirty: !!opts.dirty });
     if (replace) this.tabs.splice(i, 1, tab); else this.tabs.splice(i + 1, 0, tab);
     this.enterTab(tab, canvas);
     return true;
@@ -603,7 +608,10 @@ export class App extends Emitter<AppEvents> {
   private leaveTab(): void {
     const t = this.tab;
     this.stopRecording();
+    // 再生を止めると視点が止めた所の記録の視点に移るが、それは作業の変更として数えない(切り替えただけで「未保存」にしない)
+    const pending = this.cameraTimer !== 0;
     this.stopTake();
+    if (!pending) { clearTimeout(this.cameraTimer); this.cameraTimer = 0; }
     if (this.cameraTimer) { clearTimeout(this.cameraTimer); this.cameraTimer = 0; this.store.emit('change', undefined); }
     t.history = this.history.take();
     t.imageCanvas = null;
@@ -618,11 +626,11 @@ export class App extends Emitter<AppEvents> {
       if (this.takeState !== 'idle') { this.takeState = 'idle'; this.emit('take', 'idle'); }
       this.world.grab = null; this.world.grabGains.clear(); this.shake = { x: 0, y: 0, z: 0 };
       this.playFrom = this.playCam = null; this.world.viewRig = null; this.stage.setRig(null);
+      this.base = freshBase(); // 画像全体のずれは前の画像のピクセル単位なので持ち越さない
       this.tab = tab;
       tab.shownAt = Date.now();
-      const draft = tab.keyDraft;
-      this.store.replace(tab.project);
-      tab.keyDraft = draft; // 差し替えで記録のキーフレームに戻さず、このタブで作っていた下書きを残す
+      this.switching = true;
+      try { this.store.replace(tab.project); } finally { this.switching = false; }
       this.history.restore(tab.history);
       tab.history = emptyHistory();
       this.world.reset();
@@ -655,10 +663,12 @@ export class App extends Emitter<AppEvents> {
   private async switchTabNow(to: Tab): Promise<boolean> {
     const token = ++this.syncToken;
     let canvas: HTMLCanvasElement;
+    // 裏のタブは表示用の画像を捨ててあるので、デコードし直す(大きな画像では少しかかる)
+    if (!to.imageCanvas) setBusy(true);
     try { canvas = to.imageCanvas ?? await decodeForDisplay(to.project.documents[0].image, this.displaySize); } catch (e) {
       toast(`タブを開けませんでした: ${e instanceof Error ? e.message : e}`, 'error', 6000);
       return false;
-    }
+    } finally { setBusy(false); }
     if (token !== this.syncToken || !this.tabs.includes(to)) return false;
     this.leaveTab();
     this.enterTab(to, canvas);
@@ -679,6 +689,8 @@ export class App extends Emitter<AppEvents> {
   async closeTab(id: string = this.tab.id): Promise<boolean> {
     const t = this.tabs.find(x => x.id === id);
     if (!t) return false;
+    // 変更していないサンプルが1枚だけなら、閉じても同じものに戻るだけなので何もしない
+    if (this.tabs.length === 1 && this.replaceable) return false;
     if (this.busy) { toast('いまはタブを閉じられません。処理が終わってからもう一度お試しください。', 'warning'); return false; }
     if (t.dirty) {
       const r = await ask({ title: `「${this.tabName(t)}」は保存されていません`, body: '変更を破棄してタブを閉じますか?', yes: '破棄して閉じる' });
@@ -688,7 +700,6 @@ export class App extends Emitter<AppEvents> {
       const i = this.tabs.indexOf(t), next = this.tabs[i + 1] ?? this.tabs[i - 1];
       if (next) { if (!(await this.switchTab(next.id))) return false; } else {
         // 最後の1枚はサンプルに置き換える(置き換えるタブの自動保存は loadProject が消す)
-        t.dirty = false;
         if (!(await this.whileOpening(() => this.loadSample({ replace: true })))) return false;
         return true;
       }
@@ -739,6 +750,11 @@ export class App extends Emitter<AppEvents> {
   async whileOpening<T>(fn: () => Promise<T>): Promise<T> {
     this.opening = true;
     try { return await fn(); } finally { this.opening = false; }
+  }
+
+  /** そのファイルを開けるか(開いているタブを出すだけなら開ける)。開けないときは伝える */
+  async roomFor(handle?: FileSystemFileHandle): Promise<boolean> {
+    return !!(await this.tabOf(handle)) || !this.tabsFull();
   }
 
   /** 同じ場所のファイルを開いているタブ(ファイルの場所を受け取れる Chrome 系だけ分かる) */
@@ -873,7 +889,7 @@ export class App extends Emitter<AppEvents> {
     const blob = new Blob([bytes as BlobPart], { type: 'application/zip' });
     try {
       const h = await saveFile(blob, this.suggestedName(tab), PROJECT_TYPES, saveAs ? null : tab.fileHandle);
-      if (h === undefined) { if (cameraPending) this.cameraChanged(); return false; }
+      if (h === undefined) { if (cameraPending) this.cameraUnsaved(tab); return false; }
       tab.fileHandle = h;
       if (h) tab.fileName = h.name; else tab.fileName ??= this.suggestedName(tab);
       tab.lastSaved = new Date();
@@ -893,10 +909,20 @@ export class App extends Emitter<AppEvents> {
       void this.remember('project', tab.fileName ?? this.suggestedName(tab), bytes.byteLength, h, () => bytes, thumb);
       return true;
     } catch (e) {
-      if (cameraPending) this.cameraChanged(); // 保存できなかったので、視点の変更は未保存のまま
+      if (cameraPending) this.cameraUnsaved(tab); // 保存できなかったので、視点の変更は未保存のまま
       toast(`保存できませんでした: ${e instanceof Error ? e.message : e}`, 'error', 6000);
       return false;
     }
+  }
+
+  /** 保存できなかったときに、取り消していた視点の変更を「未保存」に戻す。待つ間にタブを切り替えていたら、そのタブに付ける */
+  private cameraUnsaved(tab: Tab): void {
+    if (tab === this.tab) { this.cameraChanged(); return; }
+    tab.revision++;
+    tab.lastAutosave = null;
+    tab.dirty = true;
+    this.scheduleAutosave(tab);
+    this.emit('tabs', undefined);
   }
 
   /** そのタブの自動保存を予約する。裏に回ったタブも中身は変わらないので、予約どおりに保存する */
@@ -912,6 +938,8 @@ export class App extends Emitter<AppEvents> {
       const fail = (e: unknown) => {
         console.warn('autosave failed', e);
         tab.autosaveError = e instanceof Error ? e.message : String(e);
+        // 裏のタブの失敗はステータスバーに出ないので、その場で知らせる
+        if (tab !== this.tab) toast(`「${this.tabName(tab)}」の自動保存に失敗しました(${tab.autosaveError})。そのタブを保存してください。`, 'error', 8000);
         this.emit('status', undefined);
       };
       // 直列化は重いので、操作の合間(アイドル時間)に行う
@@ -1753,6 +1781,10 @@ export class App extends Emitter<AppEvents> {
       this.emit('status', undefined);
     }
   }
+}
+
+function freshBase() {
+  return { shown: { x: 0, y: 0, z: 0 }, live: { x: 0, y: 0, z: 0 }, fix: { x: 0, y: 0, z: 0 }, key: '', held: null as Vec3 | null };
 }
 
 /** 視点(回転・ズーム・注視点)が同じか。画角は見ない */

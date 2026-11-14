@@ -113,6 +113,23 @@ test('自動保存はタブごとに残り、開き直すと全部のタブを�
   expect(await autosaveOp(page, 'list')).toEqual(['a.pukupop', 'b.pukupop']);
 });
 
+test('ループ再生中に切り替えても、そのタブは「未保存」にならない', async ({ page }) => {
+  await boot(page);
+  await openPng(page, 'a.png');
+  await page.evaluate(() => {
+    const a = (window as any).popstage;
+    a.addKey(); a.project.camera.yaw = 0.4; a.addKey();
+    a.makeKeyTake();
+    a.dirty = false; // 動きを作った分の「未保存」は、保存したことにする
+  });
+  expect(await page.evaluate(() => (window as any).popstage.takeState)).toBe('playing');
+  await openPng(page, 'b.png');
+  await expect.poll(async () => (await state(page)).name).toBe('b.png');
+  expect(await page.evaluate(() => (window as any).popstage.tabs[0].dirty)).toBe(false);
+  await page.waitForTimeout(500); // 間引いた視点の変更が後から数えられないこと
+  expect(await page.evaluate(() => (window as any).popstage.tabs[0].dirty)).toBe(false);
+});
+
 test('タブに分ける前の版の自動保存も戻せる', async ({ page }) => {
   await boot(page);
   const bytes = await page.evaluate(() => Array.from((window as any).popstage.serialize() as Uint8Array));

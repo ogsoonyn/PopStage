@@ -120,8 +120,8 @@ export function bindRecentDialog(app: App): { open: () => Promise<void> } {
       return;
     }
     if (!file) return;
-    // 新しいタブで開く。タブの数が上限なら、一覧を出したまま伝える
-    if (app.tabsFull()) return;
+    // 新しいタブで開く(開いているプロジェクトならそのタブを出す)。タブの数が上限なら、一覧を出したまま伝える
+    if (!(await app.roomFor(e.handle))) return;
     dlg.close();
     await app.openFile(file, e.handle);
   }

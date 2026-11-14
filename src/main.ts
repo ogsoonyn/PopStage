@@ -229,16 +229,18 @@ async function restoreAutosaves(): Promise<boolean> {
   const all = await autosave.loadAll();
   if (!all.length) return false;
   const newest = [...all].sort((a, b) => b.savedAt - a.savedAt).slice(0, MAX_TABS);
-  const saved = all.filter(e => newest.includes(e));
+  const saved = all.filter(e => newest.includes(e)), rest = all.length - saved.length;
   const when = (t: number) => new Date(t).toLocaleString();
   const r = await ask({
     title: '前回の作業を復元しますか?',
-    body: saved.length === 1
+    body: (saved.length === 1
       ? `「${saved[0].name}」(${when(saved[0].savedAt)} に自動保存)が残っています。`
-      : `${saved.length} 件の作業が残っています: ${saved.map(e => `「${e.name}」`).join('')}(最後の自動保存 ${when(Math.max(...saved.map(e => e.savedAt)))})。それぞれタブで開きます。`,
+      : `${saved.length} 件の作業が残っています: ${saved.map(e => `「${e.name}」`).join('')}(最後の自動保存 ${when(Math.max(...saved.map(e => e.savedAt)))})。それぞれタブで開きます。`)
+      + (rest ? `ほかに古い ${rest} 件があります(タブは ${MAX_TABS} 枚までなので、次回の起動時に聞きます)。` : ''),
     yes: '復元する', no: '破棄して新しく始める',
   });
-  if (!r.ok) { await autosave.clearAll(); return false; }
+  // 消すのは聞いた分だけ(残りや、別のブラウザのタブで開いている作業の分は消さない)
+  if (!r.ok) { for (const e of saved) await autosave.clear(e.key); return false; }
   // 復元している間にドロップされたファイルを開かない(開くと、復元の失敗と取り違えてサンプルで上書きしてしまう)
   const failed: string[] = [];
   let restored = 0;

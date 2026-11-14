@@ -28,13 +28,17 @@ export function bindDocTabs(app: App, deps: { open: () => unknown }): void {
   };
 
   function renderStrip(): void {
+    // 作り直すとフォーカスが外れるので、タブの列にあったら表のタブへ戻す
+    const focused = strip.contains(document.activeElement);
     strip.replaceChildren(...app.tabs.map(t => {
       const active = t === app.activeTab;
       const box = Object.assign(document.createElement('div'), { className: 'doc-tab' });
+      box.setAttribute('role', 'presentation');
       box.dataset.active = String(active);
       const tab = Object.assign(document.createElement('button'), { type: 'button', className: 'doc-tab-name', title: app.tabName(t) });
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-selected', String(active));
+      tab.tabIndex = active ? 0 : -1;
       tab.append(label(t, 'doc-tab-label'));
       tab.addEventListener('click', () => void app.switchTab(t.id));
       // 中ボタンで閉じる(ブラウザのタブと同じ)
@@ -44,7 +48,13 @@ export function bindDocTabs(app: App, deps: { open: () => unknown }): void {
       return box;
     }));
     strip.querySelector('[data-active="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (focused) strip.querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
   }
+  // タブの上では左右の矢印で隣のタブへ
+  strip.addEventListener('keydown', e => {
+    if (!(e.target instanceof HTMLElement) || e.target.getAttribute('role') !== 'tab') return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); app.stepTab(e.key === 'ArrowRight' ? 1 : -1); }
+  });
 
   function renderList(): void {
     list.replaceChildren(...app.tabs.map(t => {

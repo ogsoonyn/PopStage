@@ -45,8 +45,12 @@ export interface ActionDeps {
   togglePerf: () => unknown;
 }
 
+/** マウス・指を押しているか(ドラッグの途中にキーでタブを替えると、続きの操作が別のタブに効いてしまう) */
+let pointerHeld = false;
+
 function defineActions(app: App, d: ActionDeps) {
   const layer = () => !!app.activeLayer;
+  const tabsFree = () => !app.busy && !pointerHeld;
   const brushStep = (dir: 1 | -1) => () => {
     const el = ui.brushSize, step = Math.max(2, Math.round(app.brush.size * 0.15));
     el.value = String(app.brush.size + dir * step);
@@ -62,9 +66,9 @@ function defineActions(app: App, d: ActionDeps) {
     export: { label: '書き出し', keys: ['Ctrl+E'], run: d.openExport, enabled: () => !!app.doc },
     sample: { label: 'サンプルを開く', run: () => app.whileOpening(() => app.loadSample()), enabled: () => !app.busy },
     // タブ。Ctrl+W・Ctrl+Tab はブラウザが使うので Alt と組み合わせる
-    closeTab: { label: 'タブを閉じる', keys: ['Alt+W'], run: () => app.closeTab(), enabled: () => !app.busy },
-    nextTab: { label: '次のタブ', keys: ['Alt+PageDown'], run: () => app.stepTab(1), enabled: () => app.tabs.length > 1 && !app.busy, helpRow: '次のタブ・前のタブ' },
-    prevTab: { label: '前のタブ', keys: ['Alt+PageUp'], run: () => app.stepTab(-1), enabled: () => app.tabs.length > 1 && !app.busy, helpRow: '次のタブ・前のタブ' },
+    closeTab: { label: 'タブを閉じる', keys: ['Alt+W'], run: () => app.closeTab(), enabled: tabsFree },
+    nextTab: { label: '次のタブ', keys: ['Alt+PageDown'], run: () => app.stepTab(1), enabled: () => app.tabs.length > 1 && tabsFree(), helpRow: '次のタブ・前のタブ' },
+    prevTab: { label: '前のタブ', keys: ['Alt+PageUp'], run: () => app.stepTab(-1), enabled: () => app.tabs.length > 1 && tabsFree(), helpRow: '次のタブ・前のタブ' },
     // 編集
     undo: { label: '元に戻す', keys: ['Ctrl+Z'], run: () => app.history.undo(), enabled: () => app.history.canUndo && !app.stroking },
     redo: { label: 'やり直す', keys: ['Ctrl+Shift+Z', 'Ctrl+Y'], run: () => app.history.redo(), enabled: () => app.history.canRedo && !app.stroking },
@@ -253,7 +257,8 @@ const SLIDER_KEYS = new Set(['Home', 'End', 'PageUp', 'PageDown', 'ArrowLeft', '
 let viaPointer = false, pointerFocused: EventTarget | null = null;
 /** 押して付いたフォーカスかを覚え始める(bindActions から1回呼ぶ) */
 function watchPointerFocus(): void {
-  addEventListener('pointerdown', () => { viaPointer = true; }, true);
+  addEventListener('pointerdown', () => { viaPointer = true; pointerHeld = true; }, true);
+  for (const t of ['pointerup', 'pointercancel'] as const) addEventListener(t, () => { pointerHeld = false; }, true);
   addEventListener('keydown', () => { viaPointer = false; }, true);
   addEventListener('focusin', e => { pointerFocused = viaPointer ? e.target : null; }, true);
 }

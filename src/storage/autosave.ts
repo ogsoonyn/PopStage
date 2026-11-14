@@ -68,5 +68,4 @@ export const autosave = {
     return out.sort((a, b) => a.order - b.order || a.savedAt - b.savedAt);
   },
   async clear(key: string): Promise<void> { try { await tx('readwrite', s => s.delete(key)); } catch { /* 無視 */ } },
-  async clearAll(): Promise<void> { try { await tx('readwrite', s => s.clear()); } catch { /* 無視 */ } },
 };
