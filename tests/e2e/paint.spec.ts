@@ -1,6 +1,6 @@
 /** E2E: 塗る・ぼかす・膨らませる・重ね方 */
 import { test, expect } from '@playwright/test';
-import { watchGlErrors, boot, weightSum, dragOnStage } from './helpers';
+import { watchGlErrors, boot, weightSum, dragOnStage, nextFrames } from './helpers';
 
 watchGlErrors();
 
@@ -333,9 +333,11 @@ test('重ね方「最大」: 重なった膨らみは高い方だけになり、
       a.store.patchLayer(l.id, { pop: 300 });
     });
   });
-  await page.waitForTimeout(100);
+  // ウェイトは描画のフレームで GPU へ送るので、時間で待たずにフレームを進める(CPU が混むと 100ms では足りない)
+  await nextFrames(page);
   const add = await depth();
   await page.evaluate(() => { const a = (window as any).popstage; a.store.patchLayer(a.doc.layers[1].id, { blend: 'max' }); });
+  await nextFrames(page);
   const max = await depth();
   // 加算は重なりで 600px ぶん、最大は 300px ぶん出る(画像の厚みぶんを除いても、はっきり差が出る)
   expect(add).toBeGreaterThan(max * 1.4);
