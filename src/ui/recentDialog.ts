@@ -120,10 +120,10 @@ export function bindRecentDialog(app: App): { open: () => Promise<void> } {
       return;
     }
     if (!file) return;
-    // 未保存の確認は一覧を出したまま行い、やめたら一覧に戻れるようにする
-    if (!(await app.confirmDiscard())) return;
+    // 新しいタブで開く(開いているプロジェクトならそのタブを出す)。タブの数が上限なら、一覧を出したまま伝える
+    if (!(await app.roomFor(e.handle))) return;
     dlg.close();
-    await app.openFile(file, e.handle, { confirmed: true });
+    await app.openFile(file, e.handle);
   }
 
   clear.addEventListener('click', async () => {

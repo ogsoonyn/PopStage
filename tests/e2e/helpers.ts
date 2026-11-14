@@ -80,16 +80,21 @@ export async function settled(page: Page, read: () => Promise<number>): Promise<
 }
 
 /** 自動保存(IndexedDB)を直接読み書きする */
-export const autosaveOp = (page: Page, op: 'get' | 'put' | 'clear', entry?: { name: string; bytes: number[] }) => page.evaluate(async ([op, entry]) => {
+/**
+ * 自動保存(IndexedDB)を直接読み書きする。アプリはタブの id をキーにして1件ずつ持つ。
+ * key を省くと、タブに分ける前の版のキー 'current'。list は残っている全部の名前
+ */
+export const autosaveOp = (page: Page, op: 'get' | 'put' | 'clear' | 'list', entry?: { name: string; bytes: number[] }, key = 'current') => page.evaluate(async ([op, entry, key]) => {
   const db: IDBDatabase = await new Promise((res, rej) => {
     const r = indexedDB.open('popstage', 1);
     r.onupgradeneeded = () => r.result.createObjectStore('autosave');
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   });
-  const store = db.transaction('autosave', op === 'get' ? 'readonly' : 'readwrite').objectStore('autosave');
-  const req = op === 'get' ? store.get('current') : op === 'clear' ? store.delete('current')
-    : store.put({ savedAt: Date.now(), name: entry!.name, bytes: new Uint8Array(entry!.bytes) }, 'current');
+  const store = db.transaction('autosave', op === 'get' || op === 'list' ? 'readonly' : 'readwrite').objectStore('autosave');
+  const req: IDBRequest = op === 'list' ? store.getAll() : op === 'get' ? store.get(key) : op === 'clear' ? store.delete(key)
+    : store.put({ savedAt: Date.now(), name: entry!.name, bytes: new Uint8Array(entry!.bytes) }, key);
   const v = await new Promise(res => { req.onsuccess = () => res(req.result); });
   db.close();
+  if (op === 'list') return (v as any[]).map(e => e.name as string).sort();
   return op === 'get' ? (v ? (v as any).name as string : null) : null;
-}, [op, entry] as const);
+}, [op, entry, key] as const);
