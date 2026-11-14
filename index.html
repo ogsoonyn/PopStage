@@ -51,9 +51,9 @@
       <li><button data-cmd="save">保存</button></li>
       <li><button data-cmd="saveAs">名前を付けて保存…</button></li>
       <li><button data-cmd="closeTab">タブを閉じる</button></li>
-      <li class="menu-title pt-2">書き出し</li>
+      <li class="menu-title">書き出し</li>
       <li><button data-cmd="export">動画 / GIF / 連番PNG…</button></li>
-      <li class="menu-title pt-2">その他</li>
+      <li class="menu-title">その他</li>
       <li><button data-cmd="sample">サンプルを開く</button></li>
     </ul>
   </div>
@@ -62,7 +62,7 @@
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
       <li><button data-cmd="undo"><span>元に戻す <span data-label="undo" class="opacity-60"></span></span></button></li>
       <li><button data-cmd="redo"><span>やり直す <span data-label="redo" class="opacity-60"></span></span></button></li>
-      <li class="menu-title pt-2">選んでいるレイヤーのウェイト</li>
+      <li class="menu-title">選んでいるレイヤーのウェイト</li>
       <li><button data-cmd="smoothAll">全体をぼかす(ガウス)…</button></li>
       <li><button data-cmd="normalize">正規化(最大を100%に)</button></li>
       <li><button data-cmd="invert">反転</button></li>
@@ -73,7 +73,7 @@
   <div class="dropdown">
     <div tabindex="0" role="button" class="btn btn-ghost btn-sm">表示</div>
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
-      <li><button data-cmd="toggleOverlay">ウェイトの重ね表示(切り替え) <span data-check="overlay" class="ml-auto"></span></button></li>
+      <li><button data-cmd="toggleOverlay">ウェイトの表示切替</button></li>
       <li><button data-cmd="toggleFade">画像を薄く <span data-check="fade" class="ml-auto"></span></button></li>
       <li><button data-cmd="toggleFlat">ポップを一時OFF <span data-check="flat" class="ml-auto"></span></button></li>
       <li><button data-cmd="togglePause">揺れを一時停止 <span data-check="pause" class="ml-auto"></span></button></li>
@@ -90,15 +90,17 @@
   <div class="dropdown">
     <div tabindex="0" role="button" class="btn btn-ghost btn-sm">アニメーション</div>
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
+      <li><button data-cmd="toggleAutoSwing">自動で揺らす <span data-check="autoSwing" class="ml-auto"></span></button></li>
+      <li class="menu-title">操作の記録</li>
       <li><button data-cmd="toggleRecording">操作の記録(開始・停止)</button></li>
       <li><button data-cmd="togglePlay">ループ再生(開始・停止)</button></li>
       <li><button data-cmd="clearTake">記録を消す</button></li>
-      <li class="menu-title pt-2">キーフレーム</li>
+      <li class="menu-title">キーフレーム</li>
       <li><button data-cmd="toggleKeyPlay">再生・停止</button></li>
       <li><button data-cmd="toggleKeyPath">経路を重ねる <span data-check="keyPath" class="ml-auto"></span></button></li>
       <li><button data-cmd="toggleKeyGhost">ゴーストを重ねる <span data-check="keyGhost" class="ml-auto"></span></button></li>
-      <li class="menu-title pt-2">その他</li>
-      <li><button data-cmd="addFavorite">お気に入りに残す</button></li>
+      <li class="menu-title">その他</li>
+      <li><button data-cmd="addFavorite">お気に入りに追加</button></li>
     </ul>
   </div>
   <div class="dropdown">
@@ -121,9 +123,6 @@
   </div>
   <!-- 開いている作業のタブ(ui/docTabs.ts) -->
   <div id="docTabs" class="doc-tabs ml-auto" role="tablist" aria-label="開いている作業"></div>
-  <!-- 左のツールバーは高さが足りないので、UIを隠すボタンは歯車の隣に置く -->
-  <button class="btn btn-ghost btn-sm btn-square" data-cmd="toggleUi" aria-label="UIを隠す"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg></button>
-  <button class="btn btn-ghost btn-sm btn-square" data-cmd="settings" aria-label="設定"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 </header>
 
 <!-- ツールオプション: 選択中のツールの設定(ブラシ・膨らみ)と操作のヒント。ツールに合わせて中身を入れ替える(ui/toolOptions.ts) -->
@@ -141,10 +140,6 @@
   <label class="flex items-center gap-2" data-brush-opt>硬さ
     <input id="brushHardness" type="range" min="0" max="100" value="0" class="range range-xs w-24">
     <output id="brushHardnessO" class="w-10 tabular-nums"></output></label>
-  <label class="flex items-center gap-2" data-brush-opt>筆圧
-    <select id="brushPressure" class="select select-xs w-24">
-      <option value="strength">強さ</option><option value="size">サイズ</option><option value="none">無効</option>
-    </select></label>
   <!-- 膨らみの既定値(次に範囲を描くときの設定。描いたあとは下のパネルと同じ値を変える)。ui/toolOptions.ts -->
   <label class="flex items-center gap-2" data-inflate-opt hidden>形
     <select id="tInflKind" class="select select-xs w-20"><option value="ellipse">楕円</option><option value="rect">矩形</option></select></label>
@@ -159,9 +154,10 @@
   <label class="flex items-center gap-2" data-inflate-opt hidden>重ね方
     <select id="tInflBlend" class="select select-xs w-32"><option value="max">重ねる(高い方)</option><option value="add">足す</option><option value="replace">置き換える</option></select></label>
   <span id="toolHint" class="tool-hint hidden md:flex flex-1 min-w-0"></span>
-  <div class="ml-auto flex items-center gap-4 shrink-0" role="group" aria-label="揺れの切り替え">
-    <label class="flex items-center gap-2" title="選択中のレイヤーを揺らすか(右のパネルの「揺れ」と同じ)">レイヤーの揺れ <input id="tSwing" type="checkbox" class="toggle toggle-sm"></label>
-    <label class="flex items-center gap-2" title="周期的に自動で揺らすか(右のパネルの「自動で揺らす」と同じ)">自動で揺らす <input id="tAuto" type="checkbox" class="toggle toggle-sm"></label>
+  <!-- UIを隠す・設定。メニューバーはタブに幅を使うので、この欄の右端に置く -->
+  <div class="ml-auto flex items-center gap-1 shrink-0">
+    <button class="btn btn-ghost btn-xs btn-square" data-cmd="toggleUi" aria-label="UIを隠す"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg></button>
+    <button class="btn btn-ghost btn-xs btn-square" data-cmd="settings" aria-label="設定"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
   </div>
 </div>
 
@@ -206,7 +202,7 @@
     <div id="busy" class="absolute inset-0 bg-base-100/60 hidden items-center justify-center"><span class="loading loading-spinner loading-lg"></span></div>
   </section>
 
-  <!-- 右パネルの開閉のつまみ(ui/sidePanel.ts)。PC の幅だけ。開いている間はパネルの左端に、閉じると3Dビューの右端に出す -->
+  <!-- 右パネルの開閉のボタン(ui/sidePanel.ts)。PC の幅だけ。3Dビューの右上に出す -->
   <div id="panelToggleWrap" class="relative w-0 shrink-0"><button id="panelToggle" type="button" aria-controls="sidePanel"></button></div>
   <!-- レイヤー一覧とプロパティ -->
   <aside id="sidePanel" class="w-80 shrink-0 bg-base-100 border-l border-base-300 flex flex-col min-h-0">
@@ -276,10 +272,10 @@
           <div class="flex items-center gap-2">
             <h2 id="favTitle" class="font-bold">お気に入り</h2><button type="button" class="help-btn" data-help="favHelp"></button>
             <span id="favCount" class="text-xs opacity-60 tabular-nums"></span>
-            <button id="favAdd" class="btn btn-xs ml-auto" data-cmd="addFavorite"><span aria-hidden="true">☆</span> 残す</button>
+            <button id="favAdd" class="btn btn-xs ml-auto" data-cmd="addFavorite"><span aria-hidden="true">☆</span> 追加</button>
           </div>
-          <p id="favHelp" class="help-text" hidden>今の揺れと動きの組み合わせ(全レイヤーのポップ量・重ね方・揺れ、自動揺らし、操作の記録とキーフレーム、視点)を残します。画像とウェイトは残さないので、ファイルはほとんど大きくなりません。「適用」でその組み合わせに戻ります(視点のほかは元に戻せます)。● は今の状態と同じものです。名前はその場で書き換えられます。プロジェクトに保存されます。</p>
-          <p id="favEmpty" class="text-xs opacity-60">いい動きを見つけたら「☆ 残す」。</p>
+          <p id="favHelp" class="help-text" hidden>今の揺れと動きの組み合わせ(全レイヤーのポップ量・重ね方・揺れ、自動揺らし、操作の記録とキーフレーム、視点)をお気に入りに追加します。画像とウェイトは残さないので、ファイルはほとんど大きくなりません。「適用」でその組み合わせに戻ります(視点のほかは元に戻せます)。● は今の状態と同じものです。名前はその場で書き換えられます。プロジェクトに保存されます。</p>
+          <p id="favEmpty" class="text-xs opacity-60">いい動きを見つけたら「☆ 追加」。</p>
           <ol id="favList" class="flex flex-col gap-1" aria-label="お気に入り一覧"></ol>
         </section>
 
@@ -582,6 +578,12 @@
   <div class="modal-box max-w-xl">
     <h3 class="font-bold text-lg mb-3">設定</h3>
     <section class="flex flex-col gap-2">
+      <h4 class="font-bold">ブラシ</h4>
+      <div class="toggle-row"><span class="prop-name"><label for="brushPressure">筆圧</label><button type="button" class="help-btn" data-help="brushPressureHelp"></button></span>
+        <select id="brushPressure" class="select select-xs w-36"><option value="strength">強さに効かせる</option><option value="size">サイズに効かせる</option><option value="none">使わない</option></select></div>
+      <p id="brushPressureHelp" class="help-text" hidden>ペンの筆圧を、ブラシ・消しゴム・ぼかしの強さかサイズに効かせます。マウスや指で塗るときは変わりません。</p>
+    </section>
+    <section class="flex flex-col gap-2 mt-4">
       <h4 class="font-bold">ウェイトの重ね表示</h4>
       <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlay">塗るときは自動でON</label><button type="button" class="help-btn" data-help="vAutoOverlayHelp"></button></span><input id="vAutoOverlay" type="checkbox" class="toggle toggle-sm"></div>
       <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。手でONにした表示は、この設定では変わりません。</p>
@@ -647,8 +649,8 @@
 <dialog id="aboutDialog" class="modal">
   <div class="modal-box">
     <h3 class="font-bold text-lg">PukuPop</h3>
-    <p class="py-3 leading-relaxed">画像を3D空間に置き、塗った所を平面から持ち上げ、揺らせるWebアプリです。「塗って膨らませて揺らす」タイプの懐かしいツールの手触りを、ブラウザで作り直しています。<br>画像とプロジェクトはこのブラウザ内だけで処理され、サーバーへは送られません。</p>
-    <p class="text-xs opacity-70" id="aboutVersion"></p>
+    <p class="py-3 leading-relaxed">画像を3D空間に置き、塗った所を平面から持ち上げて、ぷるぷる揺らせる Web アプリです。<br>ブラウザだけで動き、画像やプロジェクトをサーバーへ送りません。</p>
+    <p class="text-xs opacity-70" id="aboutUpdated"></p>
     <div class="modal-action"><form method="dialog"><button class="btn btn-sm">閉じる</button></form></div>
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>

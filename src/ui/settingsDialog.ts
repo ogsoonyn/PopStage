@@ -1,6 +1,6 @@
 /**
- * ツール全体の設定(メニューバーの右端の歯車から開く)。このブラウザに覚え(prefs)、ファイルには書かない。
- * 今あるのは、左のツールバーに出すボタンの選択と、塗るときにウェイトの重ね表示を自動でON・OFFにするか(#vAutoOverlay・#vAutoOverlayOff。結び付けは表示の切り替えと一緒に ui/panels.ts)、
+ * ツール全体の設定(ツールオプションの欄の右端の歯車から開く)。このブラウザに覚え(prefs)、ファイルには書かない。
+ * 今あるのは、ブラシの筆圧(#brushPressure。結び付けは ui/panels.ts、覚えるのは main.ts の persistControls)、左のツールバーに出すボタンの選択と、塗るときにウェイトの重ね表示を自動でON・OFFにするか(#vAutoOverlay・#vAutoOverlayOff。結び付けは表示の切り替えと一緒に ui/panels.ts)、
  * ポップ量のスライダーの最大値(#setPopMax。結び付けは ui/panels.ts、目盛りは ui/popSlider.ts)、
  * UIを隠すときにブラウザも全画面にするか(#setHideFull。結び付けは ui/hideUi.ts)。
  * 新しい設定は、この画面に足す。
