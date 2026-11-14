@@ -57,6 +57,63 @@ test('一覧で Ctrl / Shift を押しながら選び、Ctrl+A で全部、Esc �
   expect(await app(page, a => a.history.size)).toBe(0);
 });
 
+test('キーボードだけで離れたレイヤーを足す・外す(Ctrl+↑↓ で移り Ctrl+Space)。Esc は一覧の外でも1枚に戻す', async ({ page }) => {
+  await threeLayers(page);
+  // 一覧は上から C / B / A
+  await row(page, 'C').click();
+  await row(page, 'C').focus();
+  // Ctrl+↓ を2回で A へ。選択は変わらない
+  await page.keyboard.press('Control+ArrowDown');
+  await page.keyboard.press('Control+ArrowDown');
+  await expect(row(page, 'A')).toBeFocused();
+  expect(await selected(page)).toEqual(['C']);
+  // Ctrl+Space で A を足す(塗りの先は A)
+  await page.keyboard.press('Control+Space');
+  expect(await selected(page)).toEqual(['A', 'C']);
+  expect(await app(page, a => a.activeLayer.name)).toBe('A');
+  // もう一度で外す。フォーカスは A に残る
+  await page.keyboard.press('Control+Space');
+  expect(await selected(page)).toEqual(['C']);
+  await expect(row(page, 'A')).toBeFocused();
+  // 最後の1枚は外さない
+  await page.keyboard.press('Control+ArrowUp');
+  await page.keyboard.press('Control+ArrowUp');
+  await page.keyboard.press('Control+Space');
+  expect(await selected(page)).toEqual(['C']);
+  // 3Dビューにフォーカスがあっても、Ctrl+A のあと Esc で1枚に戻る
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+a');
+  expect(await selected(page)).toEqual(['A', 'B', 'C']);
+  // UI を隠しているときの Esc は、UI を戻すほうを先にする(選択はそのまま)
+  await app(page, a => a.setUiHidden(true));
+  await page.keyboard.press('Escape');
+  expect(await app(page, a => a.uiHidden)).toBe(false);
+  expect(await selected(page)).toEqual(['A', 'B', 'C']);
+  // もう一度の Esc で1枚に戻る
+  await page.keyboard.press('Escape');
+  expect(await selected(page)).toEqual(['C']);
+  expect(await app(page, a => a.history.size)).toBe(0);
+});
+
+test('一覧のサムネイルは、重ね表示と同じレイヤーの色で描く', async ({ page }) => {
+  await threeLayers(page);
+  await app(page, a => { for (const l of a.doc.layers) l.weights.data.fill(255); a.store.emit('layers', { docId: a.doc.id }); });
+  // 塗った真ん中の点の色の向き(赤み・緑み・青み)が、印の色と合う
+  const colors = await page.evaluate(() => [...document.querySelectorAll<HTMLLIElement>('#layerList li')].map(li => {
+    const c = li.querySelector('canvas')!, g = c.getContext('2d')!;
+    const [r, gr, b] = g.getImageData(c.width >> 1, c.height >> 1, 1, 1).data;
+    const sw = getComputedStyle(li.querySelector<HTMLElement>('.layer-color')!).backgroundColor.match(/\d+/g)!.map(Number);
+    return { thumb: [r, gr, b], swatch: sw };
+  }));
+  expect(colors).toHaveLength(3);
+  for (const { thumb, swatch } of colors) {
+    const argmax = (v: number[]) => v.indexOf(Math.min(...v)); // いちばん弱い成分が同じ
+    expect(argmax(thumb)).toBe(argmax(swatch.slice(0, 3)));
+  }
+  // 3枚の色は互いに違う
+  expect(new Set(colors.map(c => c.thumb.join(','))).size).toBe(3);
+});
+
 test('値が揃っていない項目は「混在」と出し、変えると選んだ全部に書く。まとめて1手で戻る', async ({ page }) => {
   await threeLayers(page);
   await openTab(page, 'layer');

@@ -78,5 +78,5 @@ export const HELP_OPS: readonly { label: string; parts: readonly HintPart[] }[] 
   { label: '3面図の視点を戻す', parts: [{ mouse: 'dbl' }] },
   { label: '一覧でレイヤーを足す・外す', parts: [{ mods: 'Ctrl', mouse: 'click' }] },
   { label: '一覧でレイヤーを範囲で選ぶ', parts: [{ mods: 'Shift', mouse: 'click' }, { mods: 'Shift+↑↓' }] },
-  { label: '一覧で選択を1枚に戻す', parts: [{ mods: 'Esc' }] },
+  { label: '一覧で離れたレイヤーを足す・外す', parts: [{ mods: 'Ctrl+↑↓' }, { mods: 'Ctrl+Space' }] },
 ];
