@@ -22,6 +22,7 @@ import { runExport, type ExportSettings } from './export/exporter';
 import { Emitter } from './util/emitter';
 import { decodeForDisplay, canvasAlpha, browserDecodeGray, fileToAsset, rgbaToPng, isProjectFile, isImageFile } from './ui/imageio';
 import { createSampleDocument } from './ui/sample';
+import { POP_MAX_SETTING, clampPopMax } from './ui/popSlider';
 import { ask, saveFile, setBusy, toast } from './ui/dom';
 
 export type Tool = 'brush' | 'erase' | 'smooth' | 'inflate' | 'grab' | 'shake' | 'view' | 'pan';
@@ -132,6 +133,8 @@ export class App extends Emitter<AppEvents> {
   autoOverlay = true;
   /** 自動で入れた重ね表示を、塗るツールから離れたり「全体をぼかす」を閉じたりしたときに切る。ブラウザに覚える設定 */
   autoOverlayOff = true;
+  /** ポップ量・膨らませる高さのスライダーの右端(px)。ブラウザに覚える設定(ui/popSlider.ts) */
+  popMax: number = POP_MAX_SETTING.def;
   /** 今の重ね表示を自動で入れたか。重ね表示を手で変えたら false にし、手で入れた表示は自動で切らない。開き直しても続くよう prefs に覚える */
   overlayAutoShown = false;
   /**
@@ -343,6 +346,7 @@ export class App extends Emitter<AppEvents> {
     this.emit('view', undefined);
   }
   setAutoOverlayOff(on: boolean): void { this.autoOverlayOff = on; this.emit('view', undefined); }
+  setPopMax(v: number): void { this.popMax = clampPopMax(v); this.emit('view', undefined); if (this.inflateState) this.emit('inflate', 'change'); }
 
   /** 塗りが見えるよう重ね表示を入れる。入れたことを覚え、塗り終えたら autoHideOverlay で切る */
   private autoShowOverlay(): void {

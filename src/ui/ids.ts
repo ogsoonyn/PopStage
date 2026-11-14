@@ -28,7 +28,7 @@ export const UI_IDS = {
   takeInfo: 'span', takeRec: 'button', takePlay: 'button', takeClear: 'button',
   keySection: 'section', keyCount: 'span', keyPathShow: 'input', keyGhostShow: 'input', playBarShow: 'input', keyAdd: 'button', keyList: 'ol', keyMake: 'button', keyTotal: 'span',
   favCount: 'span', favAdd: 'button', favEmpty: 'p', favList: 'ol',
-  vOverlayOff: 'input', vOverlaySel: 'input', vOverlayAll: 'input', vAutoOverlay: 'input', vAutoOverlayOff: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
+  vOverlayOff: 'input', vOverlaySel: 'input', vOverlayAll: 'input', vAutoOverlay: 'input', vAutoOverlayOff: 'input', setPopMax: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
   pFov: 'input', pFovO: 'output', pBgTransparent: 'input', pBgColor: 'input',
   // スマホのシート・下のバー
   mSheet: 'section', mGrip: 'div', mPresets: 'div', mPanes: 'div', mToolDesc: 'p', mBrushOpts: 'div', mInflOpts: 'div', mPaintMode: 'button',

@@ -229,7 +229,7 @@
         <section class="flex flex-col gap-2" data-m-slot="layerProps">
           <h2 class="font-bold">レイヤー: <span id="activeLayerName"></span></h2>
           <div class="prop"><span class="prop-name"><label for="pPop">ポップ量</label><button type="button" class="help-btn" data-help="pPopHelp"></button></span><input id="pPop" type="range" min="0" max="1000" class="range range-xs"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-full text-right"></div>
-          <p id="pPopHelp" class="help-text" hidden>塗った所を持ち上げる高さ(0〜1500px)。スライダーは前半で 0〜500px を細かく、後半で 500〜1500px を粗く動かします。複数のレイヤーを選んでいるときは、一番高いレイヤーの値を出し、ほかのレイヤーは同じ比率で伸び縮みします(0px のレイヤーは 0px のまま)。</p>
+          <p id="pPopHelp" class="help-text" hidden>塗った所を持ち上げる高さ(0〜1500px)。スライダーの右端は設定(右上の歯車)の「スライダーの最大値」で、既定は 500px です。最大値を 1000px より大きくすると、スライダーは前半で 0〜500px を細かく、後半を粗く動かします。複数のレイヤーを選んでいるときは、一番高いレイヤーの値を出し、ほかのレイヤーは同じ比率で伸び縮みします(0px のレイヤーは 0px のまま)。</p>
           <div class="prop"><span class="prop-name"><label for="pBlend">重ね方</label><button type="button" class="help-btn" data-help="pBlendDesc"></button></span>
             <select id="pBlend" class="select select-xs col-span-2 w-full"></select></div>
           <p id="pBlendDesc" class="help-text" hidden>画像を開くと、選んだ重ね方の説明がここに出ます。</p>
@@ -561,6 +561,11 @@
       <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。手でONにした表示は、この設定では変わりません。</p>
       <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlayOff">塗り終えたら自動でOFF</label><button type="button" class="help-btn" data-help="vAutoOverlayOffHelp"></button></span><input id="vAutoOverlayOff" type="checkbox" class="toggle toggle-sm"></div>
       <p id="vAutoOverlayOffHelp" class="help-text" hidden>自動でONにした重ね表示を、ほかのツールに移ったときや「全体をぼかす」を閉じたときにOFFにします。手でONにした表示や、塗っている間に手で切り替えた表示はそのまま残します。</p>
+    </section>
+    <section class="flex flex-col gap-2 mt-4">
+      <h4 class="font-bold">ポップ量</h4>
+      <div class="toggle-row"><span class="prop-name"><label for="setPopMax">スライダーの最大値</label><button type="button" class="help-btn" data-help="setPopMaxHelp"></button></span><span class="flex items-center gap-1"><input id="setPopMax" type="number" min="100" max="1500" step="50" class="input input-xs w-20 text-right"> px</span></div>
+      <p id="setPopMaxHelp" class="help-text" hidden>ポップ量と「膨らませる」の高さのスライダーの右端です(100〜1500px)。小さくするとスライダーで細かく動かせます。数値の欄には、この値を超えて 1500px まで打てます。</p>
     </section>
     <section id="setHideFullRow" class="flex flex-col gap-2 mt-4">
       <h4 class="font-bold">UIを隠す</h4>

@@ -6,7 +6,7 @@ import type { Command } from '../commands/history';
 import { prefs } from '../storage/prefs';
 import { ui } from './ids';
 import { drawWeightThumb } from './imageio';
-import { popToSlider, sliderToPop } from './popSlider';
+import { popSliderRange, popToSlider, sliderToPop } from './popSlider';
 import { createHelp } from './help';
 
 type Target = 'layer' | 'doc' | 'project';
@@ -115,7 +115,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   };
   bindLive(ui.pPop, {
     begin: () => ({ snap: snapshot('layer', ['pop']), start: popStart() }),
-    input: (v, b) => { applyPops(b.start, sliderToPop(+v)); ui.pPopN.value = String(sliderToPop(+v)); },
+    input: (v, b) => { const p = sliderToPop(+v, app.popMax); applyPops(b.start, p); ui.pPopN.value = String(p); },
     commit: b => record('layer', 'ポップ量', b.snap, snapshot('layer', ['pop'])),
   });
   ui.pPopN.addEventListener('change', () => {
@@ -246,6 +246,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   ui.vPause.addEventListener('change', () => app.setPaused(ui.vPause.checked));
   ui.vAutoOverlay.addEventListener('change', () => app.setAutoOverlay(ui.vAutoOverlay.checked));
   ui.vAutoOverlayOff.addEventListener('change', () => app.setAutoOverlayOff(ui.vAutoOverlayOff.checked));
+  ui.setPopMax.addEventListener('change', () => { app.setPopMax(+ui.setPopMax.value); ui.setPopMax.value = String(app.popMax); });
 
   /* ---------- ツールオプション ---------- */
 
@@ -500,7 +501,8 @@ export function bindPanels(app: App): { refresh: () => void } {
     if (l && ls.length) {
       // ポップ量は一番高いレイヤーの値を出す(動かすとほかは同じ比率で変わる)
       const top = Math.max(...ls.map(x => x.pop));
-      setRange(ui.pPop, null, popToSlider(top));
+      ui.pPop.max = String(popSliderRange(app.popMax));
+      setRange(ui.pPop, null, popToSlider(top, app.popMax));
       if (document.activeElement !== ui.pPopN) ui.pPopN.value = String(top);
       const blendMixed = !same(ls, x => x.blend);
       setSelect(blendSel, blendMixed, l.blend);
@@ -538,6 +540,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     ui.vAutoOverlay.checked = app.autoOverlay;
     ui.vAutoOverlayOff.checked = app.autoOverlayOff;
     ui.vAutoOverlayOff.disabled = !app.autoOverlay;
+    if (document.activeElement !== ui.setPopMax) ui.setPopMax.value = String(app.popMax);
   }
 
   let queued = false;

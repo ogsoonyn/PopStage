@@ -885,3 +885,37 @@ test('膨らませる・ぼかすのパネルは右下に出て、見出しを�
   expect(vp.height - (ib.y + ib.height)).toBeLessThan(80);
   await page.locator('#inflCancel').click();
 });
+
+test('ポップ量のスライダーの最大値は設定で変えられ(既定 500px)、数値の欄にはそれを超えて打てる。設定は覚える', async ({ page }) => {
+  await boot(page);
+  await openTab(page, 'layer');
+  const pop = () => page.evaluate(() => (window as any).popstage.activeLayer.pop as number);
+  // 既定では右端が 500px
+  await expect(page.locator('#pPop')).toHaveAttribute('max', '500');
+  await page.locator('#pPop').fill('500');
+  expect(await pop()).toBe(500);
+  // 数値の欄は 1500px まで打て、スライダーは右端に止まる
+  await page.locator('#pPopN').fill('900');
+  await page.locator('#pPopN').press('Enter');
+  expect(await pop()).toBe(900);
+  await expect(page.locator('#pPop')).toHaveValue('500');
+  // 設定で 1200px にすると、右端が 1200px になる(1000px を超えるので後半は粗い目盛り)
+  await page.locator('#menubar [data-cmd=settings]').click();
+  await expect(page.locator('#setPopMax')).toHaveValue('500');
+  await page.locator('#setPopMax').fill('1200');
+  await page.locator('#setPopMax').press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#pPop')).toHaveAttribute('max', '1000');
+  await page.locator('#pPop').fill('1000');
+  expect(await pop()).toBe(1200);
+  // 範囲の外の値は 100〜1500px に収める。設定は開き直しても覚えている
+  await page.locator('#menubar [data-cmd=settings]').click();
+  await page.locator('#setPopMax').fill('5000');
+  await page.locator('#setPopMax').press('Enter');
+  await expect(page.locator('#setPopMax')).toHaveValue('1500');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  await page.goto('/?e2e');
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  expect(await page.evaluate(() => (window as any).popstage.popMax)).toBe(1500);
+});

@@ -5,7 +5,7 @@
 import { INFLATE_ANGLE, type App, type InflateArea, type InflateSettings } from '../app';
 import type { InflateProfile, InflateBlend } from '../paint/inflate';
 import { LIMITS } from '../model/project';
-import { popToSlider, sliderToPop } from './popSlider';
+import { popSliderRange, popToSlider, sliderToPop } from './popSlider';
 import { ui } from './ids';
 
 export function bindInflateDialog(app: App): void {
@@ -32,8 +32,8 @@ export function bindInflateDialog(app: App): void {
   w.addEventListener('input', () => { if (+w.value >= 2) update({ area: { w: clampInt(w.value, 2, 8192) } }); });
   h.addEventListener('input', () => { if (+h.value >= 2) update({ area: { h: clampInt(h.value, 2, 8192) } }); });
   // 高さのスライダーはポップ量と同じ目盛り(前半ほど細かい)
-  height.addEventListener('input', () => { const v = sliderToPop(+height.value); heightN.value = String(v); update({ settings: { height: v } }); });
-  heightN.addEventListener('input', () => { const v = clampInt(heightN.value, 0, LIMITS.pop.max); height.value = String(popToSlider(v)); update({ settings: { height: v } }); });
+  height.addEventListener('input', () => { const v = sliderToPop(+height.value, app.popMax); heightN.value = String(v); update({ settings: { height: v } }); });
+  heightN.addEventListener('input', () => { const v = clampInt(heightN.value, 0, LIMITS.pop.max); height.value = String(popToSlider(v, app.popMax)); update({ settings: { height: v } }); });
   soft.addEventListener('input', () => { softN.value = soft.value; update({ settings: { softness: clampInt(soft.value, 0, 100) / 100 } }); });
   softN.addEventListener('input', () => { soft.value = String(clampInt(softN.value, 0, 100)); update({ settings: { softness: clampInt(softN.value, 0, 100) / 100 } }); });
   const angleOf = (v: string) => clampInt(v, INFLATE_ANGLE.min, INFLATE_ANGLE.max);
@@ -63,7 +63,8 @@ export function bindInflateDialog(app: App): void {
     ui.inflTarget.textContent = `レイヤー「${layer?.name ?? ''}」に重ねます。範囲は枠で直せ、枠の外をドラッグすると描き直します。`;
     set(kind, st.shape);
     set(w, String(Math.round(s.area.w))); set(h, String(Math.round(s.area.h)));
-    set(height, String(popToSlider(st.height))); set(heightN, String(st.height));
+    height.max = String(popSliderRange(app.popMax));
+    set(height, String(popToSlider(st.height, app.popMax))); set(heightN, String(st.height));
     set(soft, String(Math.round(st.softness * 100))); set(softN, String(Math.round(st.softness * 100)));
     set(angle, String(st.angle)); set(angleN, String(st.angle));
     set(blend, st.blend);

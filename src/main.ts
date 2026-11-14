@@ -18,6 +18,7 @@ import { bindTakeControls } from './ui/take';
 import { bindPlayBar } from './ui/playBar';
 import { bindHideUi } from './ui/hideUi';
 import { bindKeyPath } from './ui/keyPath';
+import { clampPopMax } from './ui/popSlider';
 import { bindInflateFrame } from './ui/inflateFrame';
 import { bindFavoriteControls } from './ui/favorites';
 import { isTool } from './ui/tools';
@@ -84,8 +85,11 @@ persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.b
   if (!app.view.overlay) app.view.overlayAll = false;
   if (typeof saved.autoOverlay === 'boolean') app.autoOverlay = saved.autoOverlay;
   if (typeof saved.autoOverlayOff === 'boolean') app.autoOverlayOff = saved.autoOverlayOff;
+  const popMax = prefs.get<number>('popMax');
+  if (typeof popMax === 'number') app.popMax = clampPopMax(popMax);
   app.overlayAutoShown = app.view.overlay && app.autoOverlay && saved.overlayAuto === true;
   app.syncView();
+  app.on('view', () => { if (prefs.get<number>('popMax') !== app.popMax) prefs.set('popMax', app.popMax); });
   app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, overlayAll: v.overlayAll, grid: v.grid, fade: v.fade, multi: v.multi, autoOverlay: app.autoOverlay, autoOverlayOff: app.autoOverlayOff, overlayAuto: app.overlayAutoShown }); });
 }
 {
