@@ -263,6 +263,22 @@ export const LIMITS = {
   favorites: 30,
 } as const;
 
+/** メッシュの分割数。長い辺を density 分割し、短い辺はマスがほぼ正方形になるよう決める(stage のメッシュと同じ)。 */
+export function meshSegments(imageW: number, imageH: number, density: number): { nx: number; ny: number } {
+  const nx = imageW >= imageH ? density : Math.max(2, Math.round((density * imageW) / imageH));
+  const ny = imageH > imageW ? density : Math.max(2, Math.round((density * imageH) / imageW));
+  return { nx, ny };
+}
+
+/**
+ * 「アルファから生成」でウェイトを輪郭の外へ広げる幅(ウェイトマップの画素)。
+ * 頂点の位置でしかウェイトを読まないので、境目はメッシュ1マス分の斜面になる。
+ * 不透明な画素を含むマスの頂点がどれも塗った側に入るよう、1マス分に、頂点で読むときに隣の画素と混ざる分の1画素を足す。
+ */
+export function alphaSpreadPx(weightW: number, weightH: number, seg: { nx: number; ny: number }): number {
+  return Math.ceil(Math.max(weightW / seg.nx, weightH / seg.ny)) + 1;
+}
+
 export interface Preset {
   label: string;
   desc: string;

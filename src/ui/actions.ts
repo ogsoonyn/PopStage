@@ -75,7 +75,7 @@ function defineActions(app: App, d: ActionDeps) {
     smoothAll: { label: '全体をぼかす(ガウス)', desc: '選んでいるレイヤー全体にガウスぼかしをかける', run: d.openBlur, enabled: layer },
     normalize: { label: '正規化', desc: '選んでいるレイヤーの最大値が100%になるよう全体を拡大', run: () => app.weightOp('正規化', wm => wm.normalize()), enabled: layer },
     invert: { label: '反転', desc: '選んでいるレイヤーのウェイトを反転', run: () => app.weightOp('反転', wm => wm.invert()), enabled: layer },
-    fromAlpha: { label: 'アルファから生成', run: () => app.fromAlpha(), enabled: layer },
+    fromAlpha: { label: 'アルファから生成', desc: '画像の不透明な所を塗る。横から見ても輪郭が伸びないよう、メッシュ1マス分だけ外へ広げる(後でメッシュ密度を下げたら、生成し直す)', run: () => app.fromAlpha(), enabled: layer },
     clearWeights: { label: '全消去', run: () => app.weightOp('全消去', wm => wm.clear()), enabled: layer },
     brushSmaller: { label: 'ブラシを小さく', keys: ['['], run: brushStep(-1), duringPreview: true, helpRow: 'ブラシを小さく・大きく' },
     brushLarger: { label: 'ブラシを大きく', keys: [']'], run: brushStep(1), duringPreview: true, helpRow: 'ブラシを小さく・大きく' },

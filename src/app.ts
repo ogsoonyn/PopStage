@@ -2,7 +2,7 @@
  * アプリ本体。モデル・コマンド・描画・物理・保存・書き出しをつなぐ。
  * 画面の部品(ui/)はここを経由して状態を読み書きする。
  */
-import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultOrthoView, LIMITS, PRESETS, applyPreset, type PresetName, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
+import { Store, createProject, createDocument, createLayer, cloneLayer, meshSegments, alphaSpreadPx, frontCamera, defaultOrthoView, LIMITS, PRESETS, applyPreset, type PresetName, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
 import { History, emptyHistory, shrinkHistory, type HistoryState } from './commands/history';
 import type { Rect } from './model/weightmap';
 import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, SetTake, SetFavorites, SetFov, PatchLayer, PatchProject, Batch, weightOperation, diffTiles } from './commands/commands';
@@ -1223,10 +1223,12 @@ export class App extends Emitter<AppEvents> {
   }
 
   fromAlpha(): void {
-    const c = this.imageCanvas, layer = this.activeLayer; if (!c || !layer) return;
+    const c = this.imageCanvas, layer = this.activeLayer, doc = this.doc; if (!c || !layer || !doc) return;
     const alpha = canvasAlpha(c, layer.weights.width, layer.weights.height);
     if (alpha.every(a => a === 255)) { toast('この画像には透明な部分がありません(画像全体が塗られます)。', 'warning', 5000); }
-    this.weightOp('アルファから生成', wm => wm.setFromAlpha(alpha, wm.width, wm.height));
+    // 輪郭の外へ1マス分広げ、境目の斜面を透明な所へ追い出す。輪郭ちょうどで切ると、横から見たとき輪郭が斜面で伸びて見えるため
+    const spread = alphaSpreadPx(layer.weights.width, layer.weights.height, meshSegments(doc.image.width, doc.image.height, doc.meshDensity));
+    this.weightOp('アルファから生成', wm => { wm.setFromAlpha(alpha, wm.width, wm.height); wm.dilate(spread); });
   }
 
   /* ---------- レイヤー構成 ---------- */

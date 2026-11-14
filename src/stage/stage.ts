@@ -3,7 +3,7 @@
  * 単位は元画像の 1 ピクセル = 1、画像の中心が原点。
  */
 import * as THREE from 'three';
-import { LAYER_COLORS, type CameraState, type Document, type Layer, type OrthoView, type Vec3 } from '../model/project';
+import { LAYER_COLORS, meshSegments, type CameraState, type Document, type Layer, type OrthoView, type Vec3 } from '../model/project';
 import type { Rect } from '../model/weightmap';
 import { vertexShader, fragmentShader, MAX_LAYERS } from './shaders';
 
@@ -144,8 +144,7 @@ export class Stage {
 
   rebuildMesh(density: number): void {
     const { w, h } = this.imageSize;
-    const nx = w >= h ? density : Math.max(2, Math.round((density * w) / h));
-    const ny = h > w ? density : Math.max(2, Math.round((density * h) / w));
+    const { nx, ny } = meshSegments(w, h, density);
     if (this.mesh) { this.rig.remove(this.mesh); this.mesh.geometry.dispose(); }
     this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h, nx, ny), this.material);
     this.mesh.frustumCulled = false;
