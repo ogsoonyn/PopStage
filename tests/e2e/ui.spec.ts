@@ -49,6 +49,30 @@ test('レイヤーの追加・複製・削除・名前の変更', async ({ page 
   await expect(page.locator('#layerList li')).toHaveCount(1);
 });
 
+test('レイヤー名の変更中、日本語の変換を確定する Enter・取り消す Esc では欄を抜けない', async ({ page }) => {
+  await boot(page);
+  await page.locator('#layerList li[aria-selected=true] span.truncate').dblclick();
+  const input = page.locator('#layerList input.input');
+  await input.fill('かお');
+  // 変換中のキー(isComposing)は、Enter でも Esc でも欄を残す
+  for (const key of ['Enter', 'Escape']) {
+    await input.dispatchEvent('keydown', { key, isComposing: true, bubbles: true });
+    await expect(input).toBeVisible();
+    await expect(input).toHaveValue('かお');
+  }
+  // Safari は確定後に isComposing を外し、keyCode 229 で送る
+  await input.evaluate(el => {
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+    Object.defineProperty(ev, 'keyCode', { get: () => 229 });
+    el.dispatchEvent(ev);
+  });
+  await expect(input).toBeVisible();
+  // 変換を終えた後の Enter で確定する
+  await input.press('Enter');
+  await expect(input).toHaveCount(0);
+  expect(await page.evaluate(() => (window as any).popstage.activeLayer.name)).toBe('かお');
+});
+
 test('スライダーの変更は1手として元に戻せる', async ({ page }) => {
   await boot(page);
   const pop0 = await page.evaluate(() => (window as any).popstage.activeLayer.pop);
