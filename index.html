@@ -27,8 +27,7 @@
   <div class="dropdown dropdown-end">
     <div tabindex="0" role="button" class="m-icon" aria-label="メニュー"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg></div>
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-50 w-60 p-2 shadow-lg">
-      <li><button data-cmd="open">プロジェクトを開く…</button></li>
-      <li><button data-cmd="openImage">画像を開く…</button></li>
+      <li><button data-cmd="open">開く…</button></li>
       <li><button data-cmd="save">保存</button></li>
       <li><button data-cmd="export">書き出し…</button></li>
       <li><button data-cmd="sample">サンプルを開く</button></li>
@@ -46,8 +45,7 @@
   <div class="dropdown">
     <div tabindex="0" role="button" class="btn btn-ghost btn-sm">ファイル</div>
     <ul tabindex="-1" class="dropdown-content menu bg-base-100 rounded-box z-30 w-72 p-2 shadow-lg">
-      <li><button data-cmd="openImage">画像を開く…</button></li>
-      <li><button data-cmd="open">プロジェクトを開く…</button></li>
+      <li><button data-cmd="open">開く…</button></li>
       <li><button data-cmd="recent">最近開いたファイル…</button></li>
       <li><button data-cmd="save">保存</button></li>
       <li><button data-cmd="saveAs">名前を付けて保存…</button></li>
@@ -324,7 +322,7 @@
         </section>
         <section class="flex flex-col gap-2" data-m-slot="viewToggles">
           <h2 class="font-bold">表示</h2>
-          <div class="toggle-row"><span class="prop-name"><span id="vOverlayLabel">ウェイトの重ね表示</span><button type="button" class="help-btn" data-help="vOverlayHelp"></button></span>
+          <div class="toggle-row"><span class="prop-name"><span id="vOverlayLabel">ウェイト表示</span><button type="button" class="help-btn" data-help="vOverlayHelp"></button></span>
             <div class="join" role="radiogroup" aria-labelledby="vOverlayLabel">
               <input id="vOverlayOff" type="radio" name="vOverlay" class="join-item btn btn-xs" aria-label="OFF">
               <input id="vOverlaySel" type="radio" name="vOverlay" class="join-item btn btn-xs" aria-label="選択中">
@@ -389,8 +387,7 @@
       </div>
     </div>
     <div class="m-pane" data-mpane="file" hidden>
-      <button class="m-row" data-cmd="open">プロジェクトを開く<span>.pukupop・画像</span></button>
-      <button class="m-row" data-cmd="openImage">画像を開く<span>写真</span></button>
+      <button class="m-row" data-cmd="open">開く<span>.pukupop・画像・写真</span></button>
       <button class="m-row" data-cmd="save">保存<span>ダウンロード</span></button>
       <button class="m-row" data-cmd="recent">最近開いたファイル<span>このブラウザ内</span></button>
       <button class="m-row" data-cmd="export">書き出し<span>動画・GIF・連番PNG</span></button>
@@ -424,7 +421,6 @@
   <span id="sSave"></span>
 </footer>
 
-<input id="fileImage" type="file" accept="image/png,image/jpeg,image/webp" class="hidden">
 <input id="fileProject" type="file" accept=".pukupop,.popstage,application/zip,image/png,image/jpeg,image/webp" class="hidden">
 
 <!-- 書き出しダイアログ -->

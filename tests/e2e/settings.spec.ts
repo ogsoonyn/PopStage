@@ -14,7 +14,7 @@ const dividersOk = (page: Page) => page.locator('#toolNav').evaluate(n => {
 
 test('左のツールバーのいちばん上の「最近」で、最近開いたファイルの一覧が開く', async ({ page }) => {
   await boot(page);
-  const first = page.locator('#toolNav [data-nav]').first();
+  const first = page.locator('#toolNav [data-nav]:visible').first();
   await expect(first).toHaveAttribute('data-nav', 'recent');
   await expect(first).toHaveAccessibleName('最近開いたファイル');
   await first.click();
@@ -25,8 +25,8 @@ test('設定でツールバーのボタンを1つずつ隠せる。隠しても�
   await boot(page);
   await openSettings(page);
   await expect(page.locator('#settingsDialog')).toBeVisible();
-  // 初めは全部出す
-  await expect(page.locator('#setToolbarList input:not(:checked)')).toHaveCount(0);
+  // 初めは、開く・保存・書き出しのほかを全部出す
+  await expect(page.locator('#setToolbarList input:not(:checked)')).toHaveCount(3);
   for (const id of ['brush', 'view', 'pan', 'smoothAll', 'normalize', 'invert']) await box(page, id).uncheck();
   for (const id of ['brush', 'view', 'pan', 'smoothAll']) await expect(nav(page, id)).toBeHidden();
   await expect(nav(page, 'erase')).toBeVisible();
@@ -57,6 +57,28 @@ test('設定でツールバーのボタンを1つずつ隠せる。隠しても�
   await expect(nav(page, 'brush')).toBeVisible();
   await expect(page.locator('#toolNav .nav-group[aria-label="選んでいるレイヤーに効く操作"]')).toBeVisible();
   expect(await dividersOk(page)).toBe(true);
+});
+
+test('開く・保存・書き出しは、既定では隠し、設定で出せる。出したことをブラウザに覚える', async ({ page }) => {
+  await boot(page);
+  for (const id of ['open', 'save', 'export']) await expect(nav(page, id)).toBeHidden();
+  await openSettings(page);
+  for (const id of ['open', 'save', 'export']) await expect(box(page, id)).not.toBeChecked();
+  await box(page, 'open').check();
+  await box(page, 'export').check();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#toolNav [data-nav]').first()).toHaveAttribute('data-nav', 'open');
+  await expect(nav(page, 'open')).toHaveAccessibleName(/開く/);
+  await expect(nav(page, 'open')).toHaveAttribute('title', /Ctrl\+O/);
+  await page.waitForTimeout(400);
+  await page.goto('/?e2e');
+  await page.waitForFunction(() => (window as any).popstage?.doc);
+  await expect(nav(page, 'open')).toBeVisible();
+  await expect(nav(page, 'export')).toBeVisible();
+  await expect(nav(page, 'save')).toBeHidden();
+  // 押すと書き出しのダイアログが開く
+  await nav(page, 'export').click();
+  await expect(page.locator('#exportDialog')).toBeVisible();
 });
 
 test('ファイルの操作とツールを全部隠しても、区切りが端に残らない', async ({ page }) => {

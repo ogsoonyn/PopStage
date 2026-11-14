@@ -8,13 +8,17 @@ import { prefs } from '../storage/prefs';
 import { TOOLBAR_ITEMS } from './actions';
 import { ui } from './ids';
 
+/** 隠したボタン。既定で隠すボタン(defaultHidden)は、ここではなく SHOWN_KEY に「出したもの」を覚える */
 const KEY = 'toolbarHidden';
+const SHOWN_KEY = 'toolbarShown';
+const ITEMS = TOOLBAR_ITEMS.flatMap(g => g.items);
+const DEFAULT_HIDDEN = ITEMS.filter(it => it.defaultHidden).map(it => it.id);
 
-/** 覚えている「隠すボタン」のうち、今もあるものだけ */
+/** 覚えている設定から、今隠すボタン(今もあるものだけ)。既定で隠すボタンは、出すと選んでいなければ隠す */
 function loadHidden(): Set<string> {
-  const v = prefs.get<unknown>(KEY);
-  const known = new Set(TOOLBAR_ITEMS.flatMap(g => g.items.map(it => it.id)));
-  return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && known.has(x)) : []);
+  const ids = (key: string) => { const v = prefs.get<unknown>(key); return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []); };
+  const hidden = ids(KEY), shown = ids(SHOWN_KEY);
+  return new Set(ITEMS.filter(it => it.defaultHidden ? !shown.has(it.id) : hidden.has(it.id)).map(it => it.id));
 }
 
 /**
@@ -67,7 +71,11 @@ export function bindSettingsDialog(): { open: () => void } {
   }));
 
   const sync = () => { for (const cb of boxes) cb.checked = !hidden.has(cb.dataset.nav!); };
-  const save = () => { prefs.set(KEY, [...hidden]); applyToolbar(hidden); };
+  const save = () => {
+    prefs.set(KEY, [...hidden].filter(id => !DEFAULT_HIDDEN.includes(id)));
+    prefs.set(SHOWN_KEY, DEFAULT_HIDDEN.filter(id => !hidden.has(id)));
+    applyToolbar(hidden);
+  };
   ui.setToolbarReset.addEventListener('click', () => { hidden = new Set(); save(); sync(); });
 
   return { open: () => { sync(); ui.settingsDialog.showModal(); } };

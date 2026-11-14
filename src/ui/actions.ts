@@ -34,7 +34,6 @@ export interface Action {
 
 /** 画面の部品のうち、コマンドから開くもの */
 export interface ActionDeps {
-  openImage: () => unknown;
   openProject: () => unknown;
   openRecent: () => unknown;
   openExport: () => unknown;
@@ -52,8 +51,8 @@ function defineActions(app: App, d: ActionDeps) {
   };
   return {
     // ファイル
-    openImage: { label: '画像を開く', keys: ['Ctrl+Shift+O'], run: d.openImage },
-    open: { label: 'プロジェクトを開く', keys: ['Ctrl+O'], run: d.openProject },
+    // プロジェクト(.pukupop)も画像も同じ「開く」で開く(中身で見分ける)。Ctrl+Shift+O は前の「画像を開く」のキー
+    open: { label: '開く', desc: 'プロジェクト(.pukupop)か画像を開く', keys: ['Ctrl+O', 'Ctrl+Shift+O'], run: d.openProject },
     recent: { label: '最近開いたファイル', run: d.openRecent },
     save: { label: '保存', keys: ['Ctrl+S'], run: () => app.save(false), enabled: () => !!app.doc },
     saveAs: { label: '名前を付けて保存', keys: ['Ctrl+Shift+S'], run: () => app.save(true), enabled: () => !!app.doc },
@@ -143,11 +142,20 @@ type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'tra
  * 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く)。
  * check を持つものは切り替えで、入・切を aria-pressed で示す。name は、ボタンの文言を幅に合わせて縮めたときの読み上げ用の名前
  */
-type NavGroup = { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string; check?: ViewCheck; name?: string }[] };
+type NavGroup = { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string; check?: ViewCheck; name?: string; defaultHidden?: boolean }[] };
 
 /** ツールの上に置く、ファイルの操作(作業を始めるときにすぐ開き直せるように) */
 const NAV_TOP: readonly NavGroup[] = [
-  { label: 'ファイル', title: 'ファイルの操作', items: [{ cmd: 'recent', icon: 'recent', text: '最近', name: '最近開いたファイル' }] },
+  // 開く・保存・書き出しはメニューとショートカットでも使えるので、既定では隠す(設定で出せる。出すと低い画面ではツールバーがスクロールする)
+  {
+    label: 'ファイル', title: 'ファイルの操作',
+    items: [
+      { cmd: 'open', icon: 'open', text: '開く', defaultHidden: true },
+      { cmd: 'recent', icon: 'recent', text: '最近', name: '最近開いたファイル' },
+      { cmd: 'save', icon: 'save', text: '保存', defaultHidden: true },
+      { cmd: 'export', icon: 'export', text: '書き出し', defaultHidden: true },
+    ],
+  },
 ];
 
 const NAV_ACTIONS: readonly NavGroup[] = [
@@ -174,10 +182,10 @@ const NAV_ACTIONS: readonly NavGroup[] = [
  * 左のツールバーのボタンの一覧(並びのとおり)。設定で出す・隠すを選ぶのに使う。
  * id はボタンの data-nav と同じ(ツールはツールの id、操作はコマンドの名前)
  */
-export const TOOLBAR_ITEMS: readonly { group: string; items: readonly { id: string; label: string }[] }[] = [
-  ...NAV_TOP.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text })) })),
+export const TOOLBAR_ITEMS: readonly { group: string; items: readonly { id: string; label: string; defaultHidden?: boolean }[] }[] = [
+  ...NAV_TOP.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text, defaultHidden: it.defaultHidden })) })),
   { group: 'ツール', items: TOOL_GROUPS.flat().map(t => ({ id: t.id as string, label: t.name ?? t.label })) },
-  ...NAV_ACTIONS.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text })) })),
+  ...NAV_ACTIONS.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text, defaultHidden: it.defaultHidden })) })),
 ];
 {
   // ツールの id とコマンドの名前は同じ data-nav に入るので、重なると1つのチェックで2つのボタンが隠れる
@@ -302,9 +310,9 @@ export function bindActions(app: App, deps: ActionDeps): void {
     if (a.keys) {
       b.setAttribute('aria-keyshortcuts', ariaKeys(a.keys));
       const tk = b.querySelector('kbd.tool-key');
-      // ボタンの右上は狭いので、Shift は ⇧ と短く書く
+      // ボタンの右上は狭いので、Shift は ⇧ と短く書き、Ctrl の付くキーは出さない(ツールチップには出る)
       if (tk) {
-        tk.textContent = a.keys[0].replace('Shift+', '⇧');
+        tk.textContent = a.keys[0].includes('Ctrl+') ? '' : a.keys[0].replace('Shift+', '⇧');
         // 2文字以上の表記は、低い画面で名前と重なるので隠す(style.css)
         b.classList.toggle('key-wide', tk.textContent.length > 1);
       }

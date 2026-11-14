@@ -111,8 +111,7 @@ bindToolOptions(app);
 
 /* ---------- ファイルを開く ---------- */
 
-const { fileImage, fileProject } = ui;
-fileImage.addEventListener('change', () => { const f = fileImage.files?.[0]; fileImage.value = ''; if (f) void app.openFile(f); });
+const { fileProject } = ui;
 fileProject.addEventListener('change', () => { const f = fileProject.files?.[0]; fileProject.value = ''; if (f) void app.openFile(f); });
 
 const IMAGE_ACCEPT = { 'image/*': ['.png', '.jpg', '.jpeg', '.webp'] };
@@ -132,7 +131,6 @@ async function pickAndOpen(types: FilePickerAcceptType[], fallback: HTMLInputEle
 /* ---------- コマンド(メニュー・ボタン・ショートカット共通。定義は ui/actions.ts) ---------- */
 // メニューやボタンを結び付けるので、data-cmd の部品をスマホのシートへ移す前に呼ぶ(移しても結び付けは残る)
 bindActions(app, {
-  openImage: () => pickAndOpen([{ description: '画像', accept: IMAGE_ACCEPT }], fileImage),
   openProject: () => pickAndOpen([{ description: 'PukuPop プロジェクト / 画像', accept: { 'application/zip': [FILE_EXTENSION, LEGACY_FILE_EXTENSION], ...IMAGE_ACCEPT } }], fileProject),
   openRecent: () => recentDialog.open(),
   openExport: () => exportDialog.open(),

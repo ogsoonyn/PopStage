@@ -306,9 +306,20 @@ export function bindPanels(app: App): { refresh: () => void } {
       const info = document.createElement('span');
       info.className = 'layer-info text-xs opacity-70 tabular-nums flex items-center gap-1';
       info.dataset.blend = layer.blend;
-      info.innerHTML = blendIcon(layer.blend);
-      info.append(String(layer.pop));
-      info.title = `重ね方: ${BLENDS[layer.blend].label} / ポップ量 ${layer.pop}px`;
+      // 重ね方のアイコンは押すと次の重ね方に切り替える(表示のチェックと同じく、押した1行だけに効かせる)
+      const blendBtn = document.createElement('button');
+      blendBtn.type = 'button'; blendBtn.className = 'blend-btn';
+      blendBtn.innerHTML = blendIcon(layer.blend);
+      const next = BLEND_ORDER[(BLEND_ORDER.indexOf(layer.blend) + 1) % BLEND_ORDER.length];
+      blendBtn.title = `重ね方: ${BLENDS[layer.blend].label}(押すと「${BLENDS[next].label}」に切り替え)`;
+      blendBtn.setAttribute('aria-label', `重ね方: ${BLENDS[layer.blend].label}`);
+      blendBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        history.execute(PatchLayer.from(store, layer.id, { blend: next }, `重ね方を${BLENDS[next].label}に`));
+      });
+      const popNum = document.createElement('span');
+      popNum.textContent = String(layer.pop); popNum.title = `ポップ量 ${layer.pop}px`;
+      info.append(blendBtn, popNum);
 
       li.append(eye, swatch, th, name, info);
       li.addEventListener('click', e => onRowClick(layer.id, e));

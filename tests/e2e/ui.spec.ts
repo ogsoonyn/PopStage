@@ -166,7 +166,8 @@ test('ショートカット: 一覧のキーがすべて期待どおりに効く
   await page.keyboard.press('Control+o');
   await expect.poll(calls).toEqual(['save', 'saveAs', 'open:application/zip,image/*']);
   await page.keyboard.press('Control+Shift+o');
-  await expect.poll(calls).toEqual(['save', 'saveAs', 'open:application/zip,image/*', 'open:image/*']);
+  // Ctrl+Shift+O(前の「画像を開く」)も、プロジェクトと画像の両方を開ける「開く」になる
+  await expect.poll(calls).toEqual(['save', 'saveAs', 'open:application/zip,image/*', 'open:application/zip,image/*']);
   // 書き出し
   await page.keyboard.press('Control+e');
   await expect(page.locator('#exportDialog')).toHaveAttribute('open', '');
@@ -542,8 +543,8 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(11);
-  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(11);
+  await expect(acts).toHaveCount(14); // 開く・保存・書き出しは既定では隠す
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(14);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
   // 最近開いたファイルは、ツールより上に置く
   await expect(page.locator('#toolNav [role=group]')).toHaveText([/ファイル/, /表示/, /レイヤー/, /アニメ/]);
