@@ -17,6 +17,7 @@ import { bindMobileLayout } from './ui/mobile';
 import { bindTakeControls } from './ui/take';
 import { bindPlayBar } from './ui/playBar';
 import { bindHideUi } from './ui/hideUi';
+import { bindSidePanel } from './ui/sidePanel';
 import { bindKeyPath } from './ui/keyPath';
 import { clampPopMax } from './ui/popSlider';
 import { bindInflateFrame } from './ui/inflateFrame';
@@ -58,6 +59,7 @@ bindPanels(app);
 bindTakeControls(app);
 bindPlayBar(app);
 bindHideUi(app);
+bindSidePanel(app);
 bindKeyPath(app);
 bindInflateFrame(app);
 bindFavoriteControls(app);
@@ -89,7 +91,6 @@ persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.b
   if (typeof popMax === 'number') app.popMax = clampPopMax(popMax);
   app.overlayAutoShown = app.view.overlay && app.autoOverlay && saved.overlayAuto === true;
   app.syncView();
-  app.on('view', () => { if (prefs.get<number>('popMax') !== app.popMax) prefs.set('popMax', app.popMax); });
   app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, overlayAll: v.overlayAll, grid: v.grid, fade: v.fade, multi: v.multi, autoOverlay: app.autoOverlay, autoOverlayOff: app.autoOverlayOff, overlayAuto: app.overlayAutoShown }); });
 }
 {

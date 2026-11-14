@@ -431,6 +431,14 @@ export class App extends Emitter<AppEvents> {
     this.emit('view', undefined);
   }
 
+  /** 右パネルを閉じて3Dビューを広げているか(PC の幅だけ。ui/sidePanel.ts)。ブラウザに覚える */
+  panelClosed = false;
+  setPanelClosed(on: boolean): void {
+    if (this.panelClosed === on) return;
+    this.panelClosed = on;
+    this.emit('view', undefined);
+  }
+
   /** UIを隠す・戻す。隠している間は3面図も出さない(app.view.multi はそのまま残し、戻すと出る) */
   setUiHidden(on: boolean): void {
     if (this.uiHidden === on) return;
@@ -442,6 +450,16 @@ export class App extends Emitter<AppEvents> {
   resetView(): void {
     this.project.camera = frontCamera(this.project.camera.fov);
     this.world.cutView(); // 視点が飛ぶだけなので揺らさない
+    this.cameraChanged();
+  }
+
+  /** 向きだけを正面に戻す。ズームと平行移動(画面の上下左右の位置)は保つ */
+  resetRotation(): void {
+    const c = this.project.camera;
+    if (c.yaw === 0 && c.pitch === 0 && c.target.z === 0) return;
+    // 回した視点で平行移動すると奥行き(z)にもずれるので、正面から見て同じに見えるよう 0 に戻す
+    this.project.camera = { ...c, yaw: 0, pitch: 0, target: { ...c.target, z: 0 } };
+    this.world.cutView();
     this.cameraChanged();
   }
 

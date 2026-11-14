@@ -109,13 +109,15 @@ export function bindPanels(app: App): { refresh: () => void } {
   // ポップ量のスライダーは目盛りと px が比例しない(後半ほど粗い。popSlider.ts)
   // 複数のレイヤーを選んでいるときは、比率を保って伸び縮みさせる。数値とスライダーは一番高いレイヤーの値(model の scalePops)
   const popStart = () => app.selectedLayers.map(l => [l.id, l.pop] as const);
+  /** スライダーの右端。最大値の設定より高いレイヤーでは、右端をその値まで広げる(触っただけで一気に下がらないように) */
+  const popSliderMax = () => Math.max(app.popMax, ...app.selectedLayers.map(l => l.pop));
   const applyPops = (start: readonly (readonly [string, number])[], target: number) => {
     const pops = scalePops(start.map(([, p]) => p), target);
     start.forEach(([id], i) => store.patchLayer(id, { pop: pops[i] }));
   };
   bindLive(ui.pPop, {
-    begin: () => ({ snap: snapshot('layer', ['pop']), start: popStart() }),
-    input: (v, b) => { const p = sliderToPop(+v, app.popMax); applyPops(b.start, p); ui.pPopN.value = String(p); },
+    begin: () => ({ snap: snapshot('layer', ['pop']), start: popStart(), max: popSliderMax() }),
+    input: (v, b) => { const p = sliderToPop(+v, b.max); applyPops(b.start, p); ui.pPopN.value = String(p); },
     commit: b => record('layer', 'ポップ量', b.snap, snapshot('layer', ['pop'])),
   });
   ui.pPopN.addEventListener('change', () => {
@@ -246,7 +248,11 @@ export function bindPanels(app: App): { refresh: () => void } {
   ui.vPause.addEventListener('change', () => app.setPaused(ui.vPause.checked));
   ui.vAutoOverlay.addEventListener('change', () => app.setAutoOverlay(ui.vAutoOverlay.checked));
   ui.vAutoOverlayOff.addEventListener('change', () => app.setAutoOverlayOff(ui.vAutoOverlayOff.checked));
-  ui.setPopMax.addEventListener('change', () => { app.setPopMax(+ui.setPopMax.value); ui.setPopMax.value = String(app.popMax); });
+  ui.setPopMax.addEventListener('change', () => {
+    const v = parseFloat(ui.setPopMax.value);
+    if (Number.isFinite(v)) { app.setPopMax(v); prefs.set('popMax', app.popMax); } // 空欄・数でないときは変えない
+    ui.setPopMax.value = String(app.popMax);
+  });
 
   /* ---------- ツールオプション ---------- */
 
@@ -404,7 +410,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     const items = [...list.querySelectorAll<HTMLElement>('li')];
     const i = items.indexOf(e.target as HTMLElement);
     const j = e.key === 'ArrowUp' ? i - 1 : e.key === 'ArrowDown' ? i + 1 : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : -2;
-    if (j === -2) return;
+    if (j === -2 || e.ctrlKey || e.metaKey) return; // Ctrl+Home などはコマンドに回す
     e.preventDefault(); e.stopPropagation();
     const next = items[Math.max(0, Math.min(items.length - 1, j))], id = next.dataset.id;
     if (id && e.shiftKey) {
@@ -501,8 +507,9 @@ export function bindPanels(app: App): { refresh: () => void } {
     if (l && ls.length) {
       // ポップ量は一番高いレイヤーの値を出す(動かすとほかは同じ比率で変わる)
       const top = Math.max(...ls.map(x => x.pop));
-      ui.pPop.max = String(popSliderRange(app.popMax));
-      setRange(ui.pPop, null, popToSlider(top, app.popMax));
+      const max = popSliderMax();
+      ui.pPop.max = String(popSliderRange(max));
+      setRange(ui.pPop, null, popToSlider(top, max));
       if (document.activeElement !== ui.pPopN) ui.pPopN.value = String(top);
       const blendMixed = !same(ls, x => x.blend);
       setSelect(blendSel, blendMixed, l.blend);

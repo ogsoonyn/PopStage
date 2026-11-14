@@ -591,8 +591,8 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(14); // 開く・保存・書き出しは既定では隠しているが、DOM にはある
-  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(14);
+  await expect(acts).toHaveCount(16); // 開く・保存・書き出しは既定では隠しているが、DOM にはある
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(16);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
   // 最近開いたファイルは、ツールより上に置く
   await expect(page.locator('#toolNav [role=group]')).toHaveText([/ファイル/, /表示/, /レイヤー/, /アニメ/]);
@@ -918,4 +918,31 @@ test('ポップ量のスライダーの最大値は設定で変えられ(既定 
   await page.goto('/?e2e');
   await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
   expect(await page.evaluate(() => (window as any).popstage.popMax)).toBe(1500);
+});
+
+test('右パネルは3Dビューの右端のつまみ・Shift+P・表示メニューで開閉でき、開閉を覚える', async ({ page }) => {
+  await boot(page);
+  const aside = page.locator('#sidePanel'), tab = page.locator('#panelToggle');
+  const canvasWidth = () => page.locator('#view').evaluate(el => el.getBoundingClientRect().width);
+  await expect(aside).toBeVisible();
+  await expect(tab).toHaveAttribute('aria-expanded', 'true');
+  const w0 = await canvasWidth();
+  await tab.click();
+  await expect(aside).toBeHidden();
+  await expect(tab).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(canvasWidth).toBeGreaterThan(w0 + 200); // 3Dビューが広がる
+  await expect(page.locator('#menubar [data-check=panel]')).toHaveText('');
+  // 開き直しても閉じたまま
+  await page.waitForTimeout(300);
+  await page.goto('/?e2e');
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  await expect(aside).toBeHidden();
+  // Shift+P で開く
+  await page.locator('#view').focus();
+  await page.keyboard.press('Shift+P');
+  await expect(aside).toBeVisible();
+  await expect(page.locator('#menubar [data-check=panel]')).toHaveText('✓');
+  // UIを隠すとつまみも隠れる
+  await page.evaluate(() => (window as any).popstage.setUiHidden(true));
+  await expect(tab).toBeHidden();
 });

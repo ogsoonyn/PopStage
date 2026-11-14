@@ -80,6 +80,8 @@
       <li><button data-cmd="toggleTransparent">背景を透過 <span data-check="transparent" class="ml-auto"></span></button></li>
       <li><button data-cmd="cleanView">編集表示クリア</button></li>
       <li><button data-cmd="resetView">視点リセット(正面)</button></li>
+      <li><button data-cmd="resetRotation">回転だけリセット</button></li>
+      <li><button data-cmd="togglePanel">右パネル <span data-check="panel" class="ml-auto"></span></button></li>
       <li><button data-cmd="toggleUi">UIを隠す</button></li>
     </ul>
   </div>
@@ -196,8 +198,10 @@
     <div id="busy" class="absolute inset-0 bg-base-100/60 hidden items-center justify-center"><span class="loading loading-spinner loading-lg"></span></div>
   </section>
 
+  <!-- 右パネルの開閉のつまみ(ui/sidePanel.ts)。PC の幅だけ。開いている間はパネルの左端に、閉じると3Dビューの右端に出す -->
+  <div id="panelToggleWrap" class="relative w-0 shrink-0"><button id="panelToggle" type="button" aria-controls="sidePanel"></button></div>
   <!-- レイヤー一覧とプロパティ -->
-  <aside class="w-80 shrink-0 bg-base-100 border-l border-base-300 flex flex-col min-h-0">
+  <aside id="sidePanel" class="w-80 shrink-0 bg-base-100 border-l border-base-300 flex flex-col min-h-0">
     <section class="p-3 border-b border-base-300 flex flex-col gap-2 max-h-[40%] min-h-0" data-m-slot="layers">
       <div class="flex items-center gap-1">
         <h2 class="font-bold mr-auto">レイヤー <span id="layerCount" class="opacity-60 font-normal"></span></h2>
@@ -386,6 +390,7 @@
       <div class="m-btns">
         <button class="btn btn-sm" data-cmd="cleanView">表示クリア</button>
         <button class="btn btn-sm" data-cmd="resetView">視点を戻す</button>
+        <button class="btn btn-sm" data-cmd="resetRotation">回転だけ戻す</button>
       </div>
     </div>
     <div class="m-pane" data-mpane="file" hidden>

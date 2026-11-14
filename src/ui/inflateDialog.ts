@@ -18,6 +18,9 @@ export function bindInflateDialog(app: App): void {
   const profiles = [...document.querySelectorAll<HTMLInputElement>('input[name=inflProfile]')];
   let queued: { settings?: Partial<InflateSettings>; area?: Partial<InflateArea> } = {}, scheduled = false;
 
+  /** 高さのスライダーの右端。最大値の設定より高い高さで始めたときは、その値まで広げる(触っただけで一気に下がらないように) */
+  let startHeight = 0;
+  const heightMax = () => Math.max(app.popMax, startHeight);
   const clampInt = (v: string, min: number, max: number) => Math.max(min, Math.min(max, Math.round(+v || 0)));
   const flush = () => { const q = queued; queued = {}; app.updateInflate(q); };
   /** 大きな画像でも滑らかに動かせるよう、プレビューは1フレームに1回だけ計算する */
@@ -32,8 +35,8 @@ export function bindInflateDialog(app: App): void {
   w.addEventListener('input', () => { if (+w.value >= 2) update({ area: { w: clampInt(w.value, 2, 8192) } }); });
   h.addEventListener('input', () => { if (+h.value >= 2) update({ area: { h: clampInt(h.value, 2, 8192) } }); });
   // 高さのスライダーはポップ量と同じ目盛り(前半ほど細かい)
-  height.addEventListener('input', () => { const v = sliderToPop(+height.value, app.popMax); heightN.value = String(v); update({ settings: { height: v } }); });
-  heightN.addEventListener('input', () => { const v = clampInt(heightN.value, 0, LIMITS.pop.max); height.value = String(popToSlider(v, app.popMax)); update({ settings: { height: v } }); });
+  height.addEventListener('input', () => { const v = sliderToPop(+height.value, heightMax()); heightN.value = String(v); update({ settings: { height: v } }); });
+  heightN.addEventListener('input', () => { const v = clampInt(heightN.value, 0, LIMITS.pop.max); height.value = String(popToSlider(v, heightMax())); update({ settings: { height: v } }); });
   soft.addEventListener('input', () => { softN.value = soft.value; update({ settings: { softness: clampInt(soft.value, 0, 100) / 100 } }); });
   softN.addEventListener('input', () => { soft.value = String(clampInt(softN.value, 0, 100)); update({ settings: { softness: clampInt(softN.value, 0, 100) / 100 } }); });
   const angleOf = (v: string) => clampInt(v, INFLATE_ANGLE.min, INFLATE_ANGLE.max);
@@ -63,8 +66,8 @@ export function bindInflateDialog(app: App): void {
     ui.inflTarget.textContent = `レイヤー「${layer?.name ?? ''}」に重ねます。範囲は枠で直せ、枠の外をドラッグすると描き直します。`;
     set(kind, st.shape);
     set(w, String(Math.round(s.area.w))); set(h, String(Math.round(s.area.h)));
-    height.max = String(popSliderRange(app.popMax));
-    set(height, String(popToSlider(st.height, app.popMax))); set(heightN, String(st.height));
+    height.max = String(popSliderRange(heightMax()));
+    set(height, String(popToSlider(st.height, heightMax()))); set(heightN, String(st.height));
     set(soft, String(Math.round(st.softness * 100))); set(softN, String(Math.round(st.softness * 100)));
     set(angle, String(st.angle)); set(angleN, String(st.angle));
     set(blend, st.blend);
@@ -81,6 +84,7 @@ export function bindInflateDialog(app: App): void {
 
   app.on('inflate', phase => {
     if (phase === 'end') { queued = {}; if (dlg.open) dlg.close(); return; }
+    if (phase === 'begin') startHeight = app.inflateState?.settings.height ?? 0;
     fill();
     if (phase === 'begin' && !dlg.open) dlg.show();
   });
