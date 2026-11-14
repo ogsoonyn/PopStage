@@ -104,7 +104,8 @@ interface Shape { frames: (World[] | null)[]; centers: (World | null)[]; paths: 
 export function bindKeyPath(app: App): void {
   const host = ui.keyPath, toggle = ui.keyPathShow, ghost = ui.keyGhostShow;
   const svg = el('svg', { class: 'key-path', 'aria-hidden': 'true' }, host);
-  // 経路・ゴーストの入・切は App が持つ(左のツールバー・メニューからも切り替える)。ここではブラウザに覚え、チェックボックスに映す
+  // 経路・ゴーストの入・切は App が持つ(左のツールバー・メニューからも切り替える)。ここではブラウザに覚え、チェックボックスに映す。
+  // 覚えている値は、左のツールバーとメニューを作る(bindActions)前にここで入れる(main.ts の呼ぶ順)
   app.keyOverlay = { path: prefs.get<boolean>(PREF) ?? true, ghost: prefs.get<boolean>(GHOST_PREF) ?? false };
   toggle.addEventListener('change', () => app.setKeyOverlay('path', toggle.checked));
   ghost.addEventListener('change', () => app.setKeyOverlay('ghost', ghost.checked));

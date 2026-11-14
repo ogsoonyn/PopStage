@@ -1408,10 +1408,13 @@ export class App extends Emitter<AppEvents> {
     this.emit('take', this.takeState);
   }
 
-  /** キーフレームの動きを再生できるか(2つ以上で1周が短すぎず、止まっているとき) */
+  /**
+   * キーフレームの動きを再生できるか(2つ以上で1周が短すぎず、止まっているとき)。
+   * 手で記録した操作があるときは、黙ってキーフレームの記録に入れ替えないよう使えなくする(右パネルの「再生」で入れ替える)
+   */
   get canPlayKeys(): boolean {
-    const n = this.keyDraft.length, total = this.keyDraft.reduce((a, k) => a + k.seconds, 0);
-    return n >= 2 && total >= TAKE_MIN_SECONDS - 1e-9 && !!this.doc && !this.exporting && this.takeState === 'idle';
+    const n = this.keyDraft.length, total = this.keyDraft.reduce((a, k) => a + k.seconds, 0), take = this.project.take;
+    return n >= 2 && total >= TAKE_MIN_SECONDS - 1e-9 && !!this.doc && !this.exporting && this.takeState === 'idle' && (!take || !!take.keys);
   }
 
   /** キーフレームの動きを再生する。一覧が今の記録と同じならそのまま再生し、違えば作り直す(元に戻せる) */

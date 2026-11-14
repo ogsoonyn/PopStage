@@ -29,7 +29,7 @@ export const TOOL_GROUPS: readonly (readonly ToolDef[])[] = [
     { id: 'smooth', key: 'S', label: 'ぼかし', hint: [{ mouse: 'drag', text: '段差をならす' }] },
     {
       id: 'inflate', key: 'I', label: '膨らみ', name: '膨らませる', desc: '範囲をドラッグして、指定した高さと断面で一括して膨らませる',
-      hint: [{ mouse: 'drag', text: '範囲を膨らませる' }, { mods: 'Shift', mouse: 'drag', text: '正円・正方形' }, { text: '枠の辺・角で大きさ、上の丸で回す' }],
+      hint: [{ mouse: 'drag', text: '範囲を膨らませる' }, { mods: 'Shift', mouse: 'drag', text: '正円・正方形' }, { text: '枠の辺・角で大きさ、中で移動、上の丸で回す' }],
     },
     { id: 'grab', key: 'G', label: 'つかむ', hint: [{ mouse: 'drag', text: '引っ張って離すと揺れる' }] },
     {

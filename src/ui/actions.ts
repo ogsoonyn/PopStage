@@ -122,9 +122,9 @@ function defineActions(app: App, d: ActionDeps) {
     },
     stopPlay: { label: '停止', helpLabel: 'ループ再生を止める', desc: 'ループ再生を止める', run: () => app.stopTake(), enabled: () => app.takeState === 'playing' },
     toggleKeyPlay: {
-      label: 'キーフレームの再生・停止', desc: 'キーフレームの動きをループ再生する・止める',
+      label: 'キーフレームの再生・停止', desc: 'キーフレームの動きをループ再生する。再生中は止める(手で記録した操作の再生も止める)',
       run: () => { if (app.takeState === 'playing') app.stopTake(); else app.playKeys(); },
-      enabled: () => app.takeState === 'playing' || app.canPlayKeys,
+      enabled: () => (app.takeState === 'playing' && !app.exporting) || app.canPlayKeys,
     },
     toggleKeyPath: {
       label: 'キーフレームの経路', desc: '各フレームの枠と経路を3Dビューに重ねる',
@@ -369,7 +369,10 @@ export function bindActions(app: App, deps: ActionDeps): void {
 
   /* ---------- ヘルプのマウス操作とショートカットの一覧 ---------- */
   {
-    ui.helpOps.innerHTML = HELP_OPS.map(r => `<span>${r.label}</span><span class="help-op">${hintHtml(r.parts)}</span>`).join('');
+    ui.helpOps.replaceChildren(...HELP_OPS.flatMap(r => {
+      const op = Object.assign(document.createElement('span'), { className: 'help-op', innerHTML: hintHtml(r.parts) });
+      return [Object.assign(document.createElement('span'), { textContent: r.label }), op];
+    }));
     const rows = new Map<string, string[]>();
     for (const a of Object.values(table)) {
       if (!a.keys || a.hidden) continue;

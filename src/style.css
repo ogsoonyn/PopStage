@@ -101,6 +101,7 @@ html.mobile #blurDialog { left: 50%; right: auto; transform: translateX(-50%); b
   #toolNav .nav-ico { display: none; }
   #toolNav .btn { padding-top: 2px; padding-bottom: 2px; min-height: 0; }
   #toolNav > .tool { padding-left: 2px; padding-right: 12px; }
+  #toolNav > .divider { margin: 0; height: 8px; }
 }
 
 /* マウス操作の書き方(ui/mouseHint.ts)。上の欄のツールのヒントと、ヘルプの操作方法 */
