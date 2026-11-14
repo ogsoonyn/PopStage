@@ -229,7 +229,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   });
   bindRange(ui.pPeriod, ui.pPeriodO, { target: 'project', keys: ['autoSwing'], label: '自動揺らしの周期', toPatch: v => ({ autoSwing: { ...app.project.autoSwing, period: v / 10 } }), fmt: v => `${(v / 10).toFixed(1)}秒` });
   bindRange(ui.pAutoStr, ui.pAutoStrO, { target: 'project', keys: ['autoSwing'], label: '自動揺らしの強さ', toPatch: v => ({ autoSwing: { ...app.project.autoSwing, strength: v / 100 } }), fmt: pct });
-  ui.pBgTransparent.addEventListener('change', () => exec('project', '背景', { background: ui.pBgTransparent.checked ? null : ui.pBgColor.value }));
+  ui.pBgTransparent.addEventListener('change', () => app.setBackgroundTransparent(ui.pBgTransparent.checked));
   bindLive(ui.pBgColor, {
     begin: () => snapshot('project', ['background']),
     input: v => patchNow('project', { background: v }),
@@ -512,7 +512,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     }
     setRange(ui.pFov, ui.pFovO, p.camera.fov, `${p.camera.fov}°`);
     ui.pBgTransparent.checked = p.background === null;
-    if (p.background) ui.pBgColor.value = p.background;
+    ui.pBgColor.value = p.background ?? app.bgColor;
     ui.pAuto.checked = ui.tAuto.checked = p.autoSwing.enabled;
     setRange(ui.pPeriod, ui.pPeriodO, Math.round(p.autoSwing.period * 10), `${p.autoSwing.period.toFixed(1)}秒`);
     setRange(ui.pAutoStr, ui.pAutoStrO, Math.round(p.autoSwing.strength * 100), pct(p.autoSwing.strength * 100));

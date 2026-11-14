@@ -93,6 +93,8 @@ html.mobile #blurDialog { left: 50%; right: auto; transform: translateX(-50%); b
   /* ⇧W のような2文字のキーは名前と重なるので出さない(ツールチップとヘルプには出る) */
   #toolNav .nav-act.key-wide .tool-key { display: none; }
   #toolNav .nav-act.key-wide { padding-right: 2px; }
+  /* ツールのボタンの上下も少し詰める(864px の画面で最後のボタンまで入るように) */
+  #toolNav > .tool { padding-top: 1px; padding-bottom: 1px; }
 }
 @media (max-height: 720px) {
   #toolNav .nav-ico { display: none; }

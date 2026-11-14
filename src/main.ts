@@ -90,11 +90,15 @@ persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.b
   if (isTool(t)) app.setTool(t, false);
   app.on('tool', t => prefs.set('tool', t));
 }
-// 背景・自動揺らし・画角は、変えたら「新しい画像を開いたときの既定」として覚える
+// 背景・自動揺らし・画角は、変えたら「新しい画像を開いたときの既定」として覚える。透過にしても背景色は残す(bgColor)
+{
+  const c = prefs.get<Record<string, unknown>>('newImage')?.bgColor;
+  if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) app.bgColor = c;
+}
 app.store.on('project', ({ keys }) => {
   if (!keys.some(k => k === 'background' || k === 'autoSwing' || k === 'camera')) return;
   const p = app.project;
-  prefs.set('newImage', { background: p.background, autoSwing: { ...p.autoSwing }, fov: p.camera.fov });
+  prefs.set('newImage', { background: p.background, bgColor: app.bgColor, autoSwing: { ...p.autoSwing }, fov: p.camera.fov });
 });
 const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);

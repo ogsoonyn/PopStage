@@ -542,8 +542,8 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(10);
-  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(10);
+  await expect(acts).toHaveCount(11);
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(11);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
   // 最近開いたファイルは、ツールより上に置く
   await expect(page.locator('#toolNav [role=group]')).toHaveText([/ファイル/, /表示/, /レイヤー/, /アニメ/]);
@@ -597,7 +597,39 @@ test('左のツールバー: 表示の切り替えは、入・切を aria-presse
   // 表示クリアで切れたものは、ボタンも切に戻る(3面図は切らない)
   await app(a => { Object.assign(a.view, { overlay: true, fade: true, grid: true, multi: true }); a.syncView(); });
   await btn('cleanView').click();
-  await expect(page.locator('#toolNav .nav-act[aria-pressed=true]')).toHaveText([/3面図/]);
+  await expect(page.locator('#toolNav .nav-act[aria-pressed=true]')).toHaveText([/3面図/, /透過/]); // 背景の透過は編集用の表示ではないので切らない
+});
+
+test('左のツールバー: 背景を透過は、入・切をボタン・メニュー・右パネルに映し、切ると背景色(既定は白)で塗る', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  const btn = page.locator('#toolNav [data-cmd=toggleTransparent]');
+  // 既定は透過
+  expect(await app(a => a.project.background)).toBeNull();
+  await expect(btn).toHaveAttribute('aria-pressed', 'true');
+  await expect(btn).toHaveAccessibleName('背景を透過');
+  await expect(page.locator('#menubar [data-check=transparent]')).toHaveText('✓');
+  await expect(page.locator('#stage')).not.toHaveClass(/solid/);
+  // 切ると白で塗る
+  await btn.click();
+  expect(await app(a => a.project.background)).toBe('#ffffff');
+  await expect(btn).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#menubar [data-check=transparent]')).toHaveText('');
+  await expect(page.locator('#stage')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await openTab(page, 'view');
+  await expect(page.locator('#pBgTransparent')).not.toBeChecked();
+  // 右パネルで色を変えてから透過にし、また切ると、その色に戻る
+  await page.locator('#pBgColor').evaluate((el: HTMLInputElement) => { el.value = '#336699'; el.dispatchEvent(new Event('input')); el.dispatchEvent(new Event('change')); });
+  expect(await app(a => a.project.background)).toBe('#336699');
+  await page.locator('#pBgTransparent').check();
+  await expect(btn).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#pBgColor')).toHaveValue('#336699');
+  await btn.click();
+  expect(await app(a => a.project.background)).toBe('#336699');
+  // 1手として元に戻せる
+  await app(a => a.history.undo());
+  expect(await app(a => a.project.background)).toBeNull();
+  await expect(btn).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('ツールオプションの欄は選択中のツールの設定だけを出す。膨らみは描く前に形や断面を選べる', async ({ page }) => {

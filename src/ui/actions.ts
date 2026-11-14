@@ -76,6 +76,10 @@ function defineActions(app: App, d: ActionDeps) {
     togglePause: { label: '揺れを一時停止', keys: ['P'], run: () => app.setPaused(!app.paused), duringPreview: true },
     toggleMulti: { label: '3面図', keys: ['M'], run: () => app.setViewOption('multi', !app.view.multi), duringPreview: true },
     toggleGrid: { label: 'グリッド', keys: ['Shift+G'], run: () => app.setViewOption('grid', !app.view.grid), duringPreview: true },
+    toggleTransparent: {
+      label: '背景を透過', desc: '3Dビューと書き出しの背景を透過にする・背景色で塗る(色は右パネルの「カメラと背景」で選ぶ)',
+      run: () => app.setBackgroundTransparent(app.project.background !== null),
+    },
     cleanView: {
       label: '編集表示クリア', keys: ['C'], run: () => app.clearEditView(), duringPreview: true, helpLabel: '表示クリア(編集用の表示をまとめて切る)',
       desc: '見栄えを確かめるため、編集用の表示をまとめて切る(ウェイトの重ね表示・画像を薄く・ポップを一時OFF・揺れを一時停止・グリッド)。押すたびに切るだけで、元には戻さない',
@@ -133,7 +137,7 @@ function defineActions(app: App, d: ActionDeps) {
 type CommandName = keyof ReturnType<typeof defineActions>;
 
 /** 表示の切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す) */
-type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause';
+type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'transparent';
 
 /**
  * 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く)。
@@ -154,6 +158,7 @@ const NAV_ACTIONS: readonly NavGroup[] = [
       { cmd: 'toggleOverlay', icon: 'overlay', text: 'ウェイト', check: 'overlay', name: 'ウェイトの重ね表示' },
       { cmd: 'toggleFade', icon: 'fade', text: '画像を薄く', check: 'fade' },
       { cmd: 'toggleGrid', icon: 'grid', text: 'グリッド', check: 'grid' },
+      { cmd: 'toggleTransparent', icon: 'transparent', text: '透過', check: 'transparent', name: '背景を透過' },
       { cmd: 'cleanView', icon: 'cleanView', text: '表示クリア' },
     ],
   },
@@ -363,7 +368,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
     for (const b of cmdButtons) { const off = !enabled(b.dataset.cmd!); if (b.disabled !== off) b.disabled = off; }
     setText(undoLabel, app.history.undoLabel ? `(${app.history.undoLabel})` : '');
     setText(redoLabel, app.history.redoLabel ? `(${app.history.redoLabel})` : '');
-    const on: Record<ViewCheck, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused };
+    const on: Record<ViewCheck, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused, transparent: app.project.background === null };
     // 重ね表示は3つの状態なので、メニューには今の状態を書き、左のツールバーには全レイヤーのときだけ印を付ける
     const mode = app.overlayMode;
     for (const el of checks) setText(el, el.dataset.check === 'overlay' ? (mode === 'off' ? '' : mode === 'all' ? '全レイヤー' : '選択中') : on[el.dataset.check as ViewCheck] ? '✓' : '');
@@ -387,7 +392,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   app.on('status', refresh); // 書き出しの始まり・終わりなど(fps の更新は別のイベントなので、ここでは拾わない)
   app.store.on('layers', refresh);
   app.store.on('replace', refresh);
-  app.store.on('project', ({ keys }) => { if (keys.includes('take')) refresh(); });
+  app.store.on('project', ({ keys }) => { if (keys.includes('take') || keys.includes('background')) refresh(); });
 
   /* ---------- ツールの表示(ツールオプションの欄は ui/toolOptions.ts) ---------- */
   const toolButtons = [...ui.toolNav.querySelectorAll<HTMLButtonElement>('.tool')];
