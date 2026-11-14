@@ -558,7 +558,9 @@
     <section class="flex flex-col gap-2">
       <h4 class="font-bold">ウェイトの重ね表示</h4>
       <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlay">塗るときは自動でON</label><button type="button" class="help-btn" data-help="vAutoOverlayHelp"></button></span><input id="vAutoOverlay" type="checkbox" class="toggle toggle-sm"></div>
-      <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。ほかのツールに移っても自動ではOFFにしません。</p>
+      <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。手でONにした表示は、この設定では変わりません。</p>
+      <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlayOff">塗り終えたら自動でOFF</label><button type="button" class="help-btn" data-help="vAutoOverlayOffHelp"></button></span><input id="vAutoOverlayOff" type="checkbox" class="toggle toggle-sm"></div>
+      <p id="vAutoOverlayOffHelp" class="help-text" hidden>自動でONにした重ね表示を、ほかのツールに移ったときや「全体をぼかす」を閉じたときにOFFにします。手でONにした表示や、塗っている間に手で切り替えた表示はそのまま残します。</p>
     </section>
     <section id="setHideFullRow" class="flex flex-col gap-2 mt-4">
       <h4 class="font-bold">UIを隠す</h4>

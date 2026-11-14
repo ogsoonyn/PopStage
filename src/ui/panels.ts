@@ -245,6 +245,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   for (const [el, key] of viewToggles) el.addEventListener('change', () => app.setViewOption(key, el.checked));
   ui.vPause.addEventListener('change', () => app.setPaused(ui.vPause.checked));
   ui.vAutoOverlay.addEventListener('change', () => app.setAutoOverlay(ui.vAutoOverlay.checked));
+  ui.vAutoOverlayOff.addEventListener('change', () => app.setAutoOverlayOff(ui.vAutoOverlayOff.checked));
 
   /* ---------- ツールオプション ---------- */
 
@@ -535,6 +536,8 @@ export function bindPanels(app: App): { refresh: () => void } {
     for (const [el, mode] of overlayRadios) el.checked = app.overlayMode === mode;
     ui.vPause.checked = app.paused;
     ui.vAutoOverlay.checked = app.autoOverlay;
+    ui.vAutoOverlayOff.checked = app.autoOverlayOff;
+    ui.vAutoOverlayOff.disabled = !app.autoOverlay;
   }
 
   let queued = false;

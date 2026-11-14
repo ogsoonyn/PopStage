@@ -295,7 +295,7 @@ test('表示の切り替えはキーで変えても覚える。ファイルの�
   expect(await page.evaluate(() => (window as any).__downloads)).toBe(0);
 });
 
-test('塗るツールを選ぶと重ね表示を自動でONにする。設定で切れて、ブラウザに覚える', async ({ page }) => {
+test('塗るツールを選ぶと重ね表示を自動でONにし、離れると自動で入れた分だけOFFにする。設定で切れて、ブラウザに覚える', async ({ page }) => {
   await boot(page);
   const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
   const overlay = () => app(a => a.view.overlay as boolean);
@@ -322,19 +322,66 @@ test('塗るツールを選ぶと重ね表示を自動でONにする。設定で
     expect(await overlay(), key).toBe(true);
     await expect(page.locator('#vOverlaySel')).toBeChecked();
   }
-  // 塗るツールから離れても切らない。塗るツールのままOFFにしたら、そのまま
-  await page.keyboard.press('g');
+  // 自動で入れた表示は、塗るツールから離れると切る(塗るツールどうしの切り替えでは切らない)
+  await page.keyboard.press('e');
   expect(await overlay()).toBe(true);
+  await page.keyboard.press('g');
+  expect(await overlay()).toBe(false);
+  await expect(page.locator('#vOverlayOff')).toBeChecked();
+  // 自動で入れたまま開き直しても、離れたら切る
+  await page.keyboard.press('b');
+  await reboot();
+  await page.locator('#view').focus();
+  expect(await app(a => [a.tool, a.view.overlay])).toEqual(['brush', true]);
+  await page.keyboard.press('g');
+  expect(await overlay()).toBe(false);
+  // 塗るツールの間に手で切り替えた表示は、離れても残す
+  await page.keyboard.press('b');
+  await page.keyboard.press('w'); // 選択中 → 全レイヤー
+  await page.keyboard.press('g');
+  expect(await app(a => a.overlayMode)).toBe('all');
+  // 手で入れてから塗るツールにしたときも残す
+  await overlayOff();
+  await page.keyboard.press('w');
+  await page.keyboard.press('b');
+  await page.keyboard.press('g');
+  expect(await app(a => a.overlayMode)).toBe('selected');
+  // 塗るツールのままOFFにしたら、そのまま
   await page.keyboard.press('b');
   await overlayOff();
   expect(await overlay()).toBe(false);
   await page.keyboard.press('b'); // 選び直しでは入れない
   expect(await overlay()).toBe(false);
-  // 「全体をぼかす」を開いてもONになる
-  await page.evaluate(() => (document.querySelector('[data-cmd=smoothAll]') as HTMLButtonElement).click());
-  await expect(page.locator('#blurDialog')).toBeVisible();
+  // 「全体をぼかす」を開いてもONになり、塗るツール以外で開いたときは閉じると切る
+  const blurOnce = async () => {
+    await page.evaluate(() => (document.querySelector('[data-cmd=smoothAll]') as HTMLButtonElement).click());
+    await expect(page.locator('#blurDialog')).toBeVisible();
+    expect(await overlay()).toBe(true);
+    await page.locator('#blurCancel').click();
+    await page.locator('#view').focus();
+  };
+  await blurOnce();
+  expect(await overlay()).toBe(true); // ブラシのままなので残す
+  await page.keyboard.press('g');
+  expect(await overlay()).toBe(false);
+  await blurOnce();
+  expect(await overlay()).toBe(false);
+  // 自動でOFFの設定を切ると、離れても残す。切ったことは覚える
+  await openSettings();
+  await page.locator('#vAutoOverlayOff').uncheck();
+  await page.keyboard.press('Escape');
+  await page.locator('#view').focus();
+  await page.keyboard.press('b');
+  await page.keyboard.press('g');
   expect(await overlay()).toBe(true);
-  await page.locator('#blurCancel').click();
+  await reboot();
+  expect(await app(a => a.autoOverlayOff)).toBe(false);
+  await openSettings();
+  await expect(page.locator('#vAutoOverlayOff')).not.toBeChecked();
+  await page.locator('#vAutoOverlayOff').check();
+  await page.keyboard.press('Escape');
+  await page.locator('#view').focus();
+  await page.keyboard.press('b');
 
   // 起動して前回の塗るツールを戻すだけでは入れない
   await page.locator('#view').focus();
@@ -355,6 +402,7 @@ test('塗るツールを選ぶと重ね表示を自動でONにする。設定で
   expect(await app(a => a.autoOverlay)).toBe(false);
   await openSettings();
   await expect(page.locator('#vAutoOverlay')).not.toBeChecked();
+  await expect(page.locator('#vAutoOverlayOff')).toBeDisabled(); // 自動でONにしないなら、OFFの設定は効かない
 });
 
 test('左のメニュー: 表示クリアで編集用の表示をまとめて切る。レイヤー向けの操作と、上のツールバーの揺れの切り替え', async ({ page }) => {

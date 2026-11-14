@@ -130,6 +130,10 @@ export class App extends Emitter<AppEvents> {
   uiHidden = false;
   /** 塗るツール(ブラシ・消しゴム・ぼかし・膨らみ)や「全体をぼかす」を使い始めたら、重ね表示を自動で入れる。ブラウザに覚える設定 */
   autoOverlay = true;
+  /** 自動で入れた重ね表示を、塗るツールから離れたり「全体をぼかす」を閉じたりしたときに切る。ブラウザに覚える設定 */
+  autoOverlayOff = true;
+  /** 今の重ね表示を自動で入れたか。重ね表示を手で変えたら false にし、手で入れた表示は自動で切らない。開き直しても続くよう prefs に覚える */
+  overlayAutoShown = false;
   /**
    * 「揺らす」ツールで画像を振った量(ワールド座標)。カメラは画像に付いて動くので画面上の位置は
    * 変わらないが、物理には平行移動と同じ動きとして伝える。画面だけの値で保存しない
@@ -322,20 +326,37 @@ export class App extends Emitter<AppEvents> {
 
   /* ---------- 状態の切り替え ---------- */
 
-  /** auto を false にすると、塗るツールでも重ね表示を自動で入れない(起動時に前回のツールを戻すとき) */
+  /** auto を false にすると、重ね表示を自動で入れも切りもしない(起動時に前回のツールを戻すとき、スマホと PC の幅を行き来するとき) */
   setTool(t: Tool, auto = true): void {
     const changed = t !== this.tool;
     this.tool = t;
     this.emit('tool', t);
+    // auto が false(起動時の復元・スマホの幅に入るとき)は切らない。PC の幅に戻ってブラシにしたとき、表示が消えたままになるため
+    if (auto && changed && !PAINT_TOOLS.includes(t)) this.autoHideOverlay();
     // 選び直しでは入れない(手で切った重ね表示を戻さない)。受け手が別のツールに戻したときも入れない(スマホで画像を開いたとき)
     if (auto && changed && this.tool === t && PAINT_TOOLS.includes(t)) this.autoShowOverlay();
   }
 
-  setAutoOverlay(on: boolean): void { this.autoOverlay = on; this.emit('view', undefined); }
+  setAutoOverlay(on: boolean): void {
+    this.autoOverlay = on;
+    if (!on) this.overlayAutoShown = false; // 自動でONを切ったら、OFFの設定も効かない(画面でも押せなくなる)
+    this.emit('view', undefined);
+  }
+  setAutoOverlayOff(on: boolean): void { this.autoOverlayOff = on; this.emit('view', undefined); }
 
-  /** 塗りが見えるよう重ね表示を入れる。塗るツールから離れても切らない */
+  /** 塗りが見えるよう重ね表示を入れる。入れたことを覚え、塗り終えたら autoHideOverlay で切る */
   private autoShowOverlay(): void {
-    if (this.autoOverlay && !this.view.overlay) this.setOverlayMode('selected');
+    if (!this.autoOverlay || this.view.overlay) return;
+    this.setOverlayMode('selected');
+    this.overlayAutoShown = true;
+    this.emit('view', undefined); // 自動で入れたことも覚える
+  }
+
+  /** 自動で入れた重ね表示を切る。塗るツールのままか「全体をぼかす」の途中なら、まだ切らない */
+  private autoHideOverlay(): void {
+    if (!this.overlayAutoShown || PAINT_TOOLS.includes(this.tool) || this.blurPreview) return;
+    this.overlayAutoShown = false;
+    if (this.autoOverlayOff) this.setOverlayMode('off');
   }
 
   /** そのレイヤーだけを選ぶ */
@@ -367,6 +388,7 @@ export class App extends Emitter<AppEvents> {
   }
 
   setOverlayMode(mode: OverlayMode): void {
+    this.overlayAutoShown = false; // 手で変えた表示は自動では切らない(自動で入れるときは、この後で立て直す)
     this.view.overlay = mode !== 'off';
     this.view.overlayAll = mode === 'all';
     this.syncView();
@@ -380,6 +402,7 @@ export class App extends Emitter<AppEvents> {
 
   setViewOption(key: keyof ViewOptions, on: boolean): void {
     this.view[key] = on;
+    if (key === 'overlay' || key === 'fade') this.overlayAutoShown = false;
     // 画像を薄くするのは塗りを見るためなので、重ね表示も合わせて入れる
     if (key === 'fade' && on) this.view.overlay = true;
     // 重ね表示を切ったら、次に入れたときは「選択中」から
@@ -390,6 +413,7 @@ export class App extends Emitter<AppEvents> {
   /** 見栄えの確認用に、編集のための表示(重ね表示・画像を薄く・ポップ一時OFF・揺れ一時停止・グリッド)をまとめて切る */
   clearEditView(): void {
     Object.assign(this.view, { overlay: false, overlayAll: false, fade: false, flat: false, grid: false });
+    this.overlayAutoShown = false;
     this.syncView();
     if (this.paused) this.setPaused(false);
   }
@@ -765,7 +789,7 @@ export class App extends Emitter<AppEvents> {
   endBlurPreview(apply: boolean, radius: number): void {
     const p = this.blurPreview; if (!p) return;
     this.blurPreview = null;
-    try { this.finishBlur(p, apply, radius); } finally { this.emit('blur', 'end'); }
+    try { this.finishBlur(p, apply, radius); } finally { this.emit('blur', 'end'); this.autoHideOverlay(); }
   }
 
   private finishBlur(p: NonNullable<App['blurPreview']>, apply: boolean, radius: number): void {

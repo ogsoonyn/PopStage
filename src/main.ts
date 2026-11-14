@@ -83,8 +83,10 @@ persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.b
   for (const k of ['overlay', 'overlayAll', 'grid', 'fade', 'multi'] as const) if (typeof saved[k] === 'boolean') app.view[k] = saved[k] as boolean;
   if (!app.view.overlay) app.view.overlayAll = false;
   if (typeof saved.autoOverlay === 'boolean') app.autoOverlay = saved.autoOverlay;
+  if (typeof saved.autoOverlayOff === 'boolean') app.autoOverlayOff = saved.autoOverlayOff;
+  app.overlayAutoShown = app.view.overlay && app.autoOverlay && saved.overlayAuto === true;
   app.syncView();
-  app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, overlayAll: v.overlayAll, grid: v.grid, fade: v.fade, multi: v.multi, autoOverlay: app.autoOverlay }); });
+  app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, overlayAll: v.overlayAll, grid: v.grid, fade: v.fade, multi: v.multi, autoOverlay: app.autoOverlay, autoOverlayOff: app.autoOverlayOff, overlayAuto: app.overlayAutoShown }); });
 }
 {
   const t = prefs.get<string>('tool');

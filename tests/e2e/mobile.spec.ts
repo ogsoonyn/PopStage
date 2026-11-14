@@ -251,6 +251,23 @@ test('幅を広げると PC の配置に戻る', async ({ page }) => {
   expect(await page.locator('#inflateDialog').evaluate(el => el.parentElement === document.body)).toBe(true);
 });
 
+test('PC の幅で自動で入れた重ね表示は、スマホの幅を行き来しても消えない', async ({ page }) => {
+  await boot(page);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await expect(page.locator('html')).not.toHaveClass(/mobile/);
+  const state = () => page.evaluate(() => { const a = (window as any).popstage; return [a.tool, a.view.overlay]; });
+  await page.evaluate(() => { const a = (window as any).popstage; a.setTool('grab'); a.setOverlayMode('off'); a.setTool('brush'); });
+  expect(await state()).toEqual(['brush', true]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('html')).toHaveClass(/mobile/);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await expect(page.locator('html')).not.toHaveClass(/mobile/);
+  expect(await state()).toEqual(['brush', true]);
+  // 戻った後も、塗るツールから離れれば切る
+  await page.evaluate(() => (window as any).popstage.setTool('grab'));
+  expect(await state()).toEqual(['grab', false]);
+});
+
 test("シートのタブは PC の右パネルと同じ分け方で、下のバーのアイコンは PC と同じ表から作る", async ({ page }) => {
   await boot(page);
   // 「レイヤー」: レイヤー一覧・ポップ量・揺れ(選択中のレイヤーの設定)
