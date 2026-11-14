@@ -20,6 +20,8 @@ const BLEND_ICONS: Record<BlendMode, string> = {
   add: '<path d="M1 15C3 10 6 9 12 9s9 1 11 6z" fill="currentColor" opacity=".35"/><path d="M7 9.6C8 4.5 9.8 2 12 2s4 2.5 5 7.6C15.5 9.2 14 9 12 9s-3.5.2-5 .6z" fill="currentColor"/>',
   max: '<path d="M1 15C2.5 8 4.5 4 8 4c2.6 0 3.8 2.4 4.6 5.2C13.6 6.6 15 5 17 5c3 0 4.8 4 6 10z" fill="currentColor" opacity=".8"/>',
 };
+/** 揺れのアイコン(一覧の右)。揺らさないレイヤーは薄くして斜線を引く(style.css の .swing-btn) */
+const SWING_ICON = `<svg class="swing-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/><path class="swing-off" d="M5 20 19 4"/></svg>`;
 const blendIcon = (b: BlendMode) => `<svg class="blend-ico" viewBox="0 0 24 16" width="20" height="14" aria-hidden="true">${BLEND_ICONS[b]}</svg>`;
 
 /** 選んだレイヤーで値が揃っていないときに、出力欄に出す文言 */
@@ -131,8 +133,8 @@ export function bindPanels(app: App): { refresh: () => void } {
   for (const b of BLEND_ORDER) blendSel.add(new Option(BLENDS[b].label, b));
   blendSel.addEventListener('change', () => { if (blendSel.value) exec('layer', '重ね方', { blend: blendSel.value as BlendMode }); });
   // 「揺れ」「自動で揺らす」は右のパネルと上のツールバーの両方に置く。どちらも App を通して変え、表示は refreshProps で合わせる
-  for (const el of [ui.pSwing, ui.tSwing]) el.addEventListener('change', () => app.setLayerSwing(el.checked));
-  for (const el of [ui.pAuto, ui.tAuto]) el.addEventListener('change', () => app.setAutoSwing(el.checked));
+  ui.pSwing.addEventListener('change', () => app.setLayerSwing(ui.pSwing.checked));
+  ui.pAuto.addEventListener('change', () => app.setAutoSwing(ui.pAuto.checked));
   // プリセットと揺らし方の選択肢はモデルの定義から作る
   const presetSel = ui.pPreset, motionSel = ui.pMotion;
   presetSel.replaceChildren(...PRESET_ORDER.map(k => new Option(PRESETS[k].label, k)), new Option('カスタム', 'custom'));
@@ -276,14 +278,28 @@ export function bindPanels(app: App): { refresh: () => void } {
   /** 一覧のクリックで選び直している間(選択モードを抜けるかの判定用) */
   let fromList = false;
 
+  /** 一覧の行の揺れのアイコン(レイヤーの id ごと) */
+  const swingBtns = new Map<string, HTMLButtonElement>();
+  function syncSwingBtn(id: string): void {
+    const b = swingBtns.get(id), l = app.doc?.layers.find(x => x.id === id);
+    if (!b || !l) return;
+    const on = l.physics.enabled;
+    if (b.getAttribute('aria-pressed') === String(on)) return;
+    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', '揺らす');
+    b.title = on ? '揺れ: ON(押すとOFF)' : '揺れ: OFF(押すとON)';
+  }
+
   function renderList(): void {
     const doc = app.doc;
     // 作り直してもキーボードのフォーカスを失わないよう、一覧にフォーカスがあったかを覚えておく
     const hadFocus = list.contains(document.activeElement) && document.activeElement?.tagName === 'LI';
     // 重ね方のボタンにあったフォーカスは、作り直したあと同じ行のボタンへ戻す(続けて押せるように)
-    const blendFocus = list.contains(document.activeElement) && document.activeElement?.classList.contains('blend-btn') ? document.activeElement.closest('li')?.dataset.id : undefined;
+    const focusBtn = list.contains(document.activeElement) ? ['blend-btn', 'swing-btn'].find(c => document.activeElement?.classList.contains(c)) : undefined;
+    const blendFocus = focusBtn ? document.activeElement?.closest('li')?.dataset.id : undefined;
     list.replaceChildren();
     thumbs.clear();
+    swingBtns.clear();
     if (!doc) { updateSelection(); return; }
     ui.layerCount.textContent = `${doc.layers.length} / ${LIMITS.maxLayers}`;
     // 上ほど手前(配列の後ろ)に並べる
@@ -328,9 +344,24 @@ export function bindPanels(app: App): { refresh: () => void } {
         if (pressed === layer.id) { pressed = null; return; } // 長押しで選択モードに入った直後のクリックでは切り替えない
         history.execute(PatchLayer.from(store, layer.id, { blend: next }, `重ね方を${BLENDS[next].label}に`));
       });
+      // 揺れのアイコンも押すとその行だけ揺らす・揺らさないを切り替える
+      const swingBtn = document.createElement('button');
+      swingBtn.type = 'button'; swingBtn.className = 'swing-btn';
+      swingBtn.innerHTML = SWING_ICON;
+      swingBtn.dataset.id = layer.id;
+      swingBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (pressed === layer.id) { pressed = null; return; }
+        const l = app.doc?.layers.find(x => x.id === layer.id);
+        if (!l) return;
+        const on = !l.physics.enabled;
+        history.execute(PatchLayer.from(store, l.id, { physics: { ...l.physics, enabled: on } }, on ? '揺れをON' : '揺れをOFF'));
+      });
+      swingBtns.set(layer.id, swingBtn);
+      syncSwingBtn(layer.id);
       const popNum = document.createElement('span');
       popNum.textContent = String(layer.pop); popNum.title = `ポップ量 ${layer.pop}px`;
-      info.append(blendBtn, popNum);
+      info.append(swingBtn, blendBtn, popNum);
 
       li.append(eye, swatch, th, name, info);
       li.addEventListener('click', e => onRowClick(layer.id, e));
@@ -343,7 +374,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     });
     updateSelection();
     if (hadFocus) list.querySelector<HTMLElement>('li.is-primary-focus')?.focus();
-    if (blendFocus) list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(blendFocus)}"] .blend-btn`)?.focus();
+    if (blendFocus) list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(blendFocus)}"] .${focusBtn}`)?.focus();
   }
 
   /** 一覧の下から順の id(Shift の範囲選択用) */
@@ -493,7 +524,6 @@ export function bindPanels(app: App): { refresh: () => void } {
     const l = app.activeLayer, d = app.doc, p = app.project;
     const disabled = !l;
     for (const s of layerSections) for (const el of s.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select')) el.disabled = disabled;
-    ui.tSwing.disabled = ui.tAuto.disabled = disabled;
     // 膨らませるのプレビュー中は、新しいレイヤーに作るかどうかがこのレイヤーのポップ量で決まるので、ポップ量は触らせない。
     // レイヤー一覧も、仮に入れたレイヤーの名前や表示を変えて記録しないよう、操作できなくする
     if (app.previewingInflate) ui.pPop.disabled = ui.pPopN.disabled = true;
@@ -516,7 +546,7 @@ export function bindPanels(app: App): { refresh: () => void } {
       // 説明は画面に並べず、「?」で開く欄に入れる(選択欄の aria-describedby でも読み上げる)
       ui.pBlendDesc.textContent = blendMixed ? '選んだレイヤーで重ね方が違います。選ぶと全部をその重ね方にします。' : BLENDS[l.blend].desc;
       const swingMixed = !same(ls, x => x.physics.enabled);
-      for (const el of [ui.pSwing, ui.tSwing]) { el.checked = !swingMixed && l.physics.enabled; el.indeterminate = swingMixed; }
+      ui.pSwing.checked = !swingMixed && l.physics.enabled; ui.pSwing.indeterminate = swingMixed;
       const presetMixed = !same(ls, x => x.physics.preset), motionMixed = !same(ls, x => x.physics.motion);
       setSelect(presetSel, presetMixed, l.physics.preset);
       setSelect(motionSel, motionMixed, l.physics.motion);
@@ -538,7 +568,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     setRange(ui.pFov, ui.pFovO, p.camera.fov, `${p.camera.fov}°`);
     ui.pBgTransparent.checked = p.background === null;
     ui.pBgColor.value = p.background ?? app.bgColor;
-    ui.pAuto.checked = ui.tAuto.checked = p.autoSwing.enabled;
+    ui.pAuto.checked = p.autoSwing.enabled;
     setRange(ui.pPeriod, ui.pPeriodO, Math.round(p.autoSwing.period * 10), `${p.autoSwing.period.toFixed(1)}秒`);
     setRange(ui.pAutoStr, ui.pAutoStrO, Math.round(p.autoSwing.strength * 100), pct(p.autoSwing.strength * 100));
     for (const [el, key] of viewToggles) el.checked = app.view[key];
@@ -566,7 +596,12 @@ export function bindPanels(app: App): { refresh: () => void } {
     listQueued = true;
     requestAnimationFrame(() => { listQueued = false; renderList(); });
   };
-  store.on('layer', ({ keys }) => { if (keys.some(k => k === 'name' || k === 'visible' || k === 'pop' || k === 'blend')) queueList(); refresh(); });
+  store.on('layer', ({ layerId, keys }) => {
+    if (keys.some(k => k === 'name' || k === 'visible' || k === 'pop' || k === 'blend')) queueList();
+    // 揺れの設定はスライダーで続けて変わるので、一覧は作り直さずアイコンだけ合わせる
+    else if (keys.includes('physics')) syncSwingBtn(layerId);
+    refresh();
+  });
   store.on('document', refresh);
   store.on('project', refresh);
   // 一覧の外(新規・削除・ファイルの読み込みなど)で1枚を選び直したときは、選択モードを抜ける。一覧のタップで減ったときは抜けない

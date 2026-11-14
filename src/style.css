@@ -42,6 +42,12 @@ html.mobile #favList { max-height: 10rem; }
 
 
 .menu button:disabled { opacity: .4; pointer-events: none; }
+/* メニューの中のまとまりの見出しは、押せる項目と見分けられるよう、罫線の区切りに小さく添える */
+.dropdown-content.menu > li.menu-title {
+  margin-top: .375rem; padding: .375rem .75rem .125rem; border-top: 1px solid var(--color-base-300);
+  font-size: .6875rem; font-weight: 400; letter-spacing: .02em; color: color-mix(in oklab, var(--color-base-content) 50%, transparent);
+  pointer-events: none;
+}
 
 /* 3面図 */
 #multiView { width: clamp(170px, 24%, 340px); }
@@ -89,7 +95,7 @@ html.mobile #blurDialog { left: 50%; right: auto; transform: translateX(-50%); b
 @media (max-height: 900px) {
   #toolNav .nav-act .nav-ico { display: none; }
   /* アイコンが無いと名前が右上のキーと同じ高さに来るので、キーの分だけ右を空ける */
-  #toolNav .nav-act { padding-left: 2px; padding-right: 12px; padding-top: 2px; padding-bottom: 2px; }
+  #toolNav .nav-act { padding-left: 2px; padding-right: 12px; padding-top: 1px; padding-bottom: 1px; }
   /* ⇧W のような2文字のキーは名前と重なるので出さない(ツールチップとヘルプには出る) */
   #toolNav .nav-act.key-wide .tool-key { display: none; }
   #toolNav .nav-act.key-wide { padding-right: 2px; }
@@ -265,12 +271,15 @@ html.mobile #mPanes .btn-xs.btn-square { width: 2.25rem; height: 2.25rem; }
 #layerList li { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .layer-color { width: .5rem; height: .5rem; border-radius: 999px; flex-shrink: 0; }
 /* 一覧の重ね方のアイコン(押すと切り替え) */
-.blend-btn { display: inline-grid; place-items: center; padding: 1px 2px; border-radius: 4px; cursor: pointer; }
-.blend-btn:hover { background: color-mix(in oklab, var(--color-base-content) 15%, transparent); }
+.blend-btn, .swing-btn { display: inline-grid; place-items: center; padding: 1px 2px; border-radius: 4px; cursor: pointer; }
+.blend-btn:hover, .swing-btn:hover { background: color-mix(in oklab, var(--color-base-content) 15%, transparent); }
 /* スマホでは指で押せるよう、押せる範囲を広げる */
-html.mobile .blend-btn { min-width: 2.25rem; min-height: 2.25rem; }
-.blend-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
-.blend-ico { flex-shrink: 0; }
+html.mobile .blend-btn, html.mobile .swing-btn { min-width: 2.25rem; min-height: 2.25rem; }
+.blend-btn:focus-visible, .swing-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.blend-ico, .swing-ico { flex-shrink: 0; }
+/* 一覧の揺れのアイコン(押すと切り替え)。揺らさないレイヤーは薄くして斜線を引く */
+.swing-btn[aria-pressed="false"] { opacity: .45; }
+.swing-btn[aria-pressed="true"] .swing-off { display: none; }
 /* 選んだレイヤーで値が揃っていない */
 output.is-mixed { font-size: .7rem; opacity: .8; }
 /* 左のツールバーの「ウェイト」: 全レイヤー表示の印 */

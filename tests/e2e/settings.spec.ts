@@ -3,7 +3,7 @@ import { boot, watchGlErrors } from './helpers';
 
 watchGlErrors();
 
-const openSettings = (page: Page) => page.locator('#menubar [data-cmd=settings]').click();
+const openSettings = (page: Page) => page.locator('#toolOptions [data-cmd=settings]').click();
 const box = (page: Page, id: string) => page.locator(`#setToolbarList input[data-nav="${id}"]`);
 const nav = (page: Page, id: string) => page.locator(`#toolNav [data-nav="${id}"]`);
 /** 見えている区切りが、ツールバーの端や続けて並んでいないか */

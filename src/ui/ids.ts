@@ -11,7 +11,6 @@ export const UI_IDS = {
   brushSize: 'input', brushSizeO: 'output', brushStrength: 'input', brushStrengthO: 'output',
   brushHardness: 'input', brushHardnessO: 'output', brushPressure: 'select', toolHint: 'span',
   tInflKind: 'select', tInflProfile: 'select', tInflSoft: 'input', tInflSoftO: 'output', tInflAngle: 'input', tInflAngleO: 'output', tInflBlend: 'select',
-  tSwing: 'input', tAuto: 'input',
   // ツールバー・3Dビュー
   toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', keyPath: 'div', inflateFrame: 'div', takeCam: 'button',
   playBar: 'div', playStart: 'button', playStop: 'button', playPause: 'button', playTime: 'span', playTrack: 'div', playKeys: 'div', playLoop: 'span', playCam: 'button', mFine: 'button', busy: 'div', uiRestore: 'button', panelToggle: 'button', sidePanel: 'aside',
@@ -53,7 +52,7 @@ export const UI_IDS = {
   recentDialog: 'dialog', recentEmpty: 'p', recentList: 'ul', recentClear: 'button',
   // 開いている作業(タブ)の一覧(スマホ)
   tabDialog: 'dialog', tabList: 'ul', tabOpen: 'button',
-  helpDialog: 'dialog', helpOps: 'div', helpKeys: 'div', aboutDialog: 'dialog', aboutVersion: 'p',
+  helpDialog: 'dialog', helpOps: 'div', helpKeys: 'div', aboutDialog: 'dialog', aboutUpdated: 'p',
   toasts: 'div',
 } as const satisfies Record<string, keyof HTMLElementTagNameMap>;
 

@@ -211,7 +211,10 @@ test('設定はブラウザに覚え、読み込み直しても戻る(ファイ�
   await page.locator('#view').focus();
   // ブラシ・表示・ツール・背景を変える
   await page.locator('#brushSize').fill('150');
+  // 筆圧は設定の画面にある
+  await page.locator('#toolOptions [data-cmd=settings]').click();
   await page.locator('#brushPressure').selectOption('size');
+  await page.keyboard.press('Escape');
   await page.locator('#vGrid').check();
   await page.locator('#vMulti').check();
   await page.locator('#view').focus();
@@ -307,7 +310,7 @@ test('塗るツールを選ぶと重ね表示を自動でONにし、離れると
     await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
   };
   // 設定は右上の歯車から開く
-  const openSettings = () => page.locator('#menubar [data-cmd=settings]').click();
+  const openSettings = () => page.locator('#toolOptions [data-cmd=settings]').click();
   await openSettings();
   await expect(page.locator('#vAutoOverlay')).toBeChecked();
   await page.keyboard.press('Escape');
@@ -405,7 +408,7 @@ test('塗るツールを選ぶと重ね表示を自動でONにし、離れると
   await expect(page.locator('#vAutoOverlayOff')).toBeDisabled(); // 自動でONにしないなら、OFFの設定は効かない
 });
 
-test('左のメニュー: 表示クリアで編集用の表示をまとめて切る。レイヤー向けの操作と、上のツールバーの揺れの切り替え', async ({ page }) => {
+test('左のメニュー: 表示クリアで編集用の表示をまとめて切る。レイヤー向けの操作と、一覧の揺れのアイコン・自動揺れ', async ({ page }) => {
   await boot(page);
   await openTab(page, 'layer');
   const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
@@ -433,25 +436,37 @@ test('左のメニュー: 表示クリアで編集用の表示をまとめて切
   expect(await sum()).not.toBe(s0);
   await page.keyboard.press('Control+z');
 
-  // 上のツールバーの「揺れ」「自動で揺らす」は右のパネルと連動する
+  // 一覧の行の揺れのアイコンと、左のツールバーの「自動揺れ」は、右のパネルと連動する
   const swing = () => app(a => [a.activeLayer.physics.enabled, a.project.autoSwing.enabled]);
   const [sw0, au0] = await swing();
-  await page.locator('#tSwing').click();
-  await page.locator('#tAuto').click();
+  const rowSwing = (i = 0) => page.locator('#layerList li .swing-btn').nth(i);
+  const autoBtn = page.locator('nav button[data-cmd=toggleAutoSwing]');
+  await expect(rowSwing()).toHaveAttribute('aria-pressed', String(sw0));
+  await expect(autoBtn).toHaveAttribute('aria-pressed', String(au0));
+  await rowSwing().click();
+  await autoBtn.click();
   expect(await swing()).toEqual([!sw0, !au0]);
   await expect(page.locator('#pSwing')).toBeChecked({ checked: !sw0 });
   await expect(page.locator('#pAuto')).toBeChecked({ checked: !au0 });
+  await expect(rowSwing()).toHaveAttribute('aria-pressed', String(!sw0));
+  await expect(autoBtn).toHaveAttribute('aria-pressed', String(!au0));
+  await expect(page.locator('#menubar [data-check=autoSwing]')).toHaveText(au0 ? '' : '✓');
   await page.locator('#pSwing').click();
-  await expect(page.locator('#tSwing')).toBeChecked({ checked: sw0 });
-  // 1手ずつ元に戻せ、上のツールバーの表示も戻る
+  await expect(rowSwing()).toHaveAttribute('aria-pressed', String(sw0));
+  // 1手ずつ元に戻せ、アイコンも戻る
   await page.keyboard.press('Control+z');
   expect(await swing()).toEqual([!sw0, !au0]);
-  await expect(page.locator('#tSwing')).toBeChecked({ checked: !sw0 });
-  // レイヤーを切り替えると、そのレイヤーの揺れを映す
-  await app(a => { a.addLayer(); const l = a.activeLayer; l.physics = { ...l.physics, enabled: false }; a.setActiveLayer(a.doc.layers[0].id); a.setActiveLayer(l.id); });
-  await expect(page.locator('#tSwing')).toBeChecked({ checked: false });
-  await app(a => a.setActiveLayer(a.doc.layers[0].id));
-  await expect(page.locator('#tSwing')).toBeChecked({ checked: !sw0 });
+  await expect(rowSwing()).toHaveAttribute('aria-pressed', String(!sw0));
+  // 行のアイコンは、選んでいなくても押した行だけに効く
+  await app(a => a.addLayer());
+  const both = () => app(a => a.doc.layers.map((l: any) => l.physics.enabled) as boolean[]);
+  const [b0, b1] = await both();
+  const active = await app(a => a.activeLayer.id);
+  await rowSwing(1).click(); // 一覧は上ほど手前なので、2行目は下のレイヤー(layers[0])
+  expect(await both()).toEqual([!b0, b1]);
+  expect(await app(a => a.activeLayer.id)).toBe(active);
+  await page.keyboard.press('Control+z');
+  expect(await both()).toEqual([b0, b1]);
 
   // 膨らませるのプレビュー中も C は効く
   await page.locator('#view').focus();
@@ -596,8 +611,8 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(19); // 開く・保存・書き出しは既定では隠しているが、DOM にはある
-  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(19);
+  await expect(acts).toHaveCount(20); // 開く・保存・書き出しは既定では隠しているが、DOM にはある
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(20);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
   // ツールをいちばん上に置き、まとまりは上のメニューと同じ順に並べる
   await expect(page.locator('#toolNav > *').first()).toHaveAttribute('data-tool', 'brush');
@@ -627,14 +642,14 @@ test('左のツールバー: 表示の切り替えは、入・切を aria-presse
     await expect(b).toHaveAttribute('aria-pressed', 'false');
     await expect(page.locator(`#menubar [data-check=${key}]`)).toHaveText('');
   }
-  // ウェイトは押すたびに OFF → 選択中 → 全レイヤー → OFF。全レイヤーのときは「全」の印を付け、メニューには状態を書く
+  // ウェイトは押すたびに OFF → 選択中 → 全レイヤー → OFF。全レイヤーのときは「全」の印を付ける(メニューには状態を出さない)
   await allOff();
   const ov = btn('toggleOverlay');
   await expect(ov.locator('.tool-key')).toHaveText('W');
-  for (const [pressed, menu, badge] of [['true', '選択中', false], ['true', '全レイヤー', true], ['false', '', false]] as const) {
+  await expect(page.locator('#menubar [data-check=overlay]')).toHaveCount(0);
+  for (const [pressed, badge] of [['true', false], ['true', true], ['false', false]] as const) {
     await ov.click();
     await expect(ov).toHaveAttribute('aria-pressed', pressed);
-    await expect(page.locator('#menubar [data-check=overlay]')).toHaveText(menu);
     await expect(ov.locator('.nav-badge')).toBeVisible({ visible: badge });
   }
   // 画像を薄くを入れると、重ね表示も入るので、ウェイトのボタンも入になる
@@ -907,7 +922,7 @@ test('ポップ量のスライダーの最大値は設定で変えられ(既定 
   expect(await pop()).toBe(900);
   await expect(page.locator('#pPop')).toHaveValue('500');
   // 設定で 1200px にすると、右端が 1200px になる(1000px を超えるので後半は粗い目盛り)
-  await page.locator('#menubar [data-cmd=settings]').click();
+  await page.locator('#toolOptions [data-cmd=settings]').click();
   await expect(page.locator('#setPopMax')).toHaveValue('500');
   await page.locator('#setPopMax').fill('1200');
   await page.locator('#setPopMax').press('Enter');
@@ -916,7 +931,7 @@ test('ポップ量のスライダーの最大値は設定で変えられ(既定 
   await page.locator('#pPop').fill('1000');
   expect(await pop()).toBe(1200);
   // 範囲の外の値は 100〜1500px に収める。設定は開き直しても覚えている
-  await page.locator('#menubar [data-cmd=settings]').click();
+  await page.locator('#toolOptions [data-cmd=settings]').click();
   await page.locator('#setPopMax').fill('5000');
   await page.locator('#setPopMax').press('Enter');
   await expect(page.locator('#setPopMax')).toHaveValue('1500');

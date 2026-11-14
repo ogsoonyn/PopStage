@@ -80,7 +80,7 @@ function defineActions(app: App, d: ActionDeps) {
     brushSmaller: { label: 'ブラシを小さく', keys: ['['], run: brushStep(-1), duringPreview: true, helpRow: 'ブラシを小さく・大きく' },
     brushLarger: { label: 'ブラシを大きく', keys: [']'], run: brushStep(1), duringPreview: true, helpRow: 'ブラシを小さく・大きく' },
     // 表示
-    toggleOverlay: { label: 'ウェイトの重ね表示', keys: ['W'], desc: '押すたびに OFF → 選択中 → 全レイヤー', run: () => app.cycleOverlay(), duringPreview: true },
+    toggleOverlay: { label: 'ウェイトの表示切替', helpLabel: 'ウェイトの重ね表示', keys: ['W'], desc: '押すたびに OFF → 選択中 → 全レイヤー', run: () => app.cycleOverlay(), duringPreview: true },
     toggleFade: { label: '画像を薄く', keys: ['Shift+W'], run: () => app.setViewOption('fade', !app.view.fade), duringPreview: true },
     toggleFlat: { label: 'ポップを一時OFF', keys: ['F'], run: () => app.setViewOption('flat', !app.view.flat), duringPreview: true },
     togglePause: { label: '揺れを一時停止', keys: ['P'], run: () => app.setPaused(!app.paused), duringPreview: true },
@@ -112,6 +112,10 @@ function defineActions(app: App, d: ActionDeps) {
       enabled: () => !(app.previewing && document.documentElement.classList.contains('mobile')),
     },
     // アニメーション
+    toggleAutoSwing: {
+      label: '自動で揺らす', desc: '周期的に自動で揺らす・止める(周期と強さは右パネルの「アニメーション」で決める)',
+      run: () => app.setAutoSwing(!app.project.autoSwing.enabled), enabled: () => !!app.activeLayer,
+    },
     toggleRecording: {
       label: '操作の記録', helpLabel: '記録の開始・停止', keys: ['R'], desc: 'つかむ・揺らす・移動・視点の操作を覚える(最長 60 秒)',
       run: () => app.toggleRecording(), enabled: () => !!app.doc && !app.exporting,
@@ -153,15 +157,15 @@ function defineActions(app: App, d: ActionDeps) {
     selectAllLayers: { label: 'すべてのレイヤーを選ぶ', keys: ['Ctrl+A'], run: () => app.selectAllLayers(), enabled: () => (app.doc?.layers.length ?? 0) > 1 },
     // お気に入り
     addFavorite: {
-      label: 'お気に入りに残す', keys: ['K'], desc: '今の揺れと動きの組み合わせを残す(画像とウェイトは残さない)',
+      label: 'お気に入りに追加', keys: ['K'], desc: '今の揺れと動きの組み合わせを残す(画像とウェイトは残さない)',
       run: () => app.addFavorite(), enabled: () => app.canEditFavorites && app.project.favorites.length < LIMITS.favorites,
     },
     // ヘルプ・その他
-    settings: { label: '設定', desc: 'ツール全体の設定(左のツールバーに出すボタンなど)', run: d.openSettings, duringPreview: true },
+    settings: { label: '設定', desc: 'ツール全体の設定(筆圧・左のツールバーに出すボタンなど)', run: d.openSettings, duringPreview: true },
     help: { label: '操作方法', run: () => ui.helpDialog.showModal(), duringPreview: true },
     about: {
       label: 'PukuPop について', duringPreview: true,
-      run: () => { ui.aboutVersion.textContent = `バージョン ${__APP_VERSION__} ・ .pukupop 形式 v1`; ui.aboutDialog.showModal(); },
+      run: () => { ui.aboutUpdated.textContent = updatedText(); ui.aboutDialog.showModal(); },
     },
     togglePerf: { label: 'パフォーマンスのデバッグ表示', keys: ['Ctrl+Shift+Alt+P'], run: d.togglePerf, duringPreview: true, hidden: true },
   } satisfies Record<string, Action>;
@@ -169,8 +173,16 @@ function defineActions(app: App, d: ActionDeps) {
 
 type CommandName = keyof ReturnType<typeof defineActions>;
 
-/** 切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す)。transparent だけはファイルに入る背景の設定 */
-type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'transparent' | 'panel' | 'keyPath' | 'keyGhost';
+/** 「PukuPop について」に出す、最後のコミットの日時(ビルドのときに埋め込む。git が無い所でビルドしたときは出さない) */
+function updatedText(): string {
+  const d = new Date(__COMMIT_DATE__);
+  if (!__COMMIT_DATE__ || Number.isNaN(d.getTime())) return '';
+  const p2 = (n: number) => String(n).padStart(2, '0');
+  return `最終更新 ${d.getFullYear()}/${p2(d.getMonth() + 1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+
+/** 切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す)。transparent と autoSwing はファイルに入る設定 */
+type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'transparent' | 'panel' | 'keyPath' | 'keyGhost' | 'autoSwing';
 
 /**
  * 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く)。
@@ -212,6 +224,7 @@ const NAV_ACTIONS: readonly NavGroup[] = [
   {
     label: 'アニメ', title: 'アニメーションの操作',
     items: [
+      { cmd: 'toggleAutoSwing', icon: 'autoSwing', text: '自動揺れ', check: 'autoSwing', name: '自動で揺らす' },
       // 再生中は「停止」に変わる(下の refresh)
       { cmd: 'toggleKeyPlay', icon: 'play', text: '再生', name: 'キーフレームを再生' },
       { cmd: 'toggleKeyPath', icon: 'keyPath', text: '経路', check: 'keyPath', name: 'キーフレームの経路' },
@@ -430,10 +443,11 @@ export function bindActions(app: App, deps: ActionDeps): void {
     const on: Record<ViewCheck, boolean> = {
       overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused,
       transparent: app.project.background === null, panel: !app.panelClosed, keyPath: app.keyOverlay.path, keyGhost: app.keyOverlay.ghost,
+      autoSwing: app.project.autoSwing.enabled,
     };
-    // 重ね表示は3つの状態なので、メニューには今の状態を書き、左のツールバーには全レイヤーのときだけ印を付ける
+    // 重ね表示は3つの状態なので、左のツールバーには全レイヤーのときだけ印を付ける(メニューには状態を出さない。幅が変わるため)
     const mode = app.overlayMode;
-    for (const el of checks) setText(el, el.dataset.check === 'overlay' ? (mode === 'off' ? '' : mode === 'all' ? '全レイヤー' : '選択中') : on[el.dataset.check as ViewCheck] ? '✓' : '');
+    for (const el of checks) setText(el, on[el.dataset.check as ViewCheck] ? '✓' : '');
     for (const el of overlayBadges) {
       el.hidden = mode !== 'all';
       // 読み上げでも3つの状態を区別できるようにする
@@ -464,7 +478,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   app.on('status', refresh); // 書き出しの始まり・終わりなど(fps の更新は別のイベントなので、ここでは拾わない)
   app.store.on('layers', refresh);
   app.store.on('replace', refresh);
-  app.store.on('project', ({ keys }) => { if (keys.includes('take') || keys.includes('background')) refresh(); });
+  app.store.on('project', ({ keys }) => { if (keys.includes('take') || keys.includes('background') || keys.includes('autoSwing')) refresh(); });
 
   /* ---------- ツールの表示(ツールオプションの欄は ui/toolOptions.ts) ---------- */
   const toolButtons = [...ui.toolNav.querySelectorAll<HTMLButtonElement>('.tool')];

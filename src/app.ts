@@ -1336,7 +1336,7 @@ export class App extends Emitter<AppEvents> {
     if (!doc || !this.canEditFavorites) return;
     if (list.length >= LIMITS.favorites) { toast(`お気に入りは ${LIMITS.favorites} 件までです。要らないものを消してから残してください。`, 'warning'); return; }
     const f = captureFavorite(this.project, doc, { name: nextFavoriteName(list), playing: this.takeState === 'playing' });
-    this.history.execute(new SetFavorites(`お気に入りに残す「${f.name}」`, list, [...list, f]));
+    this.history.execute(new SetFavorites(`お気に入りに追加「${f.name}」`, list, [...list, f]));
     toast(`「${f.name}」に残しました。`, 'success', 2000);
   }
 
