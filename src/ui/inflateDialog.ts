@@ -60,7 +60,7 @@ export function bindInflateDialog(app: App): void {
   function fill(): void {
     const s = app.inflateState; if (!s) return;
     const layer = app.store.findLayer(s.layerId)?.layer, st = s.settings;
-    ui.inflTarget.textContent = `レイヤー「${layer?.name ?? ''}」に重ねます。枠の辺・角で大きさ、中で移動、上の丸で回せます。枠の外をドラッグすると描き直します。`;
+    ui.inflTarget.textContent = `レイヤー「${layer?.name ?? ''}」に重ねます。範囲は枠で直せ、枠の外をドラッグすると描き直します。`;
     set(kind, st.shape);
     set(w, String(Math.round(s.area.w))); set(h, String(Math.round(s.area.h)));
     set(height, String(popToSlider(st.height))); set(heightN, String(st.height));

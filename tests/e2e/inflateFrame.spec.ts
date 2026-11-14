@@ -72,6 +72,18 @@ test('膨らませる: 枠の辺・角で大きさを、中で位置を変えら
   expect(a3.y).toBeGreaterThan(a2.y); // 画像の座標は y が上向き
   await expect.poll(key).not.toBe(k0);
 
+  // 枠を動かしている途中の Esc は、そのドラッグだけをやめて掴む前に戻す(プレビューは残る)
+  const mid = await framePoint(page, 0, 0);
+  await page.mouse.move(mid.x, mid.y);
+  await page.mouse.down();
+  await page.mouse.move(mid.x + 50, mid.y + 30, { steps: 5 });
+  await expect.poll(() => app(page, a => a.inflateState.area.x)).not.toBe(a3.x);
+  await page.keyboard.press('Escape');
+  await page.mouse.move(mid.x + 80, mid.y + 40, { steps: 3 });
+  await page.mouse.up();
+  expect(await app(page, a => a.previewingInflate)).toBe(true);
+  expect(await app(page, a => ({ ...a.inflateState.area }))).toEqual(a3);
+
   // 枠の外をドラッグすると、今までどおり描き直す
   await dragOnStage(page, [0.15, 0.15], [0.25, 0.25]);
   const a4 = await app(page, a => ({ ...a.inflateState.area }));

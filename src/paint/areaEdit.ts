@@ -57,9 +57,9 @@ export function resizeArea(a: Area, angleDeg: number, h: Handle, start: Pt, p: P
   let w = h.su ? Math.max(MIN_SIZE, a.w + h.su * du * k) : a.w;
   let hh = h.sv ? Math.max(MIN_SIZE, a.h + h.sv * dv * k) : a.h;
   if (o.keepAspect) {
-    // 角は大きく変わった方に合わせ、辺は動かした向きの倍率をもう一方にも掛ける
+    // 角は大きく変わった方(広げるのも縮めるのも)に合わせ、辺は動かした向きの倍率をもう一方にも掛ける
     const fu = w / a.w, fv = hh / a.h;
-    const f = h.su && h.sv ? Math.max(fu, fv) : h.su ? fu : fv;
+    const f = h.su && h.sv ? (Math.abs(Math.log(fu)) >= Math.abs(Math.log(fv)) ? fu : fv) : h.su ? fu : fv;
     const fMin = Math.max(MIN_SIZE / a.w, MIN_SIZE / a.h);
     const g = Math.max(f, fMin);
     w = a.w * g; hh = a.h * g;
@@ -69,6 +69,16 @@ export function resizeArea(a: Area, angleDeg: number, h: Handle, start: Pt, p: P
   const cv = o.fromCenter || !h.sv ? 0 : h.sv * (hh - a.h) / 2;
   const { u, v } = axes(angleDeg);
   return { x: a.x + u.x * cu + v.x * cv, y: a.y + u.y * cu + v.y * cv, w, h: hh };
+}
+
+/**
+ * 大きさを整数のピクセルにそろえる(範囲を描くときと同じ)。止める側の辺・角が動かないよう、丸めた差の半分だけ中心もずらす
+ */
+export function roundArea(r: Area, angleDeg: number, h: Handle, fromCenter = false): Area {
+  const w = Math.max(MIN_SIZE, Math.round(r.w)), hh = Math.max(MIN_SIZE, Math.round(r.h));
+  const cu = fromCenter || !h.su ? 0 : h.su * (w - r.w) / 2, cv = fromCenter || !h.sv ? 0 : h.sv * (hh - r.h) / 2;
+  const { u, v } = axes(angleDeg);
+  return { x: r.x + u.x * cu + v.x * cv, y: r.y + u.y * cu + v.y * cv, w, h: hh };
 }
 
 /** 範囲を start から p へ動かした分だけ移す */

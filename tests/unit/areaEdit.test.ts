@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { areaPoint, moveArea, resizeArea, rotateAngle, toLocal, wrapAngle, MIN_SIZE } from '../../src/paint/areaEdit';
+import { areaPoint, moveArea, resizeArea, roundArea, rotateAngle, toLocal, wrapAngle, MIN_SIZE } from '../../src/paint/areaEdit';
 
 const A = { x: 10, y: 20, w: 100, h: 60 };
 type P = { x?: number; y?: number; w?: number; h?: number };
@@ -48,6 +48,21 @@ describe('枠のハンドルで範囲を直す', () => {
     expect(c.w / c.h).toBeCloseTo(A.w / A.h);
     expect(c.h).toBeCloseTo(90);
     close(areaPoint(c, 0, -1, -1), areaPoint(A, 0, -1, -1));
+  });
+
+  it('Shift で角を内側へ動かすと、縦横比を保ったまま縮む', () => {
+    // 横だけ内側へ寄せても、縮んだ方(横)に合わせて縦も縮む
+    const c = resizeArea(A, 0, { su: 1, sv: 1 }, { x: 60, y: 50 }, { x: 10, y: 50 }, { keepAspect: true });
+    close(c, { w: 50, h: 30 });
+    close(areaPoint(c, 0, -1, -1), areaPoint(A, 0, -1, -1));
+  });
+
+  it('大きさを整数にそろえても、止める側の辺は動かない', () => {
+    const ang = 25, h = { su: -1, sv: 0 } as const;
+    const r = resizeArea(A, ang, h, areaPoint(A, ang, -1, 0), { x: areaPoint(A, ang, -1, 0).x - 10.37, y: areaPoint(A, ang, -1, 0).y });
+    const q = roundArea(r, ang, h);
+    expect(Number.isInteger(q.w) && Number.isInteger(q.h)).toBe(true);
+    close(areaPoint(q, ang, 1, 0), areaPoint(A, ang, 1, 0));
   });
 
   it('反対側を越えて裏返さず、最小の大きさで止まる', () => {

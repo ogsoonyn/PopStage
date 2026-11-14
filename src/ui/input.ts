@@ -17,7 +17,7 @@ import { fineFactor, wheelFineFactor, wheelDelta, isPinchWheel, FINE, isFineLock
 import { smoothZoom } from './smoothZoom';
 import { toast } from './dom';
 import { hitFrame, frameCursor, type FrameHit } from './inflateFrame';
-import { moveArea as shiftArea, resizeArea, rotateAngle, type Area } from '../paint/areaEdit';
+import { moveArea as shiftArea, resizeArea, roundArea, rotateAngle, type Area } from '../paint/areaEdit';
 
 /** 主ビューの拡大率の範囲(ホイール・ピンチ共通) */
 const ZOOM_MIN = 0.05, ZOOM_MAX = 10;
@@ -31,7 +31,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   /** 膨らませる範囲を描き始めた点(元画像のローカル座標) */
   let areaStart: { x: number; y: number } | null = null;
   /** 膨らませるの枠のハンドルで範囲を直している間の、掴んだもの・掴んだ点(元画像のローカル座標)・掴んだときの範囲と角度 */
-  let frameDrag: { hit: FrameHit; start: { x: number; y: number }; area: Area; angle: number } | null = null;
+  let frameDrag: { hit: FrameHit; start: { x: number; y: number }; area: Area; angle: number; cursor: string } | null = null;
   let space = false, alt = false, hover: { x: number; y: number; inside: boolean } | null = null;
   /** ポインタがキャンバスの上にあるか。Space の平行移動はフォーカスの場所ではなくこれで決める */
   let pointerInside = false;
@@ -53,7 +53,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   };
   /** 膨らませるのプレビュー中に、ポインタの下の枠のハンドルに合わせたカーソル(枠の外なら null) */
   function frameHover(): string | null {
-    if (frameDrag) return frameCursor(app, frameDrag.hit, true);
+    if (frameDrag) return frameDrag.cursor;
     if (app.tool !== 'inflate' || !app.previewingInflate || drag.mode || !last) return null;
     const hit = hitFrame(app, last.x, last.y, false);
     return hit ? frameCursor(app, hit, false) : null;
@@ -160,9 +160,9 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
 
   canvas.addEventListener('pointerdown', e => {
     // 指では、画像の外をなぞると回転する(右ドラッグの代わり)。ループ再生中は動いている画像で決める
-    // 膨らませるの枠のハンドルは、画像の外にはみ出していても掴めるようにする
+    // 膨らませるの枠のハンドル(大きさ・回す)は、画像の外にはみ出していても掴めるようにする(枠の中を触るのは、画像の外なら今までどおり回転)
     const outside = e.pointerType === 'touch' && app.tool !== 'pan' && !app.stage.pick(e.clientX, e.clientY)?.inside
-      && !(app.tool === 'inflate' && app.previewingInflate && hitFrame(app, e.clientX, e.clientY, true));
+      && !(app.tool === 'inflate' && app.previewingInflate && (hitFrame(app, e.clientX, e.clientY, true)?.kind ?? 'move') !== 'move');
     const orbit = e.button === 2 || (e.button === 0 && (app.tool === 'view' || outside) && !space);
     const pan = !orbit && (e.button === 1 || (e.button === 0 && (space || app.tool === 'pan')));
     // ループ再生中に画面を触ったら、再生をやめて手の操作を優先する。視点の操作(回転・平行移動)は再生したまま動かせる
@@ -305,7 +305,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (!p) return;
     const s = app.inflateState, hit = s ? hitFrame(app, e.clientX, e.clientY, e.pointerType === 'touch') : null;
     if (s && hit) {
-      frameDrag = { hit, start: { x: p.x, y: p.y }, area: { ...s.area }, angle: s.settings.angle };
+      frameDrag = { hit, start: { x: p.x, y: p.y }, area: { ...s.area }, angle: s.settings.angle, cursor: frameCursor(app, hit, true) };
       drag.mode = 'frame';
       app.holdImage(true);
       return;
@@ -320,8 +320,16 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
 
   // Esc などでプレビューが終わったら、描いている途中の範囲も捨てる(次に動かしたときに始め直さない)
   app.on('inflate', phase => {
-    if (phase === 'end' && (drag.mode === 'area' || drag.mode === 'frame')) { drag.mode = null; areaStart = null; frameDrag = null; app.holdImage(false); updateCursor(); }
+    if (phase === 'end' && (drag.mode === 'area' || drag.mode === 'frame')) { drag.mode = null; areaStart = null; frameDrag = null; app.holdImage(false); }
+    // パネルで大きさや角度を変えて枠がポインタの下へ来た・離れたときも、カーソルを合わせ直す
+    updateCursor();
   });
+  // 枠を直している途中の Esc は、そのドラッグだけをやめて掴む前に戻す(プレビューは残す。パネルの Esc より先に受ける)
+  window.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || drag.mode !== 'frame') return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    cancelDrag(); updateCursor();
+  }, true);
 
   /** 枠のハンドルで範囲を直す。大きさは Shift で縦横比を保ち、Alt で中心を止める。回すときは Shift で 15° ごと */
   function moveFrame(e: PointerEvent): void {
@@ -329,7 +337,10 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (!f || !p || !app.previewingInflate) return;
     if (f.hit.kind === 'rotate') app.updateInflate({ settings: { angle: rotateAngle(f.area, f.angle, f.start, p, e.shiftKey ? 15 : 0) } });
     else if (f.hit.kind === 'move') app.updateInflate({ area: shiftArea(f.area, f.start, p) });
-    else app.updateInflate({ area: resizeArea(f.area, f.angle, f.hit.handle, f.start, p, { keepAspect: e.shiftKey, fromCenter: e.altKey || alt }) });
+    else {
+      const fromCenter = e.altKey || alt, h = f.hit.handle;
+      app.updateInflate({ area: roundArea(resizeArea(f.area, f.angle, h, f.start, p, { keepAspect: e.shiftKey, fromCenter }), f.angle, h, fromCenter) });
+    }
   }
 
   function moveArea(e: PointerEvent): void {
