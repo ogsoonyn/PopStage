@@ -8,6 +8,7 @@ import { ui } from './ids';
 import { drawWeightThumb } from './imageio';
 import { popSliderRange, popToSlider, sliderToPop } from './popSlider';
 import { createHelp } from './help';
+import { isComposingKey } from './dom';
 
 type Target = 'layer' | 'doc' | 'project';
 /** レイヤーへの変更は、選んでいるレイヤーごとに作る(揺れの設定など、変えた項目のほかはそのレイヤーの値を残すため) */
@@ -486,7 +487,12 @@ export function bindPanels(app: App): { refresh: () => void } {
       // Enter / Esc で終えたときは、項目にフォーカスを戻す(クリックで外したときは奪わない)
       if (byKey) list.querySelector<HTMLElement>('li.is-primary-focus')?.focus();
     };
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true, true); if (e.key === 'Escape') finish(false, true); e.stopPropagation(); });
+    input.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (isComposingKey(e)) return; // 変換を確定する Enter・取り消す Esc では抜けない
+      if (e.key === 'Enter') finish(true, true);
+      if (e.key === 'Escape') finish(false, true);
+    });
     input.addEventListener('blur', () => finish(true));
   }
 
