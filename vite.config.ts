@@ -1,11 +1,14 @@
 import { defineConfig } from 'vitest/config';
 import tailwindcss from '@tailwindcss/vite';
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import pkg from './package.json' with { type: 'json' };
 
 /** 最後のコミットの日時(「PukuPop について」に出す)。git が無い所では空にする */
 function commitDate(): string {
-  try { return execSync('git log -1 --format=%cI', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; }
+  // 起動した場所ではなく、この設定ファイルのある所で読む
+  const cwd = fileURLToPath(new URL('.', import.meta.url));
+  try { return execSync('git log -1 --format=%cI', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], cwd }).trim(); } catch { return ''; }
 }
 
 export default defineConfig({

@@ -467,6 +467,11 @@ test('左のメニュー: 表示クリアで編集用の表示をまとめて切
   expect(await app(a => a.activeLayer.id)).toBe(active);
   await page.keyboard.press('Control+z');
   expect(await both()).toEqual([b0, b1]);
+  // 複数を選んでまとめて切り替えると(右パネルと同じ経路)、選んだ行のアイコンがどれも変わる
+  await app(a => { a.selectAllLayers(); a.setLayerSwing(false); });
+  for (const i of [0, 1]) await expect(rowSwing(i)).toHaveAttribute('aria-pressed', 'false');
+  await page.keyboard.press('Control+z');
+  expect(await both()).toEqual([b0, b1]);
 
   // 膨らませるのプレビュー中も C は効く
   await page.locator('#view').focus();
@@ -476,6 +481,8 @@ test('左のメニュー: 表示クリアで編集用の表示をまとめて切
   await page.locator('#view').focus();
   await page.keyboard.press('c');
   expect(await app(a => [a.previewingInflate, a.view.grid])).toEqual([true, false]);
+  // 自動で揺らすは、右パネルと同じくプレビュー中も左のツールバーから切り替えられる
+  await expect(autoBtn).toBeEnabled();
   await page.locator('#inflCancel').click();
 });
 

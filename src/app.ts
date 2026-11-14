@@ -1278,13 +1278,14 @@ export class App extends Emitter<AppEvents> {
     this.history.execute(new MoveLayer(layer.id, from, to));
   }
 
-  /* ---------- 揺れの切り替えとプリセット(右パネル・上のツールバー・スマホのどこから変えても、ここを通す) ---------- */
+  /* ---------- 揺れの切り替えとプリセット(右パネル・レイヤー一覧の行・左のツールバー・メニュー・スマホのどこから変えても、ここを通す) ---------- */
 
-  /** 選択中のレイヤーを揺らすか */
-  setLayerSwing(on: boolean): void {
-    const ls = this.selectedLayers.filter(l => l.physics.enabled !== on);
+  /** 選択中のレイヤー(ids を渡したときはそのレイヤーだけ。レイヤー一覧の行のアイコン)を揺らすか */
+  setLayerSwing(on: boolean, ids?: readonly string[]): void {
+    const targets = ids ? (this.doc?.layers ?? []).filter(l => ids.includes(l.id)) : this.selectedLayers;
+    const ls = targets.filter(l => l.physics.enabled !== on);
     if (!ls.length) return;
-    const label = countLabel('揺れの切替', this.selectedLayerIds.size);
+    const label = countLabel('揺れの切替', targets.length);
     this.history.execute(batchOf(label, ls.map(l => PatchLayer.from(this.store, l.id, { physics: { ...l.physics, enabled: on } }, label))));
   }
 
@@ -1334,10 +1335,10 @@ export class App extends Emitter<AppEvents> {
   addFavorite(): void {
     const doc = this.doc, list = this.project.favorites;
     if (!doc || !this.canEditFavorites) return;
-    if (list.length >= LIMITS.favorites) { toast(`お気に入りは ${LIMITS.favorites} 件までです。要らないものを消してから残してください。`, 'warning'); return; }
+    if (list.length >= LIMITS.favorites) { toast(`お気に入りは ${LIMITS.favorites} 件までです。要らないものを消してから追加してください。`, 'warning'); return; }
     const f = captureFavorite(this.project, doc, { name: nextFavoriteName(list), playing: this.takeState === 'playing' });
     this.history.execute(new SetFavorites(`お気に入りに追加「${f.name}」`, list, [...list, f]));
-    toast(`「${f.name}」に残しました。`, 'success', 2000);
+    toast(`「${f.name}」を追加しました。`, 'success', 2000);
   }
 
   /** お気に入りを今の状態で上書きする(名前と並びはそのまま) */

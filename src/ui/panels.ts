@@ -132,7 +132,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   const blendSel = ui.pBlend;
   for (const b of BLEND_ORDER) blendSel.add(new Option(BLENDS[b].label, b));
   blendSel.addEventListener('change', () => { if (blendSel.value) exec('layer', '重ね方', { blend: blendSel.value as BlendMode }); });
-  // 「揺れ」「自動で揺らす」は右のパネルと上のツールバーの両方に置く。どちらも App を通して変え、表示は refreshProps で合わせる
+  // 「揺れ」はレイヤー一覧の行のアイコン、「自動で揺らす」は左のツールバー・メニュー・スマホの上のバーにも置く。どれも App を通して変え、表示はモデルから合わせる
   ui.pSwing.addEventListener('change', () => app.setLayerSwing(ui.pSwing.checked));
   ui.pAuto.addEventListener('change', () => app.setAutoSwing(ui.pAuto.checked));
   // プリセットと揺らし方の選択肢はモデルの定義から作る
@@ -294,9 +294,9 @@ export function bindPanels(app: App): { refresh: () => void } {
     const doc = app.doc;
     // 作り直してもキーボードのフォーカスを失わないよう、一覧にフォーカスがあったかを覚えておく
     const hadFocus = list.contains(document.activeElement) && document.activeElement?.tagName === 'LI';
-    // 重ね方のボタンにあったフォーカスは、作り直したあと同じ行のボタンへ戻す(続けて押せるように)
+    // 重ね方・揺れのボタンにあったフォーカスは、作り直したあと同じ行のボタンへ戻す(続けて押せるように)
     const focusBtn = list.contains(document.activeElement) ? ['blend-btn', 'swing-btn'].find(c => document.activeElement?.classList.contains(c)) : undefined;
-    const blendFocus = focusBtn ? document.activeElement?.closest('li')?.dataset.id : undefined;
+    const btnFocus = focusBtn ? document.activeElement?.closest('li')?.dataset.id : undefined;
     list.replaceChildren();
     thumbs.clear();
     swingBtns.clear();
@@ -353,9 +353,7 @@ export function bindPanels(app: App): { refresh: () => void } {
         e.stopPropagation();
         if (pressed === layer.id) { pressed = null; return; }
         const l = app.doc?.layers.find(x => x.id === layer.id);
-        if (!l) return;
-        const on = !l.physics.enabled;
-        history.execute(PatchLayer.from(store, l.id, { physics: { ...l.physics, enabled: on } }, on ? '揺れをON' : '揺れをOFF'));
+        if (l) app.setLayerSwing(!l.physics.enabled, [l.id]);
       });
       swingBtns.set(layer.id, swingBtn);
       syncSwingBtn(layer.id);
@@ -374,7 +372,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     });
     updateSelection();
     if (hadFocus) list.querySelector<HTMLElement>('li.is-primary-focus')?.focus();
-    if (blendFocus) list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(blendFocus)}"] .${focusBtn}`)?.focus();
+    if (btnFocus) list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(btnFocus)}"] .${focusBtn}`)?.focus();
   }
 
   /** 一覧の下から順の id(Shift の範囲選択用) */

@@ -83,9 +83,9 @@ export function bindFavoriteControls(app: App): void {
       if ((names || document.activeElement !== name) && name.value !== f.name) name.value = f.name;
       setAttr(name, 'aria-label', `お気に入り ${i + 1} の名前`);
       setText(li.querySelector('.fav-sub')!, favoriteSummary(f));
-      // 残した日時は補足なので、ツールチップに出す
+      // 追加した日時は補足なので、ツールチップに出す
       const date = dateText(f.createdAt);
-      setAttr(li, 'title', date ? `残した日時: ${date}` : '');
+      setAttr(li, 'title', date ? `追加した日時: ${date}` : '');
       for (const el of li.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input')) if (el.disabled === can) el.disabled = !can;
     });
     if (empty.hidden !== favs.length > 0) empty.hidden = favs.length > 0;

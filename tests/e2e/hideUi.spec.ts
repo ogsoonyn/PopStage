@@ -24,7 +24,7 @@ test('Tab で UI を隠して3Dビューを画面いっぱいにし、もう一�
   await page.keyboard.press('Escape');
   await expect(page.locator('html')).not.toHaveClass(/ui-hidden/);
 
-  // メニューバーの右端のボタンで隠し、マウスを動かすと出る「UIを戻す」で戻す
+  // ツールオプションの欄の右端のボタンで隠し、マウスを動かすと出る「UIを戻す」で戻す
   await page.locator('#toolOptions [data-cmd=toggleUi]').click();
   await expect(page.locator('html')).toHaveClass(/ui-hidden/);
   const restore = page.locator('#uiRestore');

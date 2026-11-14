@@ -114,7 +114,7 @@ function defineActions(app: App, d: ActionDeps) {
     // アニメーション
     toggleAutoSwing: {
       label: '自動で揺らす', desc: '周期的に自動で揺らす・止める(周期と強さは右パネルの「アニメーション」で決める)',
-      run: () => app.setAutoSwing(!app.project.autoSwing.enabled), enabled: () => !!app.activeLayer,
+      run: () => app.setAutoSwing(!app.project.autoSwing.enabled), enabled: () => !!app.activeLayer, duringPreview: true, // 右パネル・スマホと同じくプレビュー中も使える
     },
     toggleRecording: {
       label: '操作の記録', helpLabel: '記録の開始・停止', keys: ['R'], desc: 'つかむ・揺らす・移動・視点の操作を覚える(最長 60 秒)',
@@ -157,7 +157,7 @@ function defineActions(app: App, d: ActionDeps) {
     selectAllLayers: { label: 'すべてのレイヤーを選ぶ', keys: ['Ctrl+A'], run: () => app.selectAllLayers(), enabled: () => (app.doc?.layers.length ?? 0) > 1 },
     // お気に入り
     addFavorite: {
-      label: 'お気に入りに追加', keys: ['K'], desc: '今の揺れと動きの組み合わせを残す(画像とウェイトは残さない)',
+      label: 'お気に入りに追加', keys: ['K'], desc: '今の揺れと動きの組み合わせをお気に入りに追加する(画像とウェイトは入れない)',
       run: () => app.addFavorite(), enabled: () => app.canEditFavorites && app.project.favorites.length < LIMITS.favorites,
     },
     // ヘルプ・その他
