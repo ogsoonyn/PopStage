@@ -5,16 +5,15 @@
  */
 export const UI_IDS = {
   // スマホの上のバー
-  mTop: 'header', mTitle: 'span', mAuto: 'button',
+  mTop: 'header', mTitle: 'button', mAuto: 'button',
   // メニューバー・ツールオプション
-  docTitle: 'span',
+  docTabs: 'div',
   brushSize: 'input', brushSizeO: 'output', brushStrength: 'input', brushStrengthO: 'output',
   brushHardness: 'input', brushHardnessO: 'output', brushPressure: 'select', toolHint: 'span',
   tInflKind: 'select', tInflProfile: 'select', tInflSoft: 'input', tInflSoftO: 'output', tInflAngle: 'input', tInflAngleO: 'output', tInflBlend: 'select',
-  tSwing: 'input', tAuto: 'input',
   // ツールバー・3Dビュー
-  toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', keyPath: 'div', takeCam: 'button',
-  playBar: 'div', playStart: 'button', playStop: 'button', playPause: 'button', playTime: 'span', playTrack: 'div', playKeys: 'div', playLoop: 'span', playCam: 'button', mFine: 'button', busy: 'div', uiRestore: 'button',
+  toolNav: 'nav', stage: 'div', view: 'canvas', multiView: 'div', dropHint: 'div', keyPath: 'div', inflateFrame: 'div', takeCam: 'button',
+  playBar: 'div', playStart: 'button', playStop: 'button', playPause: 'button', playTime: 'span', playTrack: 'div', playKeys: 'div', playLoop: 'span', playCam: 'button', mFine: 'button', busy: 'div', uiRestore: 'button', panelToggle: 'button', sidePanel: 'aside',
   // レイヤー一覧
   layerCount: 'span', layerList: 'ul',
   layerSelBar: 'div', layerSelText: 'span', layerSelAll: 'button', layerSelOne: 'button', layerSelDone: 'button',
@@ -28,14 +27,14 @@ export const UI_IDS = {
   takeInfo: 'span', takeRec: 'button', takePlay: 'button', takeClear: 'button',
   keySection: 'section', keyCount: 'span', keyPathShow: 'input', keyGhostShow: 'input', playBarShow: 'input', keyAdd: 'button', keyList: 'ol', keyMake: 'button', keyTotal: 'span',
   favCount: 'span', favAdd: 'button', favEmpty: 'p', favList: 'ol',
-  vOverlayOff: 'input', vOverlaySel: 'input', vOverlayAll: 'input', vAutoOverlay: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
+  vOverlayOff: 'input', vOverlaySel: 'input', vOverlayAll: 'input', vAutoOverlay: 'input', vAutoOverlayOff: 'input', setPopMax: 'input', vFade: 'input', vFlat: 'input', vPause: 'input', vMulti: 'input', vGrid: 'input',
   pFov: 'input', pFovO: 'output', pBgTransparent: 'input', pBgColor: 'input',
   // スマホのシート・下のバー
   mSheet: 'section', mGrip: 'div', mPresets: 'div', mPanes: 'div', mToolDesc: 'p', mBrushOpts: 'div', mInflOpts: 'div', mPaintMode: 'button',
   mModeBar: 'div', mTools: 'nav', mPaintDone: 'button',
   // ステータスバー
   sFps: 'span', sVerts: 'span', sZoom: 'span', sImage: 'span', sRec: 'span', sSave: 'span',
-  fileImage: 'input', fileProject: 'input',
+  fileProject: 'input',
   // 書き出し
   exportDialog: 'dialog', exFormat: 'select', exW: 'input', exH: 'input', exSizePreset: 'select', exDur: 'input', exLoop: 'input',
   exBgColor: 'input', exBgAlphaLabel: 'label', exRecLen: 'span', exTakeLen: 'span', exNote: 'p', exProgress: 'progress',
@@ -51,7 +50,9 @@ export const UI_IDS = {
   settingsDialog: 'dialog', setToolbarList: 'div', setToolbarReset: 'button', setHideFull: 'input', setHideFullRow: 'section',
   // 最近開いたファイル・ヘルプ・このアプリについて
   recentDialog: 'dialog', recentEmpty: 'p', recentList: 'ul', recentClear: 'button',
-  helpDialog: 'dialog', helpKeys: 'div', aboutDialog: 'dialog', aboutVersion: 'p',
+  // 開いている作業(タブ)の一覧(スマホ)
+  tabDialog: 'dialog', tabList: 'ul', tabOpen: 'button',
+  helpDialog: 'dialog', helpOps: 'div', helpKeys: 'div', aboutDialog: 'dialog', aboutUpdated: 'p',
   toasts: 'div',
 } as const satisfies Record<string, keyof HTMLElementTagNameMap>;
 

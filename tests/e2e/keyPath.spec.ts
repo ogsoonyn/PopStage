@@ -133,3 +133,40 @@ test('キーフレームの経路: 回転・ズームだけのフレームは、
   const marks = () => overlay.locator('.kp-mark').evaluateAll(gs => gs.map(g => { const r = g.getBoundingClientRect(); return [r.x, r.y]; }));
   await expect.poll(async () => { const p = await marks(); return p[1][0] - p[0][0] > 15 && Math.abs(p[1][1] - p[0][1]) < 1; }).toBe(true);
 });
+
+test('左のツールバー: キーフレームの再生・停止と、経路・ゴーストの切り替え。入れるとアニメーションのタブを開く', async ({ page }) => {
+  await boot(page);
+  const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
+  const play = page.locator('#toolNav [data-cmd=toggleKeyPlay]'), path = page.locator('#toolNav [data-cmd=toggleKeyPath]'), ghost = page.locator('#toolNav [data-cmd=toggleKeyGhost]');
+  // フレームが2つ以上なければ再生できない
+  await expect(play).toBeDisabled();
+  await openTab(page, 'anim');
+  await setCam(page, { zoom: 2.5 });
+  await page.locator('#keyAdd').click();
+  await setCam(page, { zoom: 2.5, x: 300, y: 100 });
+  await page.locator('#keyAdd').click();
+  await expect(play).toBeEnabled();
+  await expect(play).toHaveText(/再生/);
+  await play.click();
+  expect(await app(a => [a.takeState, !!a.project.take?.keys])).toEqual(['playing', true]);
+  await expect(play).toHaveText(/停止/);
+  await play.click();
+  expect(await app(a => a.takeState)).toBe('idle');
+  await expect(play).toHaveText(/再生/);
+
+  // 経路・ゴースト: 右パネルのチェックボックスと同じ設定を切り替え、入・切を aria-pressed とメニューの ✓ に映す
+  await expect(path).toHaveAttribute('aria-pressed', 'true');
+  await path.click();
+  await expect(path).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('#keyPathShow')).not.toBeChecked();
+  await page.locator('#keyGhostShow').check();
+  await expect(ghost).toHaveAttribute('aria-pressed', 'true');
+  await ghost.click();
+  await expect(page.locator('#keyGhostShow')).not.toBeChecked();
+  // 別のタブを開いていても、入れたらアニメーションのタブを開いて重ねる
+  await openTab(page, 'layer');
+  await path.click();
+  await expect(page.locator('#keySection')).toBeVisible();
+  await expect(page.locator('#keyPath .kp-mark')).toHaveCount(2);
+  await expect(page.locator('#menubar [data-check=keyPath]')).toHaveText('✓');
+});

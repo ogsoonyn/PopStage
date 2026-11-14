@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { WeightMap, weightSizeFor, TILE } from '../../src/model/weightmap';
 import { Store, createDocument, createProject, createLayer, LIMITS, scalePops, layerColor, LAYER_COLORS } from '../../src/model/project';
-import { History } from '../../src/commands/history';
+import { History, shrinkHistory } from '../../src/commands/history';
 import { PatchLayer, InsertLayer, RemoveLayer, MoveLayer, WeightEdit, weightOperation, diffTiles } from '../../src/commands/commands';
 import { Stroke, falloff } from '../../src/paint/stroke';
 
@@ -87,6 +87,43 @@ describe('History', () => {
     h.undo();
     h.execute(PatchLayer.from(store, id, { pop: 2 }));
     expect(h.canRedo).toBe(false);
+  });
+
+  it('積みを取り出して別の作業の積みと入れ替え、戻すと続きから元に戻せる(タブの切り替え)', () => {
+    const store = makeStore(), h = new History(store), pa = store.project, la = pa.documents[0].layers[0];
+    h.execute(PatchLayer.from(store, la.id, { pop: 11 }));
+    h.execute(PatchLayer.from(store, la.id, { pop: 12 }));
+    h.undo();
+    const saved = h.take();
+    expect(h.canUndo).toBe(false);
+    expect(h.bytes).toBe(0);
+    // 別の作業に切り替えて操作しても、預けた積みと元の作業は変わらない
+    const pb = makeStore().project, lb = pb.documents[0].layers[0];
+    store.replace(pb);
+    h.execute(PatchLayer.from(store, lb.id, { pop: 99 }));
+    const other = h.take();
+    expect(la.pop).toBe(11);
+    // 元の作業へ戻して積みを入れ替えると、続きからやり直し・元に戻すができる
+    store.replace(pa);
+    h.restore(saved);
+    h.redo(); expect(la.pop).toBe(12);
+    h.undo(); h.undo(); expect(la.pop).toBe(LIMITS.pop.def);
+    expect(lb.pop).toBe(99);
+    expect(other.undo.length).toBe(1);
+  });
+
+  it('預けた積みは古い手から捨てて上限に収める', () => {
+    const store = makeStore(), h = new History(store), id = store.doc!.layers[0].id;
+    for (let i = 0; i < 5; i++) h.execute(PatchLayer.from(store, id, { pop: i }));
+    h.undo();
+    const s = h.take(), each = s.undo[0].bytes, total = s.bytes;
+    expect(shrinkHistory(s, total - each)).toBe(each);
+    expect(s.undo.length).toBe(3);
+    expect(s.redo.length).toBe(1);
+    // 元に戻す側が無くなったら、やり直しの積みも捨てる
+    shrinkHistory(s, 0);
+    expect(s.undo.length + s.redo.length).toBe(0);
+    expect(s.bytes).toBe(0);
   });
 
   it('レイヤーの追加・削除・並べ替え', () => {

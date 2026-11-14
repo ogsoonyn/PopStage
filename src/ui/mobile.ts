@@ -37,7 +37,7 @@ export const MOBILE_SLOTS: readonly { slot: string; tab: Tab; prepend?: boolean 
 /** 「塗って直す」の中で使うツール。ブラシの設定を出すのは塗りの3つだけ */
 const BRUSH_TOOLS: Tool[] = ['brush', 'erase', 'smooth'];
 const TOOL_DESC: Record<Tool, string> = {
-  inflate: '画像の上をドラッグして範囲を描くと、ここで高さや断面を決めて適用できます。2本目の指を置くと描くのをやめます。',
+  inflate: '画像の上をドラッグして範囲を描くと、ここで高さや断面を決めて適用できます。範囲は枠で直せます。2本目の指を置くと描くのをやめます。',
   grab: 'つかむ: 画像を引っぱって離すと揺れます。',
   shake: '揺らす: 指で振ると、画像は動かずに揺れだけが出ます。',
   view: '視点: 画像の上でも1本指で回転します。',
@@ -80,9 +80,9 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     // 3面図は縦長の画面では狭すぎるので使わない。塗りのツールのまま来たら、主のツールにする
     if (app.view.multi) app.setViewOption('multi', false);
     desktopTool = app.tool;
-    if (PAINT_TOOLS.includes(app.tool)) app.setTool('grab');
+    if (PAINT_TOOLS.includes(app.tool)) app.setTool('grab', false);
     setPaintMode(false);
-    syncState(); syncTitle(); syncTool();
+    syncState(); syncTool();
     setSheet('closed', false);
   }
   function leave(): void {
@@ -173,8 +173,6 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
   /* ---------- 上のバー ---------- */
 
   ui.mAuto.addEventListener('click', () => app.setAutoSwing(!app.project.autoSwing.enabled));
-  const syncTitle = () => { ui.mTitle.textContent = ui.docTitle.textContent; };
-  new MutationObserver(syncTitle).observe(ui.docTitle, { childList: true, characterData: true, subtree: true });
 
   /** プリセットのボタンと自動揺らしのボタンを、今の状態(モデル)に合わせる */
   function syncState(): void {

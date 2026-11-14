@@ -21,6 +21,8 @@ interface Window {
   showOpenFilePicker?: (options?: OpenFilePickerOptions) => Promise<FileSystemFileHandle[]>;
 }
 declare const __APP_VERSION__: string;
+/** 最後のコミットの日時(ISO 8601。vite.config.ts がビルドのときに git から読む。読めなければ空) */
+declare const __COMMIT_DATE__: string;
 
 /* ファイルの場所を開き直すときの許可(Chrome 系のみ) */
 interface FileSystemHandlePermissionDescriptor { mode?: 'read' | 'readwrite' }

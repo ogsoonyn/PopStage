@@ -3,7 +3,7 @@
  * 画面の部品(ui/)はここを経由して状態を読み書きする。
  */
 import { Store, createProject, createDocument, createLayer, cloneLayer, frontCamera, defaultOrthoView, LIMITS, PRESETS, applyPreset, type PresetName, type CameraState, type Vec3, type OrthoView, type Project, type Document, type Layer } from './model/project';
-import { History } from './commands/history';
+import { History, emptyHistory, shrinkHistory, type HistoryState } from './commands/history';
 import type { Rect } from './model/weightmap';
 import { InsertLayer, RemoveLayer, MoveLayer, WeightEdit, SetTake, SetFavorites, SetFov, PatchLayer, PatchProject, Batch, weightOperation, diffTiles } from './commands/commands';
 import type { Command } from './commands/history';
@@ -11,7 +11,7 @@ import { captureFavorite, copyPhysics, sameLayer, nextFavoriteName, applyView, F
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld, PHYSICS_DT } from './physics/world';
 import { MotionRecorder, applySample, type RecordSample } from './physics/recorder';
-import { finalizeTake, takeFromKeys, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, KEY_SECONDS, MAX_KEYS, type ViewKey, type KeyFrame } from './physics/take';
+import { finalizeTake, takeFromKeys, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, KEY_SECONDS, MAX_KEYS, normalizeKeys, type ViewKey, type KeyFrame } from './physics/take';
 import { Stroke, type PaintMode } from './paint/stroke';
 import { inflateShape, type InflateProfile, type InflateBlend } from './paint/inflate';
 import { serializeProject, serializeProjectBlob, deserializeProject, FILE_EXTENSION, type PngCacheEntry } from './storage/popstage';
@@ -22,6 +22,7 @@ import { runExport, type ExportSettings } from './export/exporter';
 import { Emitter } from './util/emitter';
 import { decodeForDisplay, canvasAlpha, browserDecodeGray, fileToAsset, rgbaToPng, isProjectFile, isImageFile } from './ui/imageio';
 import { createSampleDocument } from './ui/sample';
+import { POP_MAX_SETTING, clampPopMax } from './ui/popSlider';
 import { ask, saveFile, setBusy, toast } from './ui/dom';
 
 export type Tool = 'brush' | 'erase' | 'smooth' | 'inflate' | 'grab' | 'shake' | 'view' | 'pan';
@@ -77,7 +78,69 @@ type AppEvents = {
   frame: void;
   /** 操作の記録の状態(記録中・ループ再生中)が変わった */
   take: TakeState;
+  /** タブの開く・閉じる・切り替え */
+  tabs: void;
 };
+
+/** 一度に開いておけるタブの数 */
+export const MAX_TABS = 5;
+
+/**
+ * アプリの中のタブ1枚分の作業(プロジェクトと、それに付く画面の状態)。描画・物理・画面の部品は1つを使い回し、
+ * タブを切り替えるときは、ここに預けた中身を丸ごと入れ替える。
+ * 表に出ているタブの値は App のゲッター・セッター(fileName など)から読み書きする。作業ごとの値を App に足すときは、ここに足す
+ */
+export interface Tab {
+  /** 自動保存のキーにも使う */
+  readonly id: string;
+  /** 並び(自動保存から戻すときの順) */
+  readonly order: number;
+  project: Project;
+  /** 裏にいる間のアンドゥの積み(表に出ている間は App.history が持つ) */
+  history: HistoryState;
+  /** 最後に表に出した時刻。全部のタブのアンドゥが上限を超えたら、古いタブの積みから捨てる */
+  shownAt: number;
+  /** サンプルか空で始めたタブ。変更していなければ、次に開いたファイルで置き換える */
+  sample: boolean;
+  fileHandle: FileSystemFileHandle | null;
+  fileName: string | null;
+  dirty: boolean;
+  /** 変更のたびに増える番号。保存中に変更があったかを見分けるのに使う */
+  revision: number;
+  lastSaved: Date | null;
+  lastAutosave: Date | null;
+  /** 直近の自動保存が失敗していればその理由 */
+  autosaveError: string | null;
+  /** 実行中の自動保存(終わるのを待ってから自動保存を消すため) */
+  autosaving: Promise<void>;
+  autosaveTimer: number;
+  activeLayerId: string | null;
+  selectedLayerIds: Set<string>;
+  keyDraft: KeyFrame[];
+  multiOrtho: OrthoView;
+  /** 表示用にデコードした画像。裏に回すと捨て(メモリのため)、表に出すときにデコードし直す */
+  imageCanvas: HTMLCanvasElement | null;
+  /** 自動保存用に、変わっていないレイヤーのウェイト PNG を使い回す(手動の保存では使わない) */
+  pngCache: Map<string, PngCacheEntry>;
+  /** レイヤーごとのウェイトの重心(元画像のピクセル、塗った範囲の広がりの中心)。ウェイトが変わったら捨てる */
+  centers: Map<string, { x: number; y: number }>;
+}
+
+let tabSeq = 0;
+function createTab(project: Project, init: Partial<Pick<Tab, 'id' | 'order' | 'sample' | 'fileName' | 'fileHandle' | 'dirty'>> = {}): Tab {
+  const seq = tabSeq++;
+  return {
+    id: init.id ?? `tab-${Date.now().toString(36)}-${seq.toString(36)}`,
+    order: init.order ?? Date.now() + seq,
+    project, history: emptyHistory(), shownAt: 0, sample: init.sample ?? false,
+    fileHandle: init.fileHandle ?? null, fileName: init.fileName ?? null, dirty: init.dirty ?? false, revision: 0,
+    lastSaved: null, lastAutosave: null, autosaveError: null, autosaving: Promise.resolve(), autosaveTimer: 0,
+    activeLayerId: null, selectedLayerIds: new Set(),
+    // 記録がキーフレームから作ったものなら、そのキーフレームを下書きに入れて始める
+    keyDraft: project.take?.keys ? structuredClone([...project.take.keys]) : [],
+    multiOrtho: defaultOrthoView(), imageCanvas: null, pngCache: new Map(), centers: new Map(),
+  };
+}
 
 /** 画像全体のずれ(ピストン)の飛びをならす時定数(秒)。自動揺らしの切り替えや、塗り終わりで止めていた画像を戻すとき */
 const BASE_EASE = 0.05;
@@ -110,24 +173,42 @@ export class App extends Emitter<AppEvents> {
   readonly recorder = new MotionRecorder();
   readonly stage: Stage;
 
+  /** 開いているタブ(並びのとおり) */
+  readonly tabs: Tab[] = [];
+  /** 表に出ているタブ */
+  private tab: Tab = this.addFirstTab();
+  private addFirstTab(): Tab { const t = createTab(this.store.project, { sample: true }); this.tabs.push(t); return t; }
+  get activeTab(): Tab { return this.tab; }
+
   tool: Tool = 'brush';
-  activeLayerId: string | null = null;
+  get activeLayerId(): string | null { return this.tab.activeLayerId; }
+  set activeLayerId(id: string | null) { this.tab.activeLayerId = id; }
   /**
    * 選んでいるレイヤー(一覧で Ctrl / Shift で足したもの)。activeLayerId はその中の「最後に押したレイヤー」で、塗りや膨らみの先になる。
    * 画面だけの状態で、アンドゥにも保存にも入れない
    */
-  selectedLayerIds = new Set<string>();
+  get selectedLayerIds(): Set<string> { return this.tab.selectedLayerIds; }
+  set selectedLayerIds(s: Set<string>) { this.tab.selectedLayerIds = s; }
   view: ViewOptions = { overlay: true, overlayAll: false, grid: false, fade: false, flat: false, multi: false };
   /** 3面図の「自由角度」の視点。project.multiCamera に置き、ファイルにも保存する */
   get multiCam(): CameraState { return this.project.multiCamera; }
   set multiCam(c: CameraState) { this.project.multiCamera = c; }
   /** 3面図の正面・右から・下からの拡大率と平行移動(3つで共有。画面だけの設定で保存しない) */
-  multiOrtho: OrthoView = defaultOrthoView();
+  get multiOrtho(): OrthoView { return this.tab.multiOrtho; }
+  set multiOrtho(v: OrthoView) { this.tab.multiOrtho = v; }
   paused = false;
+  /** 背景を透過しないときに塗る色(最後に使った背景色)。透過にしても忘れず、新しい画像の既定と一緒にブラウザに覚える(main.ts) */
+  bgColor = '#ffffff';
   /** UIを隠して3Dビューを画面いっぱいに出しているか(ui/hideUi.ts)。画面だけの状態で、覚えない */
   uiHidden = false;
   /** 塗るツール(ブラシ・消しゴム・ぼかし・膨らみ)や「全体をぼかす」を使い始めたら、重ね表示を自動で入れる。ブラウザに覚える設定 */
   autoOverlay = true;
+  /** 自動で入れた重ね表示を、塗るツールから離れたり「全体をぼかす」を閉じたりしたときに切る。ブラウザに覚える設定 */
+  autoOverlayOff = true;
+  /** ポップ量・膨らませる高さのスライダーの右端(px)。ブラウザに覚える設定(ui/popSlider.ts) */
+  popMax: number = POP_MAX_SETTING.def;
+  /** 今の重ね表示を自動で入れたか。重ね表示を手で変えたら false にし、手で入れた表示は自動で切らない。開き直しても続くよう prefs に覚える */
+  overlayAutoShown = false;
   /**
    * 「揺らす」ツールで画像を振った量(ワールド座標)。カメラは画像に付いて動くので画面上の位置は
    * 変わらないが、物理には平行移動と同じ動きとして伝える。画面だけの値で保存しない
@@ -136,33 +217,30 @@ export class App extends Emitter<AppEvents> {
   brush: BrushOptions = { size: 64, strength: 0.3, hardness: 0, pressure: 'strength' };
   /** 前回の「膨らませる」の設定(次に範囲を描いたときの初期値) */
   inflateSettings: InflateSettings = { shape: 'ellipse', height: null, softness: 1, angle: 0, profile: 'dome', blend: 'max' };
-  imageCanvas: HTMLCanvasElement | null = null;
+  get imageCanvas(): HTMLCanvasElement | null { return this.tab.imageCanvas; }
   /** 表示用の画像の一辺の上限 */
   private get displaySize(): number { return Math.min(4096, this.stage.maxTextureSize); }
 
-  fileHandle: FileSystemFileHandle | null = null;
-  fileName: string | null = null;
-  dirty = false;
-  /** 変更のたびに増える番号。保存中に変更があったかを見分けるのに使う */
-  private revision = 0;
+  get fileHandle(): FileSystemFileHandle | null { return this.tab.fileHandle; }
+  set fileHandle(h: FileSystemFileHandle | null) { this.tab.fileHandle = h; }
+  get fileName(): string | null { return this.tab.fileName; }
+  set fileName(n: string | null) { this.tab.fileName = n; }
+  get dirty(): boolean { return this.tab.dirty; }
+  set dirty(on: boolean) { this.tab.dirty = on; }
   /**
    * 画面に出している画像全体のずれ(ピストン、元画像のピクセル)。ライブ表示だけの値で、物理と書き出しには関わらない。
    * 塗り・膨らませる範囲のドラッグ中は止めて(held)、当たり判定がずれないようにする。設定の切り替えで飛ぶ分は fix でならす
    */
-  private base = { shown: { x: 0, y: 0, z: 0 }, live: { x: 0, y: 0, z: 0 }, fix: { x: 0, y: 0, z: 0 }, key: '', held: null as Vec3 | null };
-  /** レイヤーごとのウェイトの重心(元画像のピクセル、塗った範囲の広がりの中心)。ウェイトが変わったら捨てる */
-  private centers = new Map<string, { x: number; y: number }>();
+  private base = freshBase();
+  private get centers(): Map<string, { x: number; y: number }> { return this.tab.centers; }
   /** まだ GPU へ送っていない、レイヤーごとの変わった矩形 */
   private pendingUploads = new Map<string, Rect>();
-  /** 自動保存用に、変わっていないレイヤーのウェイト PNG を使い回す(手動の保存では使わない) */
-  private pngCache = new Map<string, PngCacheEntry>();
+  private get pngCache(): Map<string, PngCacheEntry> { return this.tab.pngCache; }
   /** 直近の自動保存が失敗していればその理由 */
-  autosaveError: string | null = null;
-  /** 実行中の自動保存(終わるのを待ってから自動保存を消すため) */
-  private autosaving: Promise<void> = Promise.resolve();
+  get autosaveError(): string | null { return this.tab.autosaveError; }
   exporting = false;
-  lastSaved: Date | null = null;
-  lastAutosave: Date | null = null;
+  get lastSaved(): Date | null { return this.tab.lastSaved; }
+  get lastAutosave(): Date | null { return this.tab.lastAutosave; }
 
   /** 操作の記録の状態 */
   takeState: TakeState = 'idle';
@@ -181,10 +259,19 @@ export class App extends Emitter<AppEvents> {
    * キーフレームの下書き(画面だけ)。作った記録はそのキーフレームも持つので、
    * 記録が差し替わったら(開く・アンドゥなど)その記録のキーフレームに合わせる
    */
-  keyDraft: KeyFrame[] = [];
+  get keyDraft(): KeyFrame[] { return this.tab.keyDraft; }
+  set keyDraft(k: KeyFrame[]) { this.tab.keyDraft = k; }
+  /** キーフレームの重ね表示(経路・ゴースト)。ブラウザに覚える(ui/keyPath.ts) */
+  keyOverlay = { path: true, ghost: false };
+  setKeyOverlay(key: 'path' | 'ghost', on: boolean): void {
+    if (this.keyOverlay[key] === on) return;
+    this.keyOverlay = { ...this.keyOverlay, [key]: on };
+    this.emit('view', undefined);
+  }
 
   private loading = false;
-  private autosaveTimer = 0;
+  /** タブを表に出している最中(Store の差し替えで、そのタブの控えを捨てない) */
+  private switching = false;
   private stroke: { stroke: Stroke; layerId: string; label: string } | null = null;
   private syncToken = 0;
   fps = 0;
@@ -197,6 +284,7 @@ export class App extends Emitter<AppEvents> {
     super();
     this.stage = new Stage(canvas);
     this.wireStore();
+    this.history.on('change', () => this.trimHiddenHistory());
   }
 
   get doc(): Document | undefined { return this.store.doc; }
@@ -225,7 +313,8 @@ export class App extends Emitter<AppEvents> {
       if (keys.includes('pop') || keys.includes('visible') || keys.includes('blend')) this.stage.setLayerParams(f.index, f.layer);
       if (keys.includes('visible') && this.view.overlayAll) this.syncView(); // 全レイヤー表示では、隠したレイヤーを重ねない
     });
-    s.on('replace', () => { this.pngCache.clear(); this.centers.clear(); this.syncKeyDraft(true); });
+    // タブを表に出すとき(enterTab)は、そのタブが預けていた PNG・重心・キーフレームの下書きをそのまま使う(裏にいる間は中身が変わらないため)
+    s.on('replace', () => { if (this.switching) return; this.pngCache.clear(); this.centers.clear(); this.syncKeyDraft(true); });
     s.on('layers', () => {
       const doc = this.doc; if (!doc) return;
       // 並べ替え・追加・削除ではウェイトは変わらないので、PNG は作り直さない(無くなったレイヤーの分だけ捨てる)
@@ -263,11 +352,12 @@ export class App extends Emitter<AppEvents> {
       this.emit('status', undefined);
     });
     s.on('change', () => {
-      this.revision++;
       if (this.loading) return;
-      this.lastAutosave = null;
-      if (!this.dirty) { this.dirty = true; this.emit('file', undefined); }
-      this.scheduleAutosave();
+      const t = this.tab;
+      t.revision++;
+      t.lastAutosave = null;
+      if (!t.dirty) { t.dirty = true; this.emit('file', undefined); }
+      this.scheduleAutosave(t);
     });
   }
 
@@ -275,7 +365,7 @@ export class App extends Emitter<AppEvents> {
   private applyDocument(canvas: HTMLCanvasElement): void {
     const doc = this.doc;
     if (!doc) return;
-    this.imageCanvas = canvas;
+    this.tab.imageCanvas = canvas;
     this.stage.setImage(canvas, doc.image.width, doc.image.height);
     this.stage.rebuildMesh(doc.meshDensity);
     this.stage.setTransform(doc);
@@ -288,8 +378,17 @@ export class App extends Emitter<AppEvents> {
     this.emit('status', undefined);
   }
 
+  /**
+   * 背景を透過する・しない。しないときは最後に使った背景色(bgColor)で塗る。1手として記録する
+   */
+  setBackgroundTransparent(on: boolean): void {
+    if ((this.project.background === null) === on) return;
+    this.history.execute(PatchProject.from(this.store, { background: on ? null : this.bgColor }, on ? '背景を透過' : '背景を塗る'));
+  }
+
   private applyBackground(): void {
     const bg = this.project.background;
+    if (bg) this.bgColor = bg;
     this.stage.setBackground(bg);
     const el = this.stage.canvas.parentElement!;
     el.classList.toggle('solid', !!bg);
@@ -311,20 +410,38 @@ export class App extends Emitter<AppEvents> {
 
   /* ---------- 状態の切り替え ---------- */
 
-  /** auto を false にすると、塗るツールでも重ね表示を自動で入れない(起動時に前回のツールを戻すとき) */
+  /** auto を false にすると、重ね表示を自動で入れも切りもしない(起動時に前回のツールを戻すとき、スマホと PC の幅を行き来するとき) */
   setTool(t: Tool, auto = true): void {
     const changed = t !== this.tool;
     this.tool = t;
     this.emit('tool', t);
+    // auto が false(起動時の復元・スマホの幅に入るとき)は切らない。PC の幅に戻ってブラシにしたとき、表示が消えたままになるため
+    if (auto && changed && !PAINT_TOOLS.includes(t)) this.autoHideOverlay();
     // 選び直しでは入れない(手で切った重ね表示を戻さない)。受け手が別のツールに戻したときも入れない(スマホで画像を開いたとき)
     if (auto && changed && this.tool === t && PAINT_TOOLS.includes(t)) this.autoShowOverlay();
   }
 
-  setAutoOverlay(on: boolean): void { this.autoOverlay = on; this.emit('view', undefined); }
+  setAutoOverlay(on: boolean): void {
+    this.autoOverlay = on;
+    if (!on) this.overlayAutoShown = false; // 自動でONを切ったら、OFFの設定も効かない(画面でも押せなくなる)
+    this.emit('view', undefined);
+  }
+  setAutoOverlayOff(on: boolean): void { this.autoOverlayOff = on; this.emit('view', undefined); }
+  setPopMax(v: number): void { this.popMax = clampPopMax(v); this.emit('view', undefined); if (this.inflateState) this.emit('inflate', 'change'); }
 
-  /** 塗りが見えるよう重ね表示を入れる。塗るツールから離れても切らない */
+  /** 塗りが見えるよう重ね表示を入れる。入れたことを覚え、塗り終えたら autoHideOverlay で切る */
   private autoShowOverlay(): void {
-    if (this.autoOverlay && !this.view.overlay) this.setOverlayMode('selected');
+    if (!this.autoOverlay || this.view.overlay) return;
+    this.setOverlayMode('selected');
+    this.overlayAutoShown = true;
+    this.emit('view', undefined); // 自動で入れたことも覚える
+  }
+
+  /** 自動で入れた重ね表示を切る。塗るツールのままか「全体をぼかす」の途中なら、まだ切らない */
+  private autoHideOverlay(): void {
+    if (!this.overlayAutoShown || PAINT_TOOLS.includes(this.tool) || this.blurPreview) return;
+    this.overlayAutoShown = false;
+    if (this.autoOverlayOff) this.setOverlayMode('off');
   }
 
   /** そのレイヤーだけを選ぶ */
@@ -356,6 +473,7 @@ export class App extends Emitter<AppEvents> {
   }
 
   setOverlayMode(mode: OverlayMode): void {
+    this.overlayAutoShown = false; // 手で変えた表示は自動では切らない(自動で入れるときは、この後で立て直す)
     this.view.overlay = mode !== 'off';
     this.view.overlayAll = mode === 'all';
     this.syncView();
@@ -369,6 +487,7 @@ export class App extends Emitter<AppEvents> {
 
   setViewOption(key: keyof ViewOptions, on: boolean): void {
     this.view[key] = on;
+    if (key === 'overlay' || key === 'fade') this.overlayAutoShown = false;
     // 画像を薄くするのは塗りを見るためなので、重ね表示も合わせて入れる
     if (key === 'fade' && on) this.view.overlay = true;
     // 重ね表示を切ったら、次に入れたときは「選択中」から
@@ -379,6 +498,7 @@ export class App extends Emitter<AppEvents> {
   /** 見栄えの確認用に、編集のための表示(重ね表示・画像を薄く・ポップ一時OFF・揺れ一時停止・グリッド)をまとめて切る */
   clearEditView(): void {
     Object.assign(this.view, { overlay: false, overlayAll: false, fade: false, flat: false, grid: false });
+    this.overlayAutoShown = false;
     this.syncView();
     if (this.paused) this.setPaused(false);
   }
@@ -389,6 +509,14 @@ export class App extends Emitter<AppEvents> {
     this.paused = on;
     this.world.paused = on;
     if (on) this.world.reset();
+    this.emit('view', undefined);
+  }
+
+  /** 右パネルを閉じて3Dビューを広げているか(PC の幅だけ。ui/sidePanel.ts)。ブラウザに覚える */
+  panelClosed = false;
+  setPanelClosed(on: boolean): void {
+    if (this.panelClosed === on) return;
+    this.panelClosed = on;
     this.emit('view', undefined);
   }
 
@@ -406,6 +534,16 @@ export class App extends Emitter<AppEvents> {
     this.cameraChanged();
   }
 
+  /** 向きだけを正面に戻す。ズームと平行移動(画面の上下左右の位置)は保つ */
+  resetRotation(): void {
+    const c = this.project.camera;
+    if (c.yaw === 0 && c.pitch === 0 && c.target.z === 0) return;
+    // 回した視点で平行移動すると奥行き(z)にもずれるので、正面から見て同じに見えるよう 0 に戻す
+    this.project.camera = { ...c, yaw: 0, pitch: 0, target: { ...c.target, z: 0 } };
+    this.world.cutView();
+    this.cameraChanged();
+  }
+
   /**
    * 視点(回転・平行移動・ズーム)を変えたことを知らせる。視点は保存される項目なので「未保存」にして
    * 自動保存を予約するが、アンドゥには積まない。ホイールのように続けて来るものは間引く。
@@ -416,14 +554,28 @@ export class App extends Emitter<AppEvents> {
   }
   private cameraTimer = 0;
 
-  /* ---------- 読み込み ---------- */
+  /* ---------- 読み込みとタブ ---------- */
+
+  /** タブを置き換えて開くか(変更していないサンプル・空のタブ) */
+  private get replaceable(): boolean { return this.tab.sample && !this.tab.dirty; }
+
+  /** タブの数が上限で、新しいタブを開けないか。開けないときは伝える */
+  tabsFull(): boolean {
+    if (this.replaceable || this.tabs.length < MAX_TABS) return false;
+    toast(`タブは ${MAX_TABS} 枚まで開けます。どれかを閉じてから開いてください。`, 'warning', 5000);
+    return true;
+  }
+
+  /** タブの見出し(ファイル名、無ければ画像の名前) */
+  tabName(t: Tab): string { return t.fileName ?? t.project.documents[0]?.name ?? ''; }
 
   /**
    * プロジェクトを読み込む。先に画像をデコードし、成功してから状態を一度に差し替える。
    * デコードに失敗したら例外を投げ、今の状態には何も触れない。
-   * 後から始まった別の読み込みに追い越されたときは何もせず false を返す。
+   * 後から始まった別の読み込みに追い越されたときや、タブの数が上限のときは何もせず false を返す。
+   * 今のタブが変更していないサンプルなら置き換え、そうでなければ新しいタブで開く(今のタブはそのまま裏に残る)。
    */
-  async loadProject(project: Project, opts: { fileName?: string | null; handle?: FileSystemFileHandle | null; dirty?: boolean; keepAutosave?: boolean; canvas?: HTMLCanvasElement } = {}): Promise<boolean> {
+  async loadProject(project: Project, opts: { fileName?: string | null; handle?: FileSystemFileHandle | null; dirty?: boolean; canvas?: HTMLCanvasElement; sample?: boolean; replace?: boolean; tabId?: string; order?: number } = {}): Promise<boolean> {
     const doc = project.documents[0];
     if (!doc) throw new Error('プロジェクトに画像が入っていません');
     const token = ++this.syncToken;
@@ -431,67 +583,201 @@ export class App extends Emitter<AppEvents> {
     const canvas = opts.canvas ?? await decodeForDisplay(doc.image, this.displaySize);
     // デコード中に別の読み込みが始まっていたら、こちらは捨てる
     if (token !== this.syncToken) return false;
-    this.loading = true;
-    clearTimeout(this.cameraTimer); this.cameraTimer = 0; // 前の作業の視点変更を、新しく開いた作業の変更として数えない
-    try {
-      // 記録中・再生中の操作は前の作業のものなので捨てる
-      this.takeRaw = []; this.playIndex = 0; this.playPaused = false;
-      if (this.takeState !== 'idle') { this.takeState = 'idle'; this.world.grab = null; this.world.grabGains.clear(); this.emit('take', 'idle'); }
-      this.playFrom = this.playCam = null; this.world.viewRig = null; this.stage.setRig(null);
-      this.store.replace(project);
-      this.history.clear();
-      this.world.reset();
-      this.recorder.clear();
-      // 3面図の視点は前の画像の大きさで動かしてあるので、新しい画像では初めの表示に戻す
-      this.multiOrtho = defaultOrthoView();
-      this.activeLayerId = null;
-      this.setActiveLayer(project.documents[0]?.layers[0]?.id ?? null);
-      this.fileName = opts.fileName ?? null;
-      this.fileHandle = opts.handle ?? null;
-      this.dirty = !!opts.dirty;
-      this.autosaveError = null;
-      this.applyDocument(canvas);
-    } finally { this.loading = false; }
-    // 別の作業に切り替えたので、前の作業の自動保存はもう要らない(復元した作業の読み込みは除く)
-    if (!opts.dirty && !opts.keepAutosave) { clearTimeout(this.autosaveTimer); void autosave.clear(); }
-    this.emit('file', undefined);
+    const replace = opts.replace || this.replaceable;
+    if (!replace && this.tabsFull()) return false;
+    const old = this.tab;
+    if (replace) {
+      // 前の作業の視点変更を、新しく開いた作業の変更として数えない
+      clearTimeout(this.cameraTimer); this.cameraTimer = 0;
+      // 置き換える作業の自動保存はもう要らない
+      this.dropTabAutosave(old);
+    } else this.leaveTab();
+    // 並び: 置き換えなら同じ位置、新しいタブなら今のタブの右隣(自動保存から戻すときもこの並びにする)
+    const i = this.tabs.indexOf(old), right = this.tabs[i + 1];
+    const order = opts.order ?? (replace ? old.order : right ? (old.order + right.order) / 2 : Math.max(Date.now(), old.order + 1));
+    const tab = createTab(project, { id: opts.tabId, order, sample: opts.sample, fileName: opts.fileName ?? null, fileHandle: opts.handle ?? null, dirty: !!opts.dirty });
+    if (replace) this.tabs.splice(i, 1, tab); else this.tabs.splice(i + 1, 0, tab);
+    this.enterTab(tab, canvas);
     return true;
   }
 
-  async loadSample(opts: { keepAutosave?: boolean } = {}): Promise<void> {
-    const doc = await createSampleDocument();
-    const p = createProject(doc);
-    await this.loadProject(p, { keepAutosave: opts.keepAutosave });
+  /**
+   * 表のタブを裏へ回す。記録・再生を止め、間引き中の視点の変更を数え、アンドゥの積みを預ける。
+   * 表示用の画像はメモリを空けるため捨てる(表に出すときにデコードし直す)
+   */
+  private leaveTab(): void {
+    const t = this.tab;
+    this.stopRecording();
+    // 再生を止めると視点が止めた所の記録の視点に移るが、それは作業の変更として数えない(切り替えただけで「未保存」にしない)
+    const pending = this.cameraTimer !== 0;
+    this.stopTake();
+    if (!pending) { clearTimeout(this.cameraTimer); this.cameraTimer = 0; }
+    if (this.cameraTimer) { clearTimeout(this.cameraTimer); this.cameraTimer = 0; this.store.emit('change', undefined); }
+    t.history = this.history.take();
+    t.imageCanvas = null;
   }
 
-  /** 未保存の変更があれば確認する。続けてよければ true。 */
-  async confirmDiscard(): Promise<boolean> {
-    if (!this.dirty) return true;
-    const r = await ask({ title: '保存されていない変更があります', body: '変更を破棄して続けますか?', yes: '破棄して続ける' });
-    return r.ok;
+  /** タブを表に出す。canvas はデコード済みの表示用画像 */
+  private enterTab(tab: Tab, canvas: HTMLCanvasElement): void {
+    this.loading = true;
+    try {
+      // 記録中・再生中の操作は前の作業のものなので捨てる
+      this.takeRaw = []; this.playIndex = 0; this.playPaused = false;
+      if (this.takeState !== 'idle') { this.takeState = 'idle'; this.emit('take', 'idle'); }
+      this.world.grab = null; this.world.grabGains.clear(); this.shake = { x: 0, y: 0, z: 0 };
+      this.playFrom = this.playCam = null; this.world.viewRig = null; this.stage.setRig(null);
+      this.base = freshBase(); // 画像全体のずれは前の画像のピクセル単位なので持ち越さない
+      this.tab = tab;
+      tab.shownAt = Date.now();
+      this.switching = true;
+      try { this.store.replace(tab.project); } finally { this.switching = false; }
+      this.history.restore(tab.history);
+      tab.history = emptyHistory();
+      this.world.reset();
+      this.recorder.clear();
+      // 選んでいたレイヤーを選び直す(初めて出すタブは、いちばん下のレイヤー)
+      const first = tab.project.documents[0]?.layers[0]?.id ?? null;
+      if (tab.activeLayerId && this.store.findLayer(tab.activeLayerId)) this.selectLayers(tab.selectedLayerIds, tab.activeLayerId);
+      else this.setActiveLayer(first);
+      this.applyDocument(canvas);
+    } finally { this.loading = false; }
+    this.emit('take', this.takeState);
+    this.emit('file', undefined);
+    this.emit('tabs', undefined);
+  }
+
+  /** タブの自動保存を取り消して消す(実行中のものは終わってから消す) */
+  private dropTabAutosave(t: Tab): void {
+    clearTimeout(t.autosaveTimer); t.autosaveTimer = 0;
+    void t.autosaving.then(() => autosave.clear(t.id));
+  }
+
+  /** タブを表に出す。切り替えたら true */
+  async switchTab(id: string): Promise<boolean> {
+    const to = this.tabs.find(t => t.id === id);
+    if (!to || to === this.tab) return false;
+    if (this.busy) { toast('いまはタブを切り替えられません。処理が終わってからもう一度お試しください。', 'warning'); return false; }
+    return this.whileOpening(() => this.switchTabNow(to));
+  }
+
+  private async switchTabNow(to: Tab): Promise<boolean> {
+    const token = ++this.syncToken;
+    let canvas: HTMLCanvasElement;
+    // 裏のタブは表示用の画像を捨ててあるので、デコードし直す(大きな画像では少しかかる)
+    if (!to.imageCanvas) setBusy(true);
+    try { canvas = to.imageCanvas ?? await decodeForDisplay(to.project.documents[0].image, this.displaySize); } catch (e) {
+      toast(`タブを開けませんでした: ${e instanceof Error ? e.message : e}`, 'error', 6000);
+      return false;
+    } finally { setBusy(false); }
+    if (token !== this.syncToken || !this.tabs.includes(to)) return false;
+    this.leaveTab();
+    this.enterTab(to, canvas);
+    return true;
+  }
+
+  /** 隣のタブへ(dir: +1 で右、-1 で左。端からは反対の端へ) */
+  stepTab(dir: 1 | -1): void {
+    const n = this.tabs.length; if (n < 2) return;
+    const i = this.tabs.indexOf(this.tab);
+    void this.switchTab(this.tabs[(i + dir + n) % n].id);
+  }
+
+  /**
+   * タブを閉じる。保存していない変更があれば確かめる。表のタブを閉じたら右隣(無ければ左隣)を出し、
+   * 最後の1枚ならサンプルに置き換える。閉じたら true
+   */
+  async closeTab(id: string = this.tab.id): Promise<boolean> {
+    const t = this.tabs.find(x => x.id === id);
+    if (!t) return false;
+    // 変更していないサンプルが1枚だけなら、閉じても同じものに戻るだけなので何もしない
+    if (this.tabs.length === 1 && this.replaceable) return false;
+    if (this.busy) { toast('いまはタブを閉じられません。処理が終わってからもう一度お試しください。', 'warning'); return false; }
+    if (t.dirty) {
+      const r = await ask({ title: `「${this.tabName(t)}」は保存されていません`, body: '変更を破棄してタブを閉じますか?', yes: '破棄して閉じる' });
+      if (!r.ok || !this.tabs.includes(t)) return false;
+    }
+    if (t === this.tab) {
+      const i = this.tabs.indexOf(t), next = this.tabs[i + 1] ?? this.tabs[i - 1];
+      if (next) { if (!(await this.switchTab(next.id))) return false; } else {
+        // 最後の1枚はサンプルに置き換える(置き換えるタブの自動保存は loadProject が消す)
+        if (!(await this.whileOpening(() => this.loadSample({ replace: true })))) return false;
+        return true;
+      }
+    }
+    this.tabs.splice(this.tabs.indexOf(t), 1);
+    this.dropTabAutosave(t);
+    t.history = emptyHistory(); t.imageCanvas = null;
+    this.trimHiddenHistory();
+    this.emit('tabs', undefined);
+    return true;
+  }
+
+  /** どれかのタブに保存していない変更があるか(ページを閉じるときの確認) */
+  get anyDirty(): boolean { return this.tabs.some(t => t.dirty); }
+
+  /**
+   * 全部のタブのアンドゥの合計を、1つの作業の上限(history.options.maxBytes)に収める。
+   * あふれたら、裏のタブのうち長く出していないものの古い手から捨てる(表のタブの積みは History が自分で収める)
+   */
+  private trimHiddenHistory(): void {
+    const limit = this.history.options.maxBytes, hidden = this.tabs.filter(t => t !== this.tab);
+    let total = this.history.bytes + hidden.reduce((a, t) => a + t.history.bytes, 0);
+    for (const t of hidden.sort((a, b) => a.shownAt - b.shownAt)) {
+      if (total <= limit) break;
+      total -= shrinkHistory(t.history, t.history.bytes - (total - limit));
+    }
+  }
+
+  async loadSample(opts: { replace?: boolean } = {}): Promise<boolean> {
+    if (!opts.replace && this.tabsFull()) return false;
+    const doc = await createSampleDocument();
+    const p = createProject(doc);
+    return this.loadProject(p, { sample: true, replace: opts.replace });
   }
 
   /** 書き出し・塗り・ぼかしのプレビュー・別のファイルの読み込みの最中は、ファイルを開かない */
   get busy(): boolean { return this.exporting || this.stroking || this.previewingBlur || this.previewingInflate || this.opening; }
   private opening = false;
 
-  /** confirmed: 未保存の変更を捨ててよいか、呼ぶ側で確かめ済み */
-  async openFile(file: File, handle?: FileSystemFileHandle, opts: { confirmed?: boolean } = {}): Promise<void> {
+  async openFile(file: File, handle?: FileSystemFileHandle): Promise<void> {
     if (this.busy) { toast('いまはファイルを開けません。処理が終わってからもう一度お試しください。', 'warning'); return; }
     const t = performance.now();
-    await this.whileOpening(() => this.openFileNow(file, handle, !!opts.confirmed));
-    this.perf?.event({ t, d: performance.now() - t, kind: 'open', detail: `${file.name}(${(file.size / 1e6).toFixed(1)}MB、確認の待ち時間も含む)` });
+    await this.whileOpening(() => this.openFileNow(file, handle));
+    this.perf?.event({ t, d: performance.now() - t, kind: 'open', detail: `${file.name}(${(file.size / 1e6).toFixed(1)}MB)` });
   }
 
-  /** ファイルを開いている間は、ほかのファイルを開かせない(起動時の復元にも使う) */
+  /** ファイルを開いている間は、ほかのファイルを開かせない(起動時の復元・タブの切り替えにも使う) */
   async whileOpening<T>(fn: () => Promise<T>): Promise<T> {
     this.opening = true;
     try { return await fn(); } finally { this.opening = false; }
   }
 
-  private async openFileNow(file: File, handle: FileSystemFileHandle | undefined, confirmed: boolean): Promise<void> {
-    if (isProjectFile(file)) {
-      if (!confirmed && !(await this.confirmDiscard())) return;
+  /** そのファイルを開けるか(開いているタブを出すだけなら開ける)。開けないときは伝える */
+  async roomFor(handle?: FileSystemFileHandle): Promise<boolean> {
+    return !!(await this.tabOf(handle)) || !this.tabsFull();
+  }
+
+  /** 同じ場所のファイルを開いているタブ(ファイルの場所を受け取れる Chrome 系だけ分かる) */
+  private async tabOf(handle: FileSystemFileHandle | undefined): Promise<Tab | undefined> {
+    if (!handle) return undefined;
+    for (const t of this.tabs) {
+      try { if (t.fileHandle && await t.fileHandle.isSameEntry(handle)) return t; } catch { /* 比べられなければ別のファイルとして開く */ }
+    }
+    return undefined;
+  }
+
+  private async openFileNow(file: File, handle: FileSystemFileHandle | undefined): Promise<void> {
+    const project = isProjectFile(file);
+    if (!project && !isImageFile(file)) { toast('PNG / JPEG / WebP の画像か、.pukupop ファイルを選んでください。', 'warning'); return; }
+    // 開いているプロジェクトなら、そのタブを出す(同じ作業を2つのタブで別々に変えないように)
+    const same = project ? await this.tabOf(handle) : undefined;
+    if (same) {
+      if (same !== this.tab) await this.switchTabNow(same);
+      toast(`「${file.name}」はもう開いています。`, 'info');
+      return;
+    }
+    if (this.tabsFull()) return;
+    if (project) {
       let bytes: Uint8Array;
       try { bytes = new Uint8Array(await file.arrayBuffer()); } catch (e) {
         toast(`「${file.name}」を読めませんでした: ${e instanceof Error ? e.message : e}`, 'error', 6000);
@@ -499,12 +785,7 @@ export class App extends Emitter<AppEvents> {
       }
       // 一覧への記録は待たない(記録が遅れたり失敗したりしても、次のファイルを開けるように)
       if (await this.openProjectBytes(bytes, file.name, handle ?? null)) void this.remember('project', file.name, file.size, handle, () => bytes);
-    } else if (isImageFile(file)) {
-      if (!confirmed && !(await this.confirmDiscard())) return;
-      if (await this.openImage(file)) void this.remember('image', file.name, file.size, handle, async () => new Uint8Array(await file.arrayBuffer()));
-    } else {
-      toast('PNG / JPEG / WebP の画像か、.pukupop ファイルを選んでください。', 'warning');
-    }
+    } else if (await this.openImage(file)) void this.remember('image', file.name, file.size, handle, async () => new Uint8Array(await file.arrayBuffer()));
   }
 
   /**
@@ -556,12 +837,15 @@ export class App extends Emitter<AppEvents> {
     } finally { setBusy(false); }
   }
 
-  /** 開けたら true。開けなければ理由を伝えて false を返し、今の状態は変えない */
-  async openProjectBytes(bytes: Uint8Array, name: string | null, handle: FileSystemFileHandle | null, dirty = false): Promise<boolean> {
+  /**
+   * 開けたら true。開けなければ理由を伝えて false を返し、今の状態は変えない。
+   * restore は自動保存から戻すときの、そのタブの id(自動保存のキー)・並び・見出し
+   */
+  async openProjectBytes(bytes: Uint8Array, name: string | null, handle: FileSystemFileHandle | null, dirty = false, restore?: { tabId: string; order: number; name: string }): Promise<boolean> {
     setBusy(true);
     try {
       const { project } = await deserializeProject(bytes, { decodeFallback: browserDecodeGray });
-      if (!(await this.loadProject(project, { fileName: name, handle, dirty }))) return false;
+      if (!(await this.loadProject(project, { fileName: name ?? restore?.name ?? null, handle, dirty, tabId: restore?.tabId, order: restore?.order }))) return false;
       if (name) toast(`「${name}」を開きました。`, 'success');
       return true;
     } catch (e) {
@@ -585,75 +869,99 @@ export class App extends Emitter<AppEvents> {
 
   serialize(thumbnail?: Uint8Array): Uint8Array { return serializeProject(this.project, { thumbnail }); }
 
-  suggestedName(): string {
-    if (this.fileName) return this.fileName;
-    const base = (this.doc?.name ?? 'untitled').replace(/\.[^.]+$/, '');
+  suggestedName(tab: Tab = this.tab): string {
+    if (tab.fileName) return tab.fileName;
+    const base = (tab.project.documents[0]?.name ?? 'untitled').replace(/\.[^.]+$/, '');
     return `${base}${FILE_EXTENSION}`;
   }
 
   async save(saveAs = false): Promise<boolean> {
     if (!this.doc) return false;
+    // 保存先を選んでいる間にタブを切り替えても、このタブに書き戻す
+    const tab = this.tab;
     // 書き込みを待つ間に変更されたら、その変更は保存されていないので「未保存」のまま残す
     const thumb = await this.thumbnail();
     // 間引き中の視点の変更は、これから保存する内容に含まれるので、ここで通知を取り消す
-    const cameraPending = this.cameraTimer !== 0;
+    const cameraPending = tab === this.tab && this.cameraTimer !== 0;
     if (cameraPending) { clearTimeout(this.cameraTimer); this.cameraTimer = 0; }
-    const revision = this.revision;
-    const bytes = this.serialize(thumb);
+    const revision = tab.revision;
+    const bytes = serializeProject(tab.project, { thumbnail: thumb });
     const blob = new Blob([bytes as BlobPart], { type: 'application/zip' });
     try {
-      const h = await saveFile(blob, this.suggestedName(), PROJECT_TYPES, saveAs ? null : this.fileHandle);
-      if (h === undefined) { if (cameraPending) this.cameraChanged(); return false; }
-      this.fileHandle = h;
-      if (h) this.fileName = h.name; else this.fileName ??= this.suggestedName();
-      this.lastSaved = new Date();
-      this.autosaveError = null; // ファイルに保存できたので、自動保存の失敗の案内は消す
-      if (this.revision === revision) {
-        this.dirty = false;
+      const h = await saveFile(blob, this.suggestedName(tab), PROJECT_TYPES, saveAs ? null : tab.fileHandle);
+      if (h === undefined) { if (cameraPending) this.cameraUnsaved(tab); return false; }
+      tab.fileHandle = h;
+      if (h) tab.fileName = h.name; else tab.fileName ??= this.suggestedName(tab);
+      tab.lastSaved = new Date();
+      tab.sample = false; // 保存したら、次に開いたファイルで置き換えない
+      tab.autosaveError = null; // ファイルに保存できたので、自動保存の失敗の案内は消す
+      if (tab.revision === revision) {
+        tab.dirty = false;
         // 予約中の自動保存は取り消し、実行中のものがあれば終わってから消す(古い内容が後から書き込まれないように)
-        clearTimeout(this.autosaveTimer);
-        void this.autosaving.then(() => { if (!this.dirty) return autosave.clear(); });
+        clearTimeout(tab.autosaveTimer);
+        void tab.autosaving.then(() => { if (!tab.dirty) return autosave.clear(tab.id); });
       } else {
-        this.scheduleAutosave();
+        this.scheduleAutosave(tab);
       }
       this.emit('file', undefined);
-      toast(h ? `「${h.name}」に保存しました。` : `「${this.fileName}」をダウンロードしました。`, 'success');
-      void this.remember('project', this.fileName ?? this.suggestedName(), bytes.byteLength, h, () => bytes, thumb);
+      this.emit('tabs', undefined);
+      toast(h ? `「${h.name}」に保存しました。` : `「${tab.fileName}」をダウンロードしました。`, 'success');
+      void this.remember('project', tab.fileName ?? this.suggestedName(tab), bytes.byteLength, h, () => bytes, thumb);
       return true;
     } catch (e) {
-      if (cameraPending) this.cameraChanged(); // 保存できなかったので、視点の変更は未保存のまま
+      if (cameraPending) this.cameraUnsaved(tab); // 保存できなかったので、視点の変更は未保存のまま
       toast(`保存できませんでした: ${e instanceof Error ? e.message : e}`, 'error', 6000);
       return false;
     }
   }
 
-  private scheduleAutosave(): void {
-    clearTimeout(this.autosaveTimer);
-    this.autosaveTimer = window.setTimeout(() => {
-      // 塗りの最中・ぼかしのプレビュー中は、確定していない状態を保存しないよう後に回す
-      const unsettled = !!this.stroke || this.previewingBlur || this.previewingInflate;
-      if (!this.dirty || !this.doc || unsettled) { if (unsettled) this.scheduleAutosave(); return; }
+  /** 保存できなかったときに、取り消していた視点の変更を「未保存」に戻す。待つ間にタブを切り替えていたら、そのタブに付ける */
+  private cameraUnsaved(tab: Tab): void {
+    if (tab === this.tab) { this.cameraChanged(); return; }
+    tab.revision++;
+    tab.lastAutosave = null;
+    tab.dirty = true;
+    this.scheduleAutosave(tab);
+    this.emit('tabs', undefined);
+  }
+
+  /** そのタブの自動保存を予約する。裏に回ったタブも中身は変わらないので、予約どおりに保存する */
+  private scheduleAutosave(tab: Tab = this.tab): void {
+    clearTimeout(tab.autosaveTimer);
+    /** 表のタブの塗りの最中・ぼかしのプレビュー中は、確定していない状態を保存しないよう後に回す */
+    const unsettled = () => tab === this.tab && (!!this.stroke || this.previewingBlur || this.previewingInflate);
+    const live = () => this.tabs.includes(tab) && tab.dirty && !!tab.project.documents[0];
+    tab.autosaveTimer = window.setTimeout(() => {
+      tab.autosaveTimer = 0;
+      if (!live()) return;
+      if (unsettled()) { this.scheduleAutosave(tab); return; }
       const fail = (e: unknown) => {
         console.warn('autosave failed', e);
-        this.autosaveError = e instanceof Error ? e.message : String(e);
+        tab.autosaveError = e instanceof Error ? e.message : String(e);
+        // 裏のタブの失敗はステータスバーに出ないので、その場で知らせる
+        if (tab !== this.tab) toast(`「${this.tabName(tab)}」の自動保存に失敗しました(${tab.autosaveError})。そのタブを保存してください。`, 'error', 8000);
         this.emit('status', undefined);
       };
       // 直列化は重いので、操作の合間(アイドル時間)に行う
       idle(() => {
-        if (!this.dirty || !this.doc) return;
-        if (this.stroke || this.previewingBlur || this.previewingInflate) { this.scheduleAutosave(); return; }
+        if (!live()) return;
+        if (unsettled()) { this.scheduleAutosave(tab); return; }
         try {
           const t = performance.now();
-          const bytes = serializeProjectBlob(this.project, { pngCache: this.pngCache });
+          const bytes = serializeProjectBlob(tab.project, { pngCache: tab.pngCache });
           const t1 = performance.now();
-          const run = autosave.save({ savedAt: Date.now(), name: this.suggestedName(), bytes })
-            .then(() => { this.lastAutosave = new Date(); this.autosaveError = null; this.emit('status', undefined); }, fail);
+          const run = autosave.save(tab.id, { savedAt: Date.now(), name: this.suggestedName(tab), bytes, order: tab.order })
+            .then(() => {
+              tab.lastAutosave = new Date(); tab.autosaveError = null; this.emit('status', undefined);
+              // 書き込んでいる間にタブを閉じたら、書いた分を消す
+              if (!this.tabs.includes(tab)) return autosave.clear(tab.id);
+            }, fail);
           if (this.perf) {
             const p = this.perf;
             p.event({ t, d: t1 - t, kind: 'autosave', detail: `${(bytes.size / 1e6).toFixed(1)}MB を直列化(メインスレッド)` });
             void run.then(() => p.event({ t: t1, d: performance.now() - t1, kind: 'autosave-write', detail: 'IndexedDB への書き込み完了まで(非同期)' }));
           }
-          this.autosaving = this.autosaving.then(() => run);
+          tab.autosaving = tab.autosaving.then(() => run);
         } catch (e) { fail(e); }
       });
     }, AUTOSAVE_DELAY);
@@ -754,7 +1062,7 @@ export class App extends Emitter<AppEvents> {
   endBlurPreview(apply: boolean, radius: number): void {
     const p = this.blurPreview; if (!p) return;
     this.blurPreview = null;
-    try { this.finishBlur(p, apply, radius); } finally { this.emit('blur', 'end'); }
+    try { this.finishBlur(p, apply, radius); } finally { this.emit('blur', 'end'); this.autoHideOverlay(); }
   }
 
   private finishBlur(p: NonNullable<App['blurPreview']>, apply: boolean, radius: number): void {
@@ -970,13 +1278,14 @@ export class App extends Emitter<AppEvents> {
     this.history.execute(new MoveLayer(layer.id, from, to));
   }
 
-  /* ---------- 揺れの切り替えとプリセット(右パネル・上のツールバー・スマホのどこから変えても、ここを通す) ---------- */
+  /* ---------- 揺れの切り替えとプリセット(右パネル・レイヤー一覧の行・左のツールバー・メニュー・スマホのどこから変えても、ここを通す) ---------- */
 
-  /** 選択中のレイヤーを揺らすか */
-  setLayerSwing(on: boolean): void {
-    const ls = this.selectedLayers.filter(l => l.physics.enabled !== on);
+  /** 選択中のレイヤー(ids を渡したときはそのレイヤーだけ。レイヤー一覧の行のアイコン)を揺らすか */
+  setLayerSwing(on: boolean, ids?: readonly string[]): void {
+    const targets = ids ? (this.doc?.layers ?? []).filter(l => ids.includes(l.id)) : this.selectedLayers;
+    const ls = targets.filter(l => l.physics.enabled !== on);
     if (!ls.length) return;
-    const label = countLabel('揺れの切替', this.selectedLayerIds.size);
+    const label = countLabel('揺れの切替', targets.length);
     this.history.execute(batchOf(label, ls.map(l => PatchLayer.from(this.store, l.id, { physics: { ...l.physics, enabled: on } }, label))));
   }
 
@@ -1026,10 +1335,10 @@ export class App extends Emitter<AppEvents> {
   addFavorite(): void {
     const doc = this.doc, list = this.project.favorites;
     if (!doc || !this.canEditFavorites) return;
-    if (list.length >= LIMITS.favorites) { toast(`お気に入りは ${LIMITS.favorites} 件までです。要らないものを消してから残してください。`, 'warning'); return; }
+    if (list.length >= LIMITS.favorites) { toast(`お気に入りは ${LIMITS.favorites} 件までです。要らないものを消してから追加してください。`, 'warning'); return; }
     const f = captureFavorite(this.project, doc, { name: nextFavoriteName(list), playing: this.takeState === 'playing' });
-    this.history.execute(new SetFavorites(`お気に入りに残す「${f.name}」`, list, [...list, f]));
-    toast(`「${f.name}」に残しました。`, 'success', 2000);
+    this.history.execute(new SetFavorites(`お気に入りに追加「${f.name}」`, list, [...list, f]));
+    toast(`「${f.name}」を追加しました。`, 'success', 2000);
   }
 
   /** お気に入りを今の状態で上書きする(名前と並びはそのまま) */
@@ -1344,6 +1653,23 @@ export class App extends Emitter<AppEvents> {
     this.emit('take', this.takeState);
   }
 
+  /**
+   * キーフレームの動きを再生できるか(2つ以上で1周が短すぎず、止まっているとき)。
+   * 手で記録した操作があるときは、黙ってキーフレームの記録に入れ替えないよう使えなくする(右パネルの「再生」で入れ替える)
+   */
+  get canPlayKeys(): boolean {
+    const n = this.keyDraft.length, total = this.keyDraft.reduce((a, k) => a + k.seconds, 0), take = this.project.take;
+    return n >= 2 && total >= TAKE_MIN_SECONDS - 1e-9 && !!this.doc && !this.exporting && this.takeState === 'idle' && (!take || !!take.keys);
+  }
+
+  /** キーフレームの動きを再生する。一覧が今の記録と同じならそのまま再生し、違えば作り直す(元に戻せる) */
+  playKeys(): void {
+    if (!this.canPlayKeys) return;
+    const take = this.project.take;
+    if (take?.keys && JSON.stringify(take.keys) === JSON.stringify(normalizeKeys(this.keyDraft))) this.playTake();
+    else this.makeKeyTake();
+  }
+
   /** キーフレームを順に通ってくり返す記録を作り(今の記録と入れ替え、アンドゥできる)、ループ再生する */
   makeKeyTake(): void {
     if (!this.doc || this.takeState === 'recording') return;
@@ -1456,6 +1782,10 @@ export class App extends Emitter<AppEvents> {
       this.emit('status', undefined);
     }
   }
+}
+
+function freshBase() {
+  return { shown: { x: 0, y: 0, z: 0 }, live: { x: 0, y: 0, z: 0 }, fix: { x: 0, y: 0, z: 0 }, key: '', held: null as Vec3 | null };
 }
 
 /** 視点(回転・ズーム・注視点)が同じか。画角は見ない */

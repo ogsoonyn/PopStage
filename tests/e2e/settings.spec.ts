@@ -3,7 +3,7 @@ import { boot, watchGlErrors } from './helpers';
 
 watchGlErrors();
 
-const openSettings = (page: Page) => page.locator('#menubar [data-cmd=settings]').click();
+const openSettings = (page: Page) => page.locator('#toolOptions [data-cmd=settings]').click();
 const box = (page: Page, id: string) => page.locator(`#setToolbarList input[data-nav="${id}"]`);
 const nav = (page: Page, id: string) => page.locator(`#toolNav [data-nav="${id}"]`);
 /** 見えている区切りが、ツールバーの端や続けて並んでいないか */
@@ -12,12 +12,11 @@ const dividersOk = (page: Page) => page.locator('#toolNav').evaluate(n => {
   return shown.every((el, i) => !el.classList.contains('divider') || (i > 0 && i < shown.length - 1 && !shown[i + 1].classList.contains('divider')));
 });
 
-test('左のツールバーのいちばん上の「最近」で、最近開いたファイルの一覧が開く', async ({ page }) => {
+test('左のツールバーの「最近」で、最近開いたファイルの一覧が開く', async ({ page }) => {
   await boot(page);
-  const first = page.locator('#toolNav [data-nav]').first();
-  await expect(first).toHaveAttribute('data-nav', 'recent');
-  await expect(first).toHaveAccessibleName('最近開いたファイル');
-  await first.click();
+  const recent = nav(page, 'recent');
+  await expect(recent).toHaveAccessibleName('最近開いたファイル');
+  await recent.click();
   await expect(page.locator('#recentDialog')).toBeVisible();
 });
 
@@ -25,8 +24,8 @@ test('設定でツールバーのボタンを1つずつ隠せる。隠しても�
   await boot(page);
   await openSettings(page);
   await expect(page.locator('#settingsDialog')).toBeVisible();
-  // 初めは全部出す
-  await expect(page.locator('#setToolbarList input:not(:checked)')).toHaveCount(0);
+  // 初めは、開く・保存・書き出しのほかを全部出す
+  await expect(page.locator('#setToolbarList input:not(:checked)')).toHaveCount(3);
   for (const id of ['brush', 'view', 'pan', 'smoothAll', 'normalize', 'invert']) await box(page, id).uncheck();
   for (const id of ['brush', 'view', 'pan', 'smoothAll']) await expect(nav(page, id)).toBeHidden();
   await expect(nav(page, 'erase')).toBeVisible();
@@ -57,6 +56,37 @@ test('設定でツールバーのボタンを1つずつ隠せる。隠しても�
   await expect(nav(page, 'brush')).toBeVisible();
   await expect(page.locator('#toolNav .nav-group[aria-label="選んでいるレイヤーに効く操作"]')).toBeVisible();
   expect(await dividersOk(page)).toBe(true);
+});
+
+test('開く・保存・書き出しは、既定では隠し、設定で出せる。出したことをブラウザに覚える', async ({ page }) => {
+  await boot(page);
+  for (const id of ['open', 'save', 'export']) await expect(nav(page, id)).toBeHidden();
+  await openSettings(page);
+  for (const id of ['open', 'save', 'export']) await expect(box(page, id)).not.toBeChecked();
+  await box(page, 'open').check();
+  await box(page, 'export').check();
+  await page.keyboard.press('Escape');
+  // ファイルのまとまりの先頭に出る
+  await expect(page.locator('#toolNav .nav-group[aria-label=ファイルの操作] [data-nav]:visible').first()).toHaveAttribute('data-nav', 'open');
+  await expect(nav(page, 'open')).toHaveAccessibleName(/開く/);
+  await expect(nav(page, 'open')).toHaveAttribute('title', /Ctrl\+O/);
+  await page.waitForTimeout(400);
+  await page.goto('/?e2e');
+  await page.waitForFunction(() => (window as any).popstage?.doc);
+  await expect(nav(page, 'open')).toBeVisible();
+  await expect(nav(page, 'export')).toBeVisible();
+  await expect(nav(page, 'save')).toBeHidden();
+  // 押すと書き出しのダイアログが開く
+  await nav(page, 'export').click();
+  await expect(page.locator('#exportDialog')).toBeVisible();
+});
+
+test('前の版で隠したボタンを覚えている人にも、開く・保存・書き出しはいきなり出さない', async ({ page }) => {
+  await page.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('popstage.prefs.v1', JSON.stringify({ toolbarHidden: ['brush'] })); } });
+  await boot(page);
+  await expect(nav(page, 'brush')).toBeHidden();
+  for (const id of ['open', 'save', 'export']) await expect(nav(page, id)).toBeHidden();
+  await expect(nav(page, 'recent')).toBeVisible();
 });
 
 test('ファイルの操作とツールを全部隠しても、区切りが端に残らない', async ({ page }) => {

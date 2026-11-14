@@ -102,13 +102,22 @@ type World = { x: number; y: number; z: number };
 interface Shape { frames: (World[] | null)[]; centers: (World | null)[]; paths: World[][]; seconds: number[]; modes: KeyMode[]; rigs: ReturnType<App['stage']['rigMatrix']>[] }
 
 export function bindKeyPath(app: App): void {
-  const host = ui.keyPath, toggle = ui.keyPathShow;
+  const host = ui.keyPath, toggle = ui.keyPathShow, ghost = ui.keyGhostShow;
   const svg = el('svg', { class: 'key-path', 'aria-hidden': 'true' }, host);
-  toggle.checked = prefs.get<boolean>(PREF) ?? true;
-  toggle.addEventListener('change', () => { prefs.set(PREF, toggle.checked); hideIfNeeded(); });
-  const ghost = ui.keyGhostShow;
-  ghost.checked = prefs.get<boolean>(GHOST_PREF) ?? false;
-  ghost.addEventListener('change', () => { prefs.set(GHOST_PREF, ghost.checked); hideIfNeeded(); });
+  // 経路・ゴーストの入・切は App が持つ(左のツールバー・メニューからも切り替える)。ここではブラウザに覚え、チェックボックスに映す。
+  // 覚えている値は、左のツールバーとメニューを作る(bindActions)前にここで入れる(main.ts の呼ぶ順)
+  app.keyOverlay = { path: prefs.get<boolean>(PREF) ?? true, ghost: prefs.get<boolean>(GHOST_PREF) ?? false };
+  toggle.addEventListener('change', () => app.setKeyOverlay('path', toggle.checked));
+  ghost.addEventListener('change', () => app.setKeyOverlay('ghost', ghost.checked));
+  let saved = { ...app.keyOverlay };
+  const syncToggles = () => {
+    const o = app.keyOverlay;
+    toggle.checked = o.path; ghost.checked = o.ghost;
+    if (o.path !== saved.path) prefs.set(PREF, o.path);
+    if (o.ghost !== saved.ghost) prefs.set(GHOST_PREF, o.ghost);
+    saved = { ...o };
+  };
+  toggle.checked = app.keyOverlay.path; ghost.checked = app.keyOverlay.ghost;
 
   // 番号を押して(ずらさずに)離すとその視点へ。押したときに一覧のフォーカスが外れて描き直しても届くよう、押した番号を覚えておく
   let press: { key: number; x: number; y: number; id: number } | null = null;
@@ -141,7 +150,7 @@ export function bindKeyPath(app: App): void {
 
   let last = '', shapeSig = '', shape: Shape | null = null;
   function visible(): boolean {
-    if ((!toggle.checked && !ghost.checked) || !app.keyDraft.length || !app.doc || app.exporting || app.takeState !== 'idle') return false;
+    if ((!app.keyOverlay.path && !app.keyOverlay.ghost) || !app.keyDraft.length || !app.doc || app.exporting || app.takeState !== 'idle') return false;
     return keySectionShown();
   }
 
@@ -178,12 +187,12 @@ export function bindKeyPath(app: App): void {
     const m = app.stage.mainView(), c = app.project.camera, d = app.doc!;
     if (hover >= app.keyDraft.length) hover = -1;
     const ss = JSON.stringify([app.keyDraft, c.fov, m.w, m.h, d.position, d.rotation, d.scale]);
-    const sig = `${ss}|${m.x},${m.y}|${c.yaw},${c.pitch},${c.zoom},${c.target.x},${c.target.y},${c.target.z}|${hover}|${ghost.checked}|${toggle.checked}`;
+    const sig = `${ss}|${m.x},${m.y}|${c.yaw},${c.pitch},${c.zoom},${c.target.x},${c.target.y},${c.target.z}|${hover}|${app.keyOverlay.ghost}|${app.keyOverlay.path}`;
     if (sig === last) return;
     last = sig;
     if (ss !== shapeSig || !shape) { shapeSig = ss; shape = buildShape(c.fov); }
     // ゴーストだけのときは、重ね表示(SVG)は隠す
-    host.hidden = !toggle.checked;
+    host.hidden = !app.keyOverlay.path;
     Object.assign(host.style, { left: `${m.x}px`, top: `${m.y}px`, width: `${m.w}px`, height: `${m.h}px` });
     svg.setAttribute('viewBox', `0 0 ${m.w} ${m.h}`);
     draw(shape);
@@ -196,9 +205,9 @@ export function bindKeyPath(app: App): void {
     const toScreen = (w: World | null) => (w ? stage.toMainScreen(w) : null);
     const current = app.keyDraft.findIndex(k => sameView(k.view, cam));
     const strong = hover >= 0 ? hover : current;
-    stage.setGhosts(ghost.checked ? sh.rigs : null, strong);
+    stage.setGhosts(app.keyOverlay.ghost ? sh.rigs : null, strong);
     svg.replaceChildren();
-    if (!toggle.checked) return;
+    if (!app.keyOverlay.path) return;
     const frames = el('g', { class: 'kp-frames' }, svg), paths = el('g', { class: 'kp-paths' }, svg);
     const labels = el('g', { class: 'kp-labels' }, svg), marks = el('g', { class: 'kp-marks' }, svg);
     // 順番は濃さでも表す(最初が濃く、あとほど薄く)
@@ -268,7 +277,7 @@ export function bindKeyPath(app: App): void {
   const hideIfNeeded = () => { last = ''; if (!visible()) update(); };
   // 行を消したときは、強めていた行がもう無いことがある(消えた要素からは focusout が届かない)
   app.on('take', () => { hover = -1; hideIfNeeded(); });
-  app.on('view', () => { last = ''; shapeSig = ''; });
+  app.on('view', () => { last = ''; shapeSig = ''; syncToggles(); hideIfNeeded(); });
   app.on('status', hideIfNeeded);
   // タブの切り替えは frame で拾う(見えているかを毎フレーム確かめる)
   update();

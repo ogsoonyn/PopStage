@@ -1,5 +1,5 @@
 import './style.css';
-import { App } from './app';
+import { App, MAX_TABS } from './app';
 import { initUI, ui } from './ui/ids';
 import { bindStageInput } from './ui/input';
 import { bindPanels } from './ui/panels';
@@ -17,10 +17,14 @@ import { bindMobileLayout } from './ui/mobile';
 import { bindTakeControls } from './ui/take';
 import { bindPlayBar } from './ui/playBar';
 import { bindHideUi } from './ui/hideUi';
+import { bindSidePanel } from './ui/sidePanel';
 import { bindKeyPath } from './ui/keyPath';
+import { clampPopMax } from './ui/popSlider';
+import { bindInflateFrame } from './ui/inflateFrame';
 import { bindFavoriteControls } from './ui/favorites';
 import { isTool } from './ui/tools';
 import { bindHelp } from './ui/help';
+import { bindDocTabs } from './ui/docTabs';
 import { FILE_EXTENSION, LEGACY_FILE_EXTENSION } from './storage/popstage';
 import { ask, toast, retryWithClick } from './ui/dom';
 import { autosave } from './storage/autosave';
@@ -56,11 +60,13 @@ bindPanels(app);
 bindTakeControls(app);
 bindPlayBar(app);
 bindHideUi(app);
+bindSidePanel(app);
 bindKeyPath(app);
+bindInflateFrame(app);
 bindFavoriteControls(app);
 
 /* ---------- 右のパネルのタブ(レイヤー・アニメーション・画像と表示)。選んだタブはブラウザに覚える ---------- */
-{
+const selectPanelTab = (() => {
   const tabs = [...document.querySelectorAll<HTMLButtonElement>('#pTabs [data-ptab]')];
   const select = (t: string) => {
     if (!tabs.some(b => b.dataset.ptab === t)) t = 'layer'; // 知らない値(前の版の「編集」タブなど)は「レイヤー」で始める
@@ -70,7 +76,8 @@ bindFavoriteControls(app);
   };
   for (const b of tabs) b.addEventListener('click', () => select(b.dataset.ptab!));
   select(prefs.get<string>('panelTab') ?? 'layer');
-}
+  return select;
+})();
 
 /* ---------- 設定をブラウザに覚える(ファイルには書かない) ---------- */
 persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.brushPressure]);
@@ -81,8 +88,12 @@ persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.b
   for (const k of ['overlay', 'overlayAll', 'grid', 'fade', 'multi'] as const) if (typeof saved[k] === 'boolean') app.view[k] = saved[k] as boolean;
   if (!app.view.overlay) app.view.overlayAll = false;
   if (typeof saved.autoOverlay === 'boolean') app.autoOverlay = saved.autoOverlay;
+  if (typeof saved.autoOverlayOff === 'boolean') app.autoOverlayOff = saved.autoOverlayOff;
+  const popMax = prefs.get<number>('popMax');
+  if (typeof popMax === 'number') app.popMax = clampPopMax(popMax);
+  app.overlayAutoShown = app.view.overlay && app.autoOverlay && saved.overlayAuto === true;
   app.syncView();
-  app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, overlayAll: v.overlayAll, grid: v.grid, fade: v.fade, multi: v.multi, autoOverlay: app.autoOverlay }); });
+  app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, overlayAll: v.overlayAll, grid: v.grid, fade: v.fade, multi: v.multi, autoOverlay: app.autoOverlay, autoOverlayOff: app.autoOverlayOff, overlayAuto: app.overlayAutoShown }); });
 }
 {
   const t = prefs.get<string>('tool');
@@ -90,11 +101,17 @@ persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.b
   if (isTool(t)) app.setTool(t, false);
   app.on('tool', t => prefs.set('tool', t));
 }
-// 背景・自動揺らし・画角は、変えたら「新しい画像を開いたときの既定」として覚える
+// 背景・自動揺らし・画角は、変えたら「新しい画像を開いたときの既定」として覚える。透過にしても背景色は残す(bgColor)
+{
+  // bgColor を覚える前の版では、透過でないときの background だけが色を持っていた
+  const d = prefs.get<Record<string, unknown>>('newImage') ?? {};
+  const c = [d.bgColor, d.background].find(v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v));
+  if (c) app.bgColor = c as string;
+}
 app.store.on('project', ({ keys }) => {
   if (!keys.some(k => k === 'background' || k === 'autoSwing' || k === 'camera')) return;
   const p = app.project;
-  prefs.set('newImage', { background: p.background, autoSwing: { ...p.autoSwing }, fov: p.camera.fov });
+  prefs.set('newImage', { background: p.background, bgColor: app.bgColor, autoSwing: { ...p.autoSwing }, fov: p.camera.fov });
 });
 const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
@@ -105,8 +122,7 @@ bindToolOptions(app);
 
 /* ---------- ファイルを開く ---------- */
 
-const { fileImage, fileProject } = ui;
-fileImage.addEventListener('change', () => { const f = fileImage.files?.[0]; fileImage.value = ''; if (f) void app.openFile(f); });
+const { fileProject } = ui;
 fileProject.addEventListener('change', () => { const f = fileProject.files?.[0]; fileProject.value = ''; if (f) void app.openFile(f); });
 
 const IMAGE_ACCEPT = { 'image/*': ['.png', '.jpg', '.jpeg', '.webp'] };
@@ -123,18 +139,22 @@ async function pickAndOpen(types: FilePickerAcceptType[], fallback: HTMLInputEle
   } else fallback.click();
 }
 
+const openAny = () => pickAndOpen([{ description: 'PukuPop プロジェクト / 画像', accept: { 'application/zip': [FILE_EXTENSION, LEGACY_FILE_EXTENSION], ...IMAGE_ACCEPT } }], fileProject);
+
 /* ---------- コマンド(メニュー・ボタン・ショートカット共通。定義は ui/actions.ts) ---------- */
 // メニューやボタンを結び付けるので、data-cmd の部品をスマホのシートへ移す前に呼ぶ(移しても結び付けは残る)
 bindActions(app, {
-  openImage: () => pickAndOpen([{ description: '画像', accept: IMAGE_ACCEPT }], fileImage),
-  openProject: () => pickAndOpen([{ description: 'PukuPop プロジェクト / 画像', accept: { 'application/zip': [FILE_EXTENSION, LEGACY_FILE_EXTENSION], ...IMAGE_ACCEPT } }], fileProject),
+  openProject: openAny,
   openRecent: () => recentDialog.open(),
   openExport: () => exportDialog.open(),
   openBlur: () => blurDialog.open(),
   openSettings: () => settingsDialog.open(),
+  // キーフレームの重ね表示は「アニメーション」タブを開いている間だけ出るので、左のツールバーなどで入れたらタブを開く
+  showKeyFrames: () => { app.setPanelClosed(false); selectPanelTab('anim'); },
   togglePerf,
 });
 bindMenus();
+bindDocTabs(app, { open: openAny });
 // 左のツールバーを作ったあとに、隠すボタンを映す
 const settingsDialog = bindSettingsDialog();
 // スマホの配置。右パネルなどの部品を移すので、ほかの部品を結び付けたあとに呼ぶ
@@ -178,8 +198,7 @@ function refreshStatus(): void {
   ui.sSave.textContent = app.autosaveError ? `自動保存に失敗しました(${app.autosaveError})。こまめに保存してください。` : app.dirty ? (app.lastAutosave ? `未保存の変更あり(${app.lastAutosave.toLocaleTimeString()} に自動保存)` : '未保存の変更あり') : app.lastSaved ? `保存済み ${app.lastSaved.toLocaleTimeString()}` : '';
 }
 function refreshTitle(): void {
-  const name = app.fileName ?? app.doc?.name ?? '';
-  ui.docTitle.textContent = `${app.dirty ? '● ' : ''}${name}`;
+  const name = app.tabName(app.activeTab);
   document.title = `${app.dirty ? '* ' : ''}${name ? name + ' - ' : ''}PukuPop`;
   refreshStatus();
 }
@@ -187,8 +206,9 @@ app.on('status', refreshStatus);
 app.on('fps', refreshStatus); // ズームの表示など、イベントの無い変化もここで拾う(ステータスバーだけを書き直す)
 app.on('view', refreshStatus);
 app.on('file', refreshTitle);
+app.on('tabs', refreshTitle);
 
-window.addEventListener('beforeunload', e => { if (app.dirty) e.preventDefault(); });
+window.addEventListener('beforeunload', e => { if (app.anyDirty) e.preventDefault(); });
 new ResizeObserver(() => { app.stage.resize(); multiView.layout(); }).observe(canvas);
 
 /* ---------- 起動 ---------- */
@@ -196,29 +216,51 @@ new ResizeObserver(() => { app.stage.resize(); multiView.layout(); }).observe(ca
 async function boot(): Promise<void> {
   app.stage.resize();
   app.start();
-  const saved = checkRestore ? await autosave.load() : undefined;
-  if (saved) {
-    const r = await ask({
-      title: '前回の作業を復元しますか?',
-      body: `「${saved.name}」(${new Date(saved.savedAt).toLocaleString()} に自動保存)が残っています。`,
-      yes: '復元する', no: '破棄して新しく始める',
-    });
-    if (r.ok) {
-      // 復元している間にドロップされたファイルを開かない(開くと、復元の失敗と取り違えてサンプルで上書きしてしまう)
-      if (await app.whileOpening(() => app.openProjectBytes(saved.bytes, null, null, true))) { app.fileName = saved.name; refreshTitle(); return; }
-      // 復元できなかったときはサンプルで始める。壊れた自動保存を残すかは本人に決めてもらう
-      const keep = await ask({
-        title: '前回の作業を復元できませんでした',
-        body: '自動保存のデータを削除しますか? 残しておくと、次回の起動時にもう一度復元を試します。',
-        yes: '削除する', no: '残しておく',
-      });
-      if (keep.ok) await autosave.clear();
-    } else {
-      await autosave.clear();
-    }
-  }
-  await app.loadSample({ keepAutosave: true });
+  if (checkRestore && await restoreAutosaves()) return;
+  await app.loadSample();
   if (e2e) app.setPaused(true);
+}
+
+/**
+ * 前回の作業(タブごとの自動保存)を戻す。1つでも戻せたら true。
+ * タブの上限より多く残っていれば、新しく保存したものから上限まで戻し、残りは次の起動に回す
+ */
+async function restoreAutosaves(): Promise<boolean> {
+  const all = await autosave.loadAll();
+  if (!all.length) return false;
+  const newest = [...all].sort((a, b) => b.savedAt - a.savedAt).slice(0, MAX_TABS);
+  const saved = all.filter(e => newest.includes(e)), rest = all.length - saved.length;
+  const when = (t: number) => new Date(t).toLocaleString();
+  const r = await ask({
+    title: '前回の作業を復元しますか?',
+    body: (saved.length === 1
+      ? `「${saved[0].name}」(${when(saved[0].savedAt)} に自動保存)が残っています。`
+      : `${saved.length} 件の作業が残っています: ${saved.map(e => `「${e.name}」`).join('')}(最後の自動保存 ${when(Math.max(...saved.map(e => e.savedAt)))})。それぞれタブで開きます。`)
+      + (rest ? `ほかに古い ${rest} 件があります(タブは ${MAX_TABS} 枚までなので、次回の起動時に聞きます)。` : ''),
+    yes: '復元する', no: '破棄して新しく始める',
+  });
+  // 消すのは聞いた分だけ(残りや、別のブラウザのタブで開いている作業の分は消さない)
+  if (!r.ok) { for (const e of saved) await autosave.clear(e.key); return false; }
+  // 復元している間にドロップされたファイルを開かない(開くと、復元の失敗と取り違えてサンプルで上書きしてしまう)
+  const failed: string[] = [];
+  let restored = 0;
+  await app.whileOpening(async () => {
+    for (const e of saved) {
+      if (await app.openProjectBytes(e.bytes, null, null, true, { tabId: e.key, order: e.order, name: e.name })) restored++;
+      else failed.push(e.key);
+    }
+  });
+  if (failed.length) {
+    // 壊れた自動保存を残すかは本人に決めてもらう
+    const keep = await ask({
+      title: failed.length === saved.length ? '前回の作業を復元できませんでした' : `${failed.length} 件の作業を復元できませんでした`,
+      body: '復元できなかった自動保存のデータを削除しますか? 残しておくと、次回の起動時にもう一度復元を試します。',
+      yes: '削除する', no: '残しておく',
+    });
+    if (keep.ok) for (const k of failed) await autosave.clear(k);
+  }
+  if (restored) refreshTitle();
+  return restored > 0;
 }
 void boot();
 

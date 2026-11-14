@@ -1,6 +1,6 @@
 /**
  * お気に入りの一覧(右のパネルの「アニメーション」。スマホではシートの「アニメ」タブへ移す)。
- * 「☆ 残す」はコマンド(data-cmd。ui/actions.ts)で、ここは一覧の表示と行の操作だけを受け持つ。
+ * 「☆ 追加」はコマンド(data-cmd。ui/actions.ts)で、ここは一覧の表示と行の操作だけを受け持つ。
  * 名前は行の入力欄でその場で書き換え、適用・上書き・削除はどれも App を通す(アンドゥできる)。
  */
 import type { App } from '../app';
@@ -83,9 +83,9 @@ export function bindFavoriteControls(app: App): void {
       if ((names || document.activeElement !== name) && name.value !== f.name) name.value = f.name;
       setAttr(name, 'aria-label', `お気に入り ${i + 1} の名前`);
       setText(li.querySelector('.fav-sub')!, favoriteSummary(f));
-      // 残した日時は補足なので、ツールチップに出す
+      // 追加した日時は補足なので、ツールチップに出す
       const date = dateText(f.createdAt);
-      setAttr(li, 'title', date ? `残した日時: ${date}` : '');
+      setAttr(li, 'title', date ? `追加した日時: ${date}` : '');
       for (const el of li.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input')) if (el.disabled === can) el.disabled = !can;
     });
     if (empty.hidden !== favs.length > 0) empty.hidden = favs.length > 0;

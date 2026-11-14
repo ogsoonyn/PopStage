@@ -62,7 +62,7 @@ test('自動保存から復元すると、塗った内容と設定が戻る', as
   });
   expect(before[0]).toBeGreaterThan(0);
   // 自動保存が書き込まれるまで待つ
-  await expect.poll(() => autosaveOp(page, 'get'), { timeout: 10000 }).not.toBeNull();
+  await expect.poll(async () => (await autosaveOp(page, 'list') as string[]).length, { timeout: 10000 }).toBe(1);
   await page.waitForTimeout(1500);
   await page.goto('/?e2e&restore');
   await expect(page.locator('#askTitle')).toHaveText('前回の作業を復元しますか?');
@@ -77,15 +77,6 @@ test('自動保存から復元すると、塗った内容と設定が戻る', as
   expect(after.dirty).toBe(true);
 });
 
-test('別のファイルを開くと、前の作業の自動保存は消える', async ({ page }) => {
-  await boot(page);
-  await autosaveOp(page, 'put', { name: 'old.popstage', bytes: [9, 9, 9] });
-  expect(await autosaveOp(page, 'get')).toBe('old.popstage');
-  // 今のプロジェクトを別のファイルとして開き直す(中身はページの中で受け渡す。数の配列でページの外とやり取りすると遅い)
-  expect(await page.evaluate(async () => { const a = (window as any).popstage; return a.openProjectBytes(a.serialize(), 'new.popstage', null); })).toBe(true);
-  await expect.poll(() => autosaveOp(page, 'get')).toBeNull();
-});
-
 test('自動保存は塗った内容を反映し、失敗したらステータスバーで知らせる', async ({ page }) => {
   await boot(page);
   const autosavedSum = () => page.evaluate(async () => {
@@ -94,7 +85,7 @@ test('自動保存は塗った内容を反映し、失敗したらステータ�
       r.onupgradeneeded = () => r.result.createObjectStore('autosave');
       r.onsuccess = () => res(r.result);
     });
-    const req = db.transaction('autosave', 'readonly').objectStore('autosave').get('current');
+    const req = db.transaction('autosave', 'readonly').objectStore('autosave').get((window as any).popstage.activeTab.id);
     const v: any = await new Promise(res => { req.onsuccess = () => res(req.result); });
     db.close();
     if (!v) return -1;
@@ -344,23 +335,19 @@ test('最近開いたファイル: 一覧から外す・消去する(ファイ�
   expect(await recentStored(page)).toEqual([]);
 });
 
-test('最近開いたファイル: 未保存の確認でやめたら一覧に戻る。記録に失敗しても開ける', async ({ page }) => {
+test('最近開いたファイル: 保存していない作業があっても新しいタブで開く。記録に失敗しても開ける', async ({ page }) => {
   await boot(page);
   await makePng(page, 'keep.png', '#e33');
   await page.evaluate(async () => { const a = (window as any).popstage; await a.openFile((window as any).__png); await a.loadSample(); a.addLayer(); });
   await waitRecent(page, 1);
   expect(await page.evaluate(() => (window as any).popstage.dirty)).toBe(true);
+  expect(await page.evaluate(() => (window as any).popstage.tabs.length)).toBe(2);
   await openRecentDialog(page);
-  // ダブルクリックしても確認は1回だけ
+  // ダブルクリックしても開くのは1回だけ。破棄の確認は出ない
   await page.locator('#recentList button.recent-open').first().dblclick();
-  await expect(page.locator('#askTitle')).toHaveText('保存されていない変更があります');
-  await page.locator('#askNo').click();
-  await expect(page.locator('#recentDialog')).toHaveAttribute('open', '');
-  await expect(page.locator('#askDialog')).not.toHaveAttribute('open', '');
-  expect(await page.evaluate(() => (window as any).popstage.doc.name)).not.toBe('keep.png');
-  await page.locator('#recentList button.recent-open').first().click();
-  await page.locator('#askYes').click();
   await expect.poll(() => page.evaluate(() => (window as any).popstage.doc.name)).toBe('keep.png');
+  expect(await page.evaluate(() => (window as any).popstage.tabs.length)).toBe(3);
+  await expect(page.locator('#askDialog')).not.toHaveAttribute('open', '');
   await expect(page.locator('#toasts')).not.toContainText('いまはファイルを開けません');
 
   // IndexedDB が開けなくても、画像は開ける(一覧に入らないだけ)
@@ -373,7 +360,8 @@ test('最近開いたファイル: 未保存の確認でやめたら一覧に戻
   expect(await page.evaluate(() => (window as any).popstage.doc.name)).toBe('next.png');
 });
 
-test('最近開いたファイル: ファイルの場所を覚えて開き直し、保存も元のファイルへ。消えたファイルは一覧から外せる', async ({ page }) => {
+// @local: クラウド環境の Chrome for Testing では、IndexedDB にファイルハンドルを入れるとブラウザごと落ちる(アプリと関係なく再現する)ので流さない
+test('最近開いたファイル: ファイルの場所を覚えて開き直し、保存も元のファイルへ。消えたファイルは一覧から外せる', { tag: '@local' }, async ({ page }) => {
   await boot(page);
   // ブラウザ内のファイルシステム(OPFS)で、本物のファイルハンドルを作る
   await page.evaluate(async () => {

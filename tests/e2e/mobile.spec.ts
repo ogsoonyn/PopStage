@@ -177,6 +177,42 @@ test('「塗って直す」の膨らみで範囲を描くと「ツール」タ�
   await expect(page.locator('#mSheet')).toHaveAttribute('data-state', 'closed');
 });
 
+test('膨らみの範囲は指で枠の辺を動かして直せ、2本目の指を置くと直す前に戻る', async ({ page }) => {
+  await boot(page);
+  const cdp = await page.context().newCDPSession(page);
+  await page.locator('[data-mtab="layer"]').click();
+  await page.locator('#mPaintMode').click();
+  await page.locator('#mTools [data-mtool="inflate"]').click();
+  const [cx, cy] = await viewCenter(page);
+  await swipe(cdp, [[cx - 60, cy - 40]], [[cx + 60, cy + 40]]);
+  const area = () => page.evaluate(() => ({ ...(window as any).popstage.inflateState.area }));
+  const a0 = await area();
+  // 右の辺の中点(画面上)。指は当たりが大きいので、少しずれていても掴める
+  const right = await page.evaluate(() => {
+    const a = (window as any).popstage, r = a.inflateState.area, p = a.stage.imageToMainScreen(r.x + r.w / 2, r.y);
+    const box = document.getElementById('view')!.getBoundingClientRect(), m = a.stage.mainView();
+    return [box.left + m.x + p.x, box.top + m.y + p.y] as Pt;
+  });
+  await swipe(cdp, [[right[0] + 8, right[1] + 6]], [[right[0] + 48, right[1] + 6]]);
+  const a1 = await area();
+  expect(a1.w).toBeGreaterThan(a0.w + 10);
+  expect(a1.h).toBeCloseTo(a0.h, 3);
+  expect(a1.x - a1.w / 2).toBeCloseTo(a0.x - a0.w / 2, 0);
+  // 動かしている途中で2本目の指を置くと、動かす前の範囲に戻る
+  const r2 = await page.evaluate(() => {
+    const a = (window as any).popstage, r = a.inflateState.area, p = a.stage.imageToMainScreen(r.x + r.w / 2, r.y);
+    const box = document.getElementById('view')!.getBoundingClientRect(), m = a.stage.mainView();
+    return [box.left + m.x + p.x, box.top + m.y + p.y] as Pt;
+  });
+  await touch(cdp, 'touchStart', [r2]);
+  for (let i = 1; i <= 4; i++) await touch(cdp, 'touchMove', [[r2[0] + i * 10, r2[1]]]);
+  expect((await area()).w).toBeGreaterThan(a1.w);
+  await touch(cdp, 'touchStart', [[r2[0] + 40, r2[1]], [cx - 100, cy - 100]]);
+  await touch(cdp, 'touchEnd', []);
+  expect(await area()).toEqual(a1);
+  await page.locator('#inflCancel').click();
+});
+
 test('「塗って直す」で塗れ、2本目の指を置くと塗りは取り消される', async ({ page }) => {
   await boot(page);
   const cdp = await page.context().newCDPSession(page);
@@ -213,6 +249,23 @@ test('幅を広げると PC の配置に戻る', async ({ page }) => {
   expect(await page.locator('#pPop').evaluate(el => !!el.closest('aside'))).toBe(true);
   expect(await page.locator('#layerList').evaluate(el => !!el.closest('aside'))).toBe(true);
   expect(await page.locator('#inflateDialog').evaluate(el => el.parentElement === document.body)).toBe(true);
+});
+
+test('PC の幅で自動で入れた重ね表示は、スマホの幅を行き来しても消えない', async ({ page }) => {
+  await boot(page);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await expect(page.locator('html')).not.toHaveClass(/mobile/);
+  const state = () => page.evaluate(() => { const a = (window as any).popstage; return [a.tool, a.view.overlay]; });
+  await page.evaluate(() => { const a = (window as any).popstage; a.setTool('grab'); a.setOverlayMode('off'); a.setTool('brush'); });
+  expect(await state()).toEqual(['brush', true]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('html')).toHaveClass(/mobile/);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await expect(page.locator('html')).not.toHaveClass(/mobile/);
+  expect(await state()).toEqual(['brush', true]);
+  // 戻った後も、塗るツールから離れれば切る
+  await page.evaluate(() => (window as any).popstage.setTool('grab'));
+  expect(await state()).toEqual(['grab', false]);
 });
 
 test("シートのタブは PC の右パネルと同じ分け方で、下のバーのアイコンは PC と同じ表から作る", async ({ page }) => {
