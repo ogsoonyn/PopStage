@@ -173,6 +173,8 @@
     </div>
     <!-- キーフレームの枠と経路(ui/keyPath.ts が主ビューの大きさに合わせて SVG を描く) -->
     <div id="keyPath" class="absolute pointer-events-none" hidden></div>
+    <!-- 膨らませるの範囲の枠とハンドル(ui/inflateFrame.ts)。ポインタは通し、掴む判定は ui/input.ts が行う -->
+    <div id="inflateFrame" class="absolute pointer-events-none" hidden></div>
     <div id="dropHint" class="absolute inset-3 border-4 border-dashed border-primary rounded-box bg-base-100/70 hidden items-center justify-center text-lg font-bold pointer-events-none">
       ここに画像か .pukupop ファイルをドロップ
     </div>

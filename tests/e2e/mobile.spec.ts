@@ -177,6 +177,42 @@ test('「塗って直す」の膨らみで範囲を描くと「ツール」タ�
   await expect(page.locator('#mSheet')).toHaveAttribute('data-state', 'closed');
 });
 
+test('膨らみの範囲は指で枠の辺を動かして直せ、2本目の指を置くと直す前に戻る', async ({ page }) => {
+  await boot(page);
+  const cdp = await page.context().newCDPSession(page);
+  await page.locator('[data-mtab="layer"]').click();
+  await page.locator('#mPaintMode').click();
+  await page.locator('#mTools [data-mtool="inflate"]').click();
+  const [cx, cy] = await viewCenter(page);
+  await swipe(cdp, [[cx - 60, cy - 40]], [[cx + 60, cy + 40]]);
+  const area = () => page.evaluate(() => ({ ...(window as any).popstage.inflateState.area }));
+  const a0 = await area();
+  // 右の辺の中点(画面上)。指は当たりが大きいので、少しずれていても掴める
+  const right = await page.evaluate(() => {
+    const a = (window as any).popstage, r = a.inflateState.area, p = a.stage.imageToMainScreen(r.x + r.w / 2, r.y);
+    const box = document.getElementById('view')!.getBoundingClientRect(), m = a.stage.mainView();
+    return [box.left + m.x + p.x, box.top + m.y + p.y] as Pt;
+  });
+  await swipe(cdp, [[right[0] + 8, right[1] + 6]], [[right[0] + 48, right[1] + 6]]);
+  const a1 = await area();
+  expect(a1.w).toBeGreaterThan(a0.w + 10);
+  expect(a1.h).toBeCloseTo(a0.h, 3);
+  expect(a1.x - a1.w / 2).toBeCloseTo(a0.x - a0.w / 2, 0);
+  // 動かしている途中で2本目の指を置くと、動かす前の範囲に戻る
+  const r2 = await page.evaluate(() => {
+    const a = (window as any).popstage, r = a.inflateState.area, p = a.stage.imageToMainScreen(r.x + r.w / 2, r.y);
+    const box = document.getElementById('view')!.getBoundingClientRect(), m = a.stage.mainView();
+    return [box.left + m.x + p.x, box.top + m.y + p.y] as Pt;
+  });
+  await touch(cdp, 'touchStart', [r2]);
+  for (let i = 1; i <= 4; i++) await touch(cdp, 'touchMove', [[r2[0] + i * 10, r2[1]]]);
+  expect((await area()).w).toBeGreaterThan(a1.w);
+  await touch(cdp, 'touchStart', [[r2[0] + 40, r2[1]], [cx - 100, cy - 100]]);
+  await touch(cdp, 'touchEnd', []);
+  expect(await area()).toEqual(a1);
+  await page.locator('#inflCancel').click();
+});
+
 test('「塗って直す」で塗れ、2本目の指を置くと塗りは取り消される', async ({ page }) => {
   await boot(page);
   const cdp = await page.context().newCDPSession(page);

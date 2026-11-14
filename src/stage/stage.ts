@@ -523,6 +523,13 @@ export class Stage {
     return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
   }
 
+  /** 画像のローカル座標(元画像のピクセル、中心が原点、y は上)の、持ち上げる前の平面の点を、主ビューの画面へ。直前の render の置き方と視点を使う */
+  imageToMainScreen(x: number, y: number): { x: number; y: number } | null {
+    if (!this.mesh) return null;
+    const v = this.tmp.set(x, y, 0).applyMatrix4(this.mesh.matrixWorld);
+    return this.toMainScreen({ x: v.x, y: v.y, z: v.z });
+  }
+
   /** ポインタからのレイと「持ち上げる前の平面」の交点 */
   pick(clientX: number, clientY: number): PickResult | null {
     if (!this.mesh) return null;
