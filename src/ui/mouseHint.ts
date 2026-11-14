@@ -23,7 +23,8 @@ const WHEEL_ON = `<rect x="7.2" y="3.5" width="3.6" height="6" rx="1.8" ${ON}/>`
 const WHEEL = '<rect x="7.4" y="3.8" width="3.2" height="5.4" rx="1.6" fill="var(--color-base-100, #fff)"/>';
 const MOVE = '<path d="M24.5 7v10M19.5 12h10"/><path d="m22.8 8.7 1.7-1.7 1.7 1.7M22.8 15.3l1.7 1.7 1.7-1.7M21.2 10.3 19.5 12l1.7 1.7M27.8 10.3 29.5 12l-1.7 1.7"/>';
 const UPDOWN = '<path d="M24.5 5v14"/><path d="m22.3 7.2 2.2-2.2 2.2 2.2M22.3 16.8l2.2 2.2 2.2-2.2"/>';
-const TWICE = '<text x="19.5" y="21" font-size="12" font-weight="700" fill="currentColor" stroke="none">2</text>';
+// ダブルクリックは「W」(ダブル)
+const TWICE = '<text x="18.6" y="20.5" font-size="11" font-weight="700" fill="currentColor" stroke="none">W</text>';
 
 /** マウスの絵の SVG */
 export function mouseIcon(m: Mouse): string {
@@ -78,6 +79,4 @@ export const HELP_OPS: readonly { label: string; parts: readonly HintPart[] }[] 
   { label: '一覧でレイヤーを足す・外す', parts: [{ mods: 'Ctrl', mouse: 'click' }] },
   { label: '一覧でレイヤーを範囲で選ぶ', parts: [{ mods: 'Shift', mouse: 'click' }, { mods: 'Shift+↑↓' }] },
   { label: '一覧で選択を1枚に戻す', parts: [{ mods: 'Esc' }] },
-  { label: '最近開いたファイル', parts: [{ text: '左の「最近」' }] },
-  { label: 'ツールバーのボタンを選ぶ', parts: [{ text: '右上の歯車' }] },
 ];

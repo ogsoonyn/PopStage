@@ -508,12 +508,14 @@ test('コマンドの表から、メニューのキー表記・ボタンのツ�
   // ヘルプのキー一覧
   const keys = page.locator('#helpKeys');
   await expect(keys).toContainText('やり直す');
-  await expect(keys).toContainText('Ctrl+Shift+Z / Ctrl+Y');
-  await expect(keys).toContainText('B / E / S / I / G / Y / V / H');
+  // キーはマウスの操作と同じキーの札で出す(1つのキーごとに札を並べる)
+  await expect(keys.locator('.mh[title="Ctrl+Shift+Z"] kbd')).toHaveText(['Ctrl', 'Shift', 'Z']);
+  await expect(keys.locator('.mh[title="Ctrl+Y"]')).toHaveCount(1);
+  for (const k of ['B', 'E', 'S', 'I', 'G', 'Y', 'V', 'H']) await expect(keys.locator(`.mh[title="${k}"]`)).toHaveCount(1);
   // ヘルプには、カッコの補足を書かない。マウスの操作は絵で出す
   expect(await page.locator('#helpDialog').evaluate(d => /[()()]/.test(d.textContent!))).toBe(false);
   await expect(page.locator('#helpOps .mh-mouse[aria-label=右ドラッグ]').first()).toBeAttached();
-  await expect(keys).not.toContainText('Ctrl+Shift+Alt+P'); // デバッグ用は出さない
+  await expect(keys.locator('.mh[title="Ctrl+Shift+Alt+P"]')).toHaveCount(0); // デバッグ用は出さない
 
   // アニメーションのメニューから記録を始めて止め、再生する。記録中は再生と消すを押せない
   await app(a => a.setPaused(false));

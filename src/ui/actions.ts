@@ -379,7 +379,11 @@ export function bindActions(app: App, deps: ActionDeps): void {
       const row = a.helpRow ?? a.helpLabel ?? a.label;
       rows.set(row, [...(rows.get(row) ?? []), ...a.keys]);
     }
-    ui.helpKeys.replaceChildren(...[...rows].flatMap(([label, keys]) => [label, keys.join(' / ')].map(text => Object.assign(document.createElement('span'), { textContent: text }))));
+    // キーもマウスの操作と同じ書き方(キーの札)で出す
+    ui.helpKeys.replaceChildren(...[...rows].flatMap(([label, keys]) => [
+      Object.assign(document.createElement('span'), { textContent: label }),
+      Object.assign(document.createElement('span'), { className: 'help-op', innerHTML: hintHtml(keys.map(k => ({ mods: k }))) }),
+    ]));
   }
 
   /* ---------- キー ---------- */
