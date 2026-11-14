@@ -295,7 +295,7 @@ test('表示の切り替えはキーで変えても覚える。ファイルの�
   expect(await page.evaluate(() => (window as any).__downloads)).toBe(0);
 });
 
-test('塗るツールを選ぶと重ね表示を自動でONにする。設定で切れて、ブラウザに覚える', async ({ page }) => {
+test('塗るツールを選ぶと重ね表示を自動でONにし、離れると自動で入れた分だけOFFにする。設定で切れて、ブラウザに覚える', async ({ page }) => {
   await boot(page);
   const app = <T>(fn: (a: any) => T): Promise<T> => page.evaluate(`(${fn.toString()})(window.popstage)`);
   const overlay = () => app(a => a.view.overlay as boolean);
@@ -322,19 +322,66 @@ test('塗るツールを選ぶと重ね表示を自動でONにする。設定で
     expect(await overlay(), key).toBe(true);
     await expect(page.locator('#vOverlaySel')).toBeChecked();
   }
-  // 塗るツールから離れても切らない。塗るツールのままOFFにしたら、そのまま
-  await page.keyboard.press('g');
+  // 自動で入れた表示は、塗るツールから離れると切る(塗るツールどうしの切り替えでは切らない)
+  await page.keyboard.press('e');
   expect(await overlay()).toBe(true);
+  await page.keyboard.press('g');
+  expect(await overlay()).toBe(false);
+  await expect(page.locator('#vOverlayOff')).toBeChecked();
+  // 自動で入れたまま開き直しても、離れたら切る
+  await page.keyboard.press('b');
+  await reboot();
+  await page.locator('#view').focus();
+  expect(await app(a => [a.tool, a.view.overlay])).toEqual(['brush', true]);
+  await page.keyboard.press('g');
+  expect(await overlay()).toBe(false);
+  // 塗るツールの間に手で切り替えた表示は、離れても残す
+  await page.keyboard.press('b');
+  await page.keyboard.press('w'); // 選択中 → 全レイヤー
+  await page.keyboard.press('g');
+  expect(await app(a => a.overlayMode)).toBe('all');
+  // 手で入れてから塗るツールにしたときも残す
+  await overlayOff();
+  await page.keyboard.press('w');
+  await page.keyboard.press('b');
+  await page.keyboard.press('g');
+  expect(await app(a => a.overlayMode)).toBe('selected');
+  // 塗るツールのままOFFにしたら、そのまま
   await page.keyboard.press('b');
   await overlayOff();
   expect(await overlay()).toBe(false);
   await page.keyboard.press('b'); // 選び直しでは入れない
   expect(await overlay()).toBe(false);
-  // 「全体をぼかす」を開いてもONになる
-  await page.evaluate(() => (document.querySelector('[data-cmd=smoothAll]') as HTMLButtonElement).click());
-  await expect(page.locator('#blurDialog')).toBeVisible();
+  // 「全体をぼかす」を開いてもONになり、塗るツール以外で開いたときは閉じると切る
+  const blurOnce = async () => {
+    await page.evaluate(() => (document.querySelector('[data-cmd=smoothAll]') as HTMLButtonElement).click());
+    await expect(page.locator('#blurDialog')).toBeVisible();
+    expect(await overlay()).toBe(true);
+    await page.locator('#blurCancel').click();
+    await page.locator('#view').focus();
+  };
+  await blurOnce();
+  expect(await overlay()).toBe(true); // ブラシのままなので残す
+  await page.keyboard.press('g');
+  expect(await overlay()).toBe(false);
+  await blurOnce();
+  expect(await overlay()).toBe(false);
+  // 自動でOFFの設定を切ると、離れても残す。切ったことは覚える
+  await openSettings();
+  await page.locator('#vAutoOverlayOff').uncheck();
+  await page.keyboard.press('Escape');
+  await page.locator('#view').focus();
+  await page.keyboard.press('b');
+  await page.keyboard.press('g');
   expect(await overlay()).toBe(true);
-  await page.locator('#blurCancel').click();
+  await reboot();
+  expect(await app(a => a.autoOverlayOff)).toBe(false);
+  await openSettings();
+  await expect(page.locator('#vAutoOverlayOff')).not.toBeChecked();
+  await page.locator('#vAutoOverlayOff').check();
+  await page.keyboard.press('Escape');
+  await page.locator('#view').focus();
+  await page.keyboard.press('b');
 
   // 起動して前回の塗るツールを戻すだけでは入れない
   await page.locator('#view').focus();
@@ -355,6 +402,7 @@ test('塗るツールを選ぶと重ね表示を自動でONにする。設定で
   expect(await app(a => a.autoOverlay)).toBe(false);
   await openSettings();
   await expect(page.locator('#vAutoOverlay')).not.toBeChecked();
+  await expect(page.locator('#vAutoOverlayOff')).toBeDisabled(); // 自動でONにしないなら、OFFの設定は効かない
 });
 
 test('左のメニュー: 表示クリアで編集用の表示をまとめて切る。レイヤー向けの操作と、上のツールバーの揺れの切り替え', async ({ page }) => {
@@ -460,9 +508,14 @@ test('コマンドの表から、メニューのキー表記・ボタンのツ�
   // ヘルプのキー一覧
   const keys = page.locator('#helpKeys');
   await expect(keys).toContainText('やり直す');
-  await expect(keys).toContainText('Ctrl+Shift+Z / Ctrl+Y');
-  await expect(keys).toContainText('B / E / S / I / G / Y / V / H');
-  await expect(keys).not.toContainText('Ctrl+Shift+Alt+P'); // デバッグ用は出さない
+  // キーはマウスの操作と同じキーの札で出す(1つのキーごとに札を並べる)
+  await expect(keys.locator('.mh[title="Ctrl+Shift+Z"] kbd')).toHaveText(['Ctrl', 'Shift', 'Z']);
+  await expect(keys.locator('.mh[title="Ctrl+Y"]')).toHaveCount(1);
+  for (const k of ['B', 'E', 'S', 'I', 'G', 'Y', 'V', 'H']) await expect(keys.locator(`.mh[title="${k}"]`)).toHaveCount(1);
+  // ヘルプには、カッコの補足を書かない。マウスの操作は絵で出す
+  expect(await page.locator('#helpDialog').evaluate(d => /[()()]/.test(d.textContent!))).toBe(false);
+  await expect(page.locator('#helpOps .mh-mouse[aria-label=右ドラッグ]').first()).toBeAttached();
+  await expect(keys.locator('.mh[title="Ctrl+Shift+Alt+P"]')).toHaveCount(0); // デバッグ用は出さない
 
   // アニメーションのメニューから記録を始めて止め、再生する。記録中は再生と消すを押せない
   await app(a => a.setPaused(false));
@@ -543,11 +596,12 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(14); // 開く・保存・書き出しは既定では隠しているが、DOM にはある
-  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(14);
+  await expect(acts).toHaveCount(19); // 開く・保存・書き出しは既定では隠しているが、DOM にはある
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(19);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
-  // 最近開いたファイルは、ツールより上に置く
-  await expect(page.locator('#toolNav [role=group]')).toHaveText([/ファイル/, /表示/, /レイヤー/, /アニメ/]);
+  // ツールをいちばん上に置き、まとまりは上のメニューと同じ順に並べる
+  await expect(page.locator('#toolNav > *').first()).toHaveAttribute('data-tool', 'brush');
+  await expect(page.locator('#toolNav [role=group] .nav-group-label')).toHaveText(['ファイル', '編集', '表示', 'アニメ']);
   await page.locator('#toolNav [data-cmd=cleanView]').click();
   await expect(page.locator('#toolNav [data-cmd=cleanView]')).not.toHaveAttribute('aria-pressed', /.*/);
 
@@ -598,7 +652,7 @@ test('左のツールバー: 表示の切り替えは、入・切を aria-presse
   // 表示クリアで切れたものは、ボタンも切に戻る(3面図は切らない)
   await app(a => { Object.assign(a.view, { overlay: true, fade: true, grid: true, multi: true }); a.syncView(); });
   await btn('cleanView').click();
-  await expect(page.locator('#toolNav .nav-act[aria-pressed=true]')).toHaveText([/3面図/, /透過/]); // 背景の透過は編集用の表示ではないので切らない
+  await expect(page.locator('#toolNav .nav-group[aria-label=表示に効く操作] .nav-act[aria-pressed=true]')).toHaveText([/3面図/, /透過/]); // 背景の透過は編集用の表示ではないので切らない
 });
 
 test('左のツールバー: 背景を透過は、入・切をボタン・メニュー・右パネルに映し、切ると背景色(既定は白)で塗る', async ({ page }) => {
@@ -665,6 +719,7 @@ test('ツールオプションの欄は選択中のツールの設定だけを�
   await expect(page.locator('#brushSize')).toBeHidden();
   await expect(page.locator('#tInflProfile')).toBeHidden();
   await expect(page.locator('#toolHint')).toContainText('引っ張って');
+  await expect(page.locator('#toolHint .mh-mouse[aria-label=左ドラッグ]')).toHaveCount(1);
   // 膨らみ: 次に描くときの設定を選び、描くとその設定で始まる
   await page.keyboard.press('i');
   await expect(page.locator('#tInflProfile')).toBeVisible();
@@ -836,4 +891,65 @@ test('膨らませる・ぼかすのパネルは右下に出て、見出しを�
   expect(vp.width - (ib.x + ib.width)).toBeLessThan(40);
   expect(vp.height - (ib.y + ib.height)).toBeLessThan(80);
   await page.locator('#inflCancel').click();
+});
+
+test('ポップ量のスライダーの最大値は設定で変えられ(既定 500px)、数値の欄にはそれを超えて打てる。設定は覚える', async ({ page }) => {
+  await boot(page);
+  await openTab(page, 'layer');
+  const pop = () => page.evaluate(() => (window as any).popstage.activeLayer.pop as number);
+  // 既定では右端が 500px
+  await expect(page.locator('#pPop')).toHaveAttribute('max', '500');
+  await page.locator('#pPop').fill('500');
+  expect(await pop()).toBe(500);
+  // 数値の欄は 1500px まで打て、スライダーは右端に止まる
+  await page.locator('#pPopN').fill('900');
+  await page.locator('#pPopN').press('Enter');
+  expect(await pop()).toBe(900);
+  await expect(page.locator('#pPop')).toHaveValue('500');
+  // 設定で 1200px にすると、右端が 1200px になる(1000px を超えるので後半は粗い目盛り)
+  await page.locator('#menubar [data-cmd=settings]').click();
+  await expect(page.locator('#setPopMax')).toHaveValue('500');
+  await page.locator('#setPopMax').fill('1200');
+  await page.locator('#setPopMax').press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#pPop')).toHaveAttribute('max', '1000');
+  await page.locator('#pPop').fill('1000');
+  expect(await pop()).toBe(1200);
+  // 範囲の外の値は 100〜1500px に収める。設定は開き直しても覚えている
+  await page.locator('#menubar [data-cmd=settings]').click();
+  await page.locator('#setPopMax').fill('5000');
+  await page.locator('#setPopMax').press('Enter');
+  await expect(page.locator('#setPopMax')).toHaveValue('1500');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  await page.goto('/?e2e');
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  expect(await page.evaluate(() => (window as any).popstage.popMax)).toBe(1500);
+});
+
+test('右パネルは3Dビューの右端のつまみ・Shift+P・表示メニューで開閉でき、開閉を覚える', async ({ page }) => {
+  await boot(page);
+  const aside = page.locator('#sidePanel'), tab = page.locator('#panelToggle');
+  const canvasWidth = () => page.locator('#view').evaluate(el => el.getBoundingClientRect().width);
+  await expect(aside).toBeVisible();
+  await expect(tab).toHaveAttribute('aria-expanded', 'true');
+  const w0 = await canvasWidth();
+  await tab.click();
+  await expect(aside).toBeHidden();
+  await expect(tab).toHaveAttribute('aria-expanded', 'false');
+  await expect.poll(canvasWidth).toBeGreaterThan(w0 + 200); // 3Dビューが広がる
+  await expect(page.locator('#menubar [data-check=panel]')).toHaveText('');
+  // 開き直しても閉じたまま
+  await page.waitForTimeout(300);
+  await page.goto('/?e2e');
+  await page.waitForFunction(() => (window as any).popstage?.doc && (window as any).popstage.stage.hasDocument);
+  await expect(aside).toBeHidden();
+  // Shift+P で開く
+  await page.locator('#view').focus();
+  await page.keyboard.press('Shift+P');
+  await expect(aside).toBeVisible();
+  await expect(page.locator('#menubar [data-check=panel]')).toHaveText('✓');
+  // UIを隠すとつまみも隠れる
+  await page.evaluate(() => (window as any).popstage.setUiHidden(true));
+  await expect(tab).toBeHidden();
 });

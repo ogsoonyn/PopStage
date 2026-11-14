@@ -80,7 +80,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     // 3面図は縦長の画面では狭すぎるので使わない。塗りのツールのまま来たら、主のツールにする
     if (app.view.multi) app.setViewOption('multi', false);
     desktopTool = app.tool;
-    if (PAINT_TOOLS.includes(app.tool)) app.setTool('grab');
+    if (PAINT_TOOLS.includes(app.tool)) app.setTool('grab', false);
     setPaintMode(false);
     syncState(); syncTitle(); syncTool();
     setSheet('closed', false);

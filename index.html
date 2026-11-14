@@ -80,6 +80,8 @@
       <li><button data-cmd="toggleTransparent">背景を透過 <span data-check="transparent" class="ml-auto"></span></button></li>
       <li><button data-cmd="cleanView">編集表示クリア</button></li>
       <li><button data-cmd="resetView">視点リセット(正面)</button></li>
+      <li><button data-cmd="resetRotation">回転だけリセット</button></li>
+      <li><button data-cmd="togglePanel">右パネル <span data-check="panel" class="ml-auto"></span></button></li>
       <li><button data-cmd="toggleUi">UIを隠す</button></li>
     </ul>
   </div>
@@ -89,6 +91,11 @@
       <li><button data-cmd="toggleRecording">操作の記録(開始・停止)</button></li>
       <li><button data-cmd="togglePlay">ループ再生(開始・停止)</button></li>
       <li><button data-cmd="clearTake">記録を消す</button></li>
+      <li class="menu-title pt-2">キーフレーム</li>
+      <li><button data-cmd="toggleKeyPlay">再生・停止</button></li>
+      <li><button data-cmd="toggleKeyPath">経路を重ねる <span data-check="keyPath" class="ml-auto"></span></button></li>
+      <li><button data-cmd="toggleKeyGhost">ゴーストを重ねる <span data-check="keyGhost" class="ml-auto"></span></button></li>
+      <li class="menu-title pt-2">その他</li>
       <li><button data-cmd="addFavorite">お気に入りに残す</button></li>
     </ul>
   </div>
@@ -148,7 +155,7 @@
     <output id="tInflAngleO" class="w-10 tabular-nums"></output></label>
   <label class="flex items-center gap-2" data-inflate-opt hidden>重ね方
     <select id="tInflBlend" class="select select-xs w-32"><option value="max">重ねる(高い方)</option><option value="add">足す</option><option value="replace">置き換える</option></select></label>
-  <span id="toolHint" class="opacity-70 hidden md:inline flex-1 min-w-0 truncate"></span>
+  <span id="toolHint" class="tool-hint hidden md:flex flex-1 min-w-0"></span>
   <div class="ml-auto flex items-center gap-4 shrink-0" role="group" aria-label="揺れの切り替え">
     <label class="flex items-center gap-2" title="選択中のレイヤーを揺らすか(右のパネルの「揺れ」と同じ)">レイヤーの揺れ <input id="tSwing" type="checkbox" class="toggle toggle-sm"></label>
     <label class="flex items-center gap-2" title="周期的に自動で揺らすか(右のパネルの「自動で揺らす」と同じ)">自動で揺らす <input id="tAuto" type="checkbox" class="toggle toggle-sm"></label>
@@ -196,8 +203,10 @@
     <div id="busy" class="absolute inset-0 bg-base-100/60 hidden items-center justify-center"><span class="loading loading-spinner loading-lg"></span></div>
   </section>
 
+  <!-- 右パネルの開閉のつまみ(ui/sidePanel.ts)。PC の幅だけ。開いている間はパネルの左端に、閉じると3Dビューの右端に出す -->
+  <div id="panelToggleWrap" class="relative w-0 shrink-0"><button id="panelToggle" type="button" aria-controls="sidePanel"></button></div>
   <!-- レイヤー一覧とプロパティ -->
-  <aside class="w-80 shrink-0 bg-base-100 border-l border-base-300 flex flex-col min-h-0">
+  <aside id="sidePanel" class="w-80 shrink-0 bg-base-100 border-l border-base-300 flex flex-col min-h-0">
     <section class="p-3 border-b border-base-300 flex flex-col gap-2 max-h-[40%] min-h-0" data-m-slot="layers">
       <div class="flex items-center gap-1">
         <h2 class="font-bold mr-auto">レイヤー <span id="layerCount" class="opacity-60 font-normal"></span></h2>
@@ -229,7 +238,7 @@
         <section class="flex flex-col gap-2" data-m-slot="layerProps">
           <h2 class="font-bold">レイヤー: <span id="activeLayerName"></span></h2>
           <div class="prop"><span class="prop-name"><label for="pPop">ポップ量</label><button type="button" class="help-btn" data-help="pPopHelp"></button></span><input id="pPop" type="range" min="0" max="1000" class="range range-xs"><input id="pPopN" type="number" min="0" max="1500" class="input input-xs w-full text-right"></div>
-          <p id="pPopHelp" class="help-text" hidden>塗った所を持ち上げる高さ(0〜1500px)。スライダーは前半で 0〜500px を細かく、後半で 500〜1500px を粗く動かします。複数のレイヤーを選んでいるときは、一番高いレイヤーの値を出し、ほかのレイヤーは同じ比率で伸び縮みします(0px のレイヤーは 0px のまま)。</p>
+          <p id="pPopHelp" class="help-text" hidden>塗った所を持ち上げる高さ(0〜1500px)。スライダーの右端は設定(右上の歯車)の「スライダーの最大値」で、既定は 500px です。最大値を 1000px より大きくすると、スライダーは前半で 0〜500px を細かく、後半を粗く動かします。複数のレイヤーを選んでいるときは、一番高いレイヤーの値を出し、ほかのレイヤーは同じ比率で伸び縮みします(0px のレイヤーは 0px のまま)。</p>
           <div class="prop"><span class="prop-name"><label for="pBlend">重ね方</label><button type="button" class="help-btn" data-help="pBlendDesc"></button></span>
             <select id="pBlend" class="select select-xs col-span-2 w-full"></select></div>
           <p id="pBlendDesc" class="help-text" hidden>画像を開くと、選んだ重ね方の説明がここに出ます。</p>
@@ -386,6 +395,7 @@
       <div class="m-btns">
         <button class="btn btn-sm" data-cmd="cleanView">表示クリア</button>
         <button class="btn btn-sm" data-cmd="resetView">視点を戻す</button>
+        <button class="btn btn-sm" data-cmd="resetRotation">回転だけ戻す</button>
       </div>
     </div>
     <div class="m-pane" data-mpane="file" hidden>
@@ -558,7 +568,14 @@
     <section class="flex flex-col gap-2">
       <h4 class="font-bold">ウェイトの重ね表示</h4>
       <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlay">塗るときは自動でON</label><button type="button" class="help-btn" data-help="vAutoOverlayHelp"></button></span><input id="vAutoOverlay" type="checkbox" class="toggle toggle-sm"></div>
-      <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。ほかのツールに移っても自動ではOFFにしません。</p>
+      <p id="vAutoOverlayHelp" class="help-text" hidden>ブラシ・消しゴム・ぼかし・膨らみに切り替えたときや「全体をぼかす」を開いたときに、ウェイトの重ね表示を自動でONにします。手でONにした表示は、この設定では変わりません。</p>
+      <div class="toggle-row"><span class="prop-name"><label for="vAutoOverlayOff">塗り終えたら自動でOFF</label><button type="button" class="help-btn" data-help="vAutoOverlayOffHelp"></button></span><input id="vAutoOverlayOff" type="checkbox" class="toggle toggle-sm"></div>
+      <p id="vAutoOverlayOffHelp" class="help-text" hidden>自動でONにした重ね表示を、ほかのツールに移ったときや「全体をぼかす」を閉じたときにOFFにします。手でONにした表示や、塗っている間に手で切り替えた表示はそのまま残します。</p>
+    </section>
+    <section class="flex flex-col gap-2 mt-4">
+      <h4 class="font-bold">ポップ量</h4>
+      <div class="toggle-row"><span class="prop-name"><label for="setPopMax">スライダーの最大値</label><button type="button" class="help-btn" data-help="setPopMaxHelp"></button></span><span class="flex items-center gap-1"><input id="setPopMax" type="number" min="100" max="1500" step="50" class="input input-xs w-20 text-right"> px</span></div>
+      <p id="setPopMaxHelp" class="help-text" hidden>ポップ量と「膨らませる」の高さのスライダーの右端です(100〜1500px)。小さくするとスライダーで細かく動かせます。数値の欄には、この値を超えて 1500px まで打てます。</p>
     </section>
     <section id="setHideFullRow" class="flex flex-col gap-2 mt-4">
       <h4 class="font-bold">UIを隠す</h4>
@@ -583,46 +600,29 @@
   <div class="modal-box max-w-2xl">
     <h3 class="font-bold text-lg mb-2">操作方法</h3>
     <div class="m-only grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm mb-4">
-      <span class="font-bold">1本指</span><span>下で選んだツール(つかむ・揺らす・移動・視点)</span>
-      <span class="font-bold">画像の外</span><span>1本指でなぞると回転、ダブルタップで視点を戻す</span>
-      <span class="font-bold">2本指</span><span>動かすと平行移動(揺れる)、つまむとズーム</span>
-      <span class="font-bold">2本指タップ</span><span>元に戻す(3本指タップでやり直す)</span>
-      <span class="font-bold">微調整</span><span>右上のボタンでオンにしている間は、動きが 1/5 になる</span>
-      <span class="font-bold">レイヤーを複数選ぶ</span><span>一覧で長押しすると選択モード。タップで足す・外し、「完了」で抜ける</span>
+      <span class="font-bold">1本指</span><span>下で選んだツールで操作</span>
+      <span class="font-bold">画像の外</span><span>なぞると回転、ダブルタップで視点を戻す</span>
+      <span class="font-bold">2本指</span><span>動かすと平行移動、つまむとズーム</span>
+      <span class="font-bold">2本指タップ</span><span>元に戻す</span>
+      <span class="font-bold">3本指タップ</span><span>やり直す</span>
+      <span class="font-bold">微調整</span><span>右上のボタンでオンにすると、動きが 1/5 になる</span>
+      <span class="font-bold">レイヤーを複数選ぶ</span><span>一覧で長押しして、タップで足す・外す</span>
       <span class="font-bold">膨らみ・塗る・消す</span><span>シートの「レイヤー」→「塗って直す」</span>
-      <span class="font-bold">操作の記録</span><span>シートの「アニメ」→「操作の記録」で記録・ループ再生。画面を触ると再生が止まる</span>
+      <span class="font-bold">操作の記録</span><span>シートの「アニメ」→「操作の記録」</span>
       <span class="font-bold">設定</span><span>右上の「…」→「設定…」</span>
     </div>
     <ol class="d-only list-decimal pl-5 leading-relaxed mb-3">
-      <li>画像をウィンドウへドロップする(PNG / JPEG / WebP)。</li>
-      <li>ブラシで動かしたい所を塗る。塗った所がその場で持ち上がる。</li>
-      <li>右ドラッグで視点を回し、ポップ量を調整する。</li>
-      <li>「つかむ」で画像をドラッグして揺らし、プリセットを選ぶ。</li>
-      <li>ファイル → 書き出しで、形式と長さを決めて保存する。</li>
+      <li>画像をウィンドウへドロップする</li>
+      <li>ブラシで動かしたい所を塗る</li>
+      <li>視点を回して、ポップ量を調整する</li>
+      <li>「つかむ」で揺らし、プリセットを選ぶ</li>
+      <li>ファイル → 書き出しで保存する</li>
     </ol>
-    <div class="d-only grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-      <span>回転(オービット)</span><span>右ドラッグ</span>
-      <span>平行移動(揺れる)</span><span>中ドラッグ / Space + 左ドラッグ</span>
-      <span>ズーム</span><span>ホイール</span>
-      <span>細かく動かす(回転・平行移動・ズーム・つかむ・揺らす・3面図)</span><span>Ctrl(Mac は ⌘)か Shift を押しながら(動きが 1/5)。Space+ドラッグと自由角度では Shift の代わりに Ctrl / ⌘</span>
-      <span>揺らす(カメラ固定で振る)</span><span>「揺らす」で左ドラッグ</span>
-      <span>塗った範囲ごと横にも膨らませる</span><span>揺らし方「ためて膨らむ2」「ふわっと膨らむ」「一瞬膨らむ」(プリセット「ぷっくり」「ぽふん」「ぽんっ」)</span>
-      <span>画像ごと上下に動かす</span><span>揺らし方「ピストン」(プリセット「ずんずん」)</span>
-      <span>膨らませる範囲を正円・正方形に</span><span>膨らみで Shift + ドラッグ</span>
-      <span>一時的に消しゴム</span><span>ブラシ中に Alt</span>
-      <span>最近開いたファイル</span><span>左のツールバーの「最近」/ ファイル → 最近開いたファイル…</span>
-      <span>左のツールバーに出すボタンを選ぶ</span><span>右上の歯車(設定)</span>
-      <span>3面図の正面・右から・下から</span><span>ドラッグで平行移動 / ホイールでズーム(3つ共通)</span>
-      <span>3面図の自由角度</span><span>ドラッグで回転 / 中ドラッグ・Shift+ドラッグで平行移動 / ホイールでズーム</span>
-      <span>3面図の視点を戻す</span><span>その図をダブルクリック</span>
-      <span>膨らませる・ぼかすのパネルを動かす</span><span>見出しをドラッグ / ダブルクリックで右下に戻す</span>
-      <span>レイヤーを足して選ぶ・外す</span><span>一覧で Ctrl(Mac は ⌘)+クリック</span>
-      <span>レイヤーを範囲で選ぶ</span><span>一覧で Shift+クリック / Shift+↑↓</span>
-      <span>選んだレイヤーを1枚に戻す</span><span>一覧で Esc / 「1枚に戻す」</span>
-    </div>
+    <!-- ui/mouseHint.ts の HELP_OPS から作る -->
+    <div id="helpOps" class="d-only help-ops grid grid-cols-[minmax(auto,15rem)_1fr] gap-x-6 gap-y-1 text-sm"></div>
     <h4 class="d-only font-bold mt-4 mb-1">キーボード</h4>
     <!-- ui/actions.ts がコマンドの表から作る -->
-    <div id="helpKeys" class="d-only grid grid-cols-2 gap-x-6 gap-y-1 text-sm"></div>
+    <div id="helpKeys" class="d-only help-ops grid grid-cols-[minmax(auto,15rem)_1fr] gap-x-6 gap-y-1 text-sm"></div>
     <div class="modal-action"><form method="dialog"><button class="btn btn-sm">閉じる</button></form></div>
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>

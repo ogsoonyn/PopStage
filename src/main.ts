@@ -17,7 +17,9 @@ import { bindMobileLayout } from './ui/mobile';
 import { bindTakeControls } from './ui/take';
 import { bindPlayBar } from './ui/playBar';
 import { bindHideUi } from './ui/hideUi';
+import { bindSidePanel } from './ui/sidePanel';
 import { bindKeyPath } from './ui/keyPath';
+import { clampPopMax } from './ui/popSlider';
 import { bindInflateFrame } from './ui/inflateFrame';
 import { bindFavoriteControls } from './ui/favorites';
 import { isTool } from './ui/tools';
@@ -57,12 +59,13 @@ bindPanels(app);
 bindTakeControls(app);
 bindPlayBar(app);
 bindHideUi(app);
+bindSidePanel(app);
 bindKeyPath(app);
 bindInflateFrame(app);
 bindFavoriteControls(app);
 
 /* ---------- 右のパネルのタブ(レイヤー・アニメーション・画像と表示)。選んだタブはブラウザに覚える ---------- */
-{
+const selectPanelTab = (() => {
   const tabs = [...document.querySelectorAll<HTMLButtonElement>('#pTabs [data-ptab]')];
   const select = (t: string) => {
     if (!tabs.some(b => b.dataset.ptab === t)) t = 'layer'; // 知らない値(前の版の「編集」タブなど)は「レイヤー」で始める
@@ -72,7 +75,8 @@ bindFavoriteControls(app);
   };
   for (const b of tabs) b.addEventListener('click', () => select(b.dataset.ptab!));
   select(prefs.get<string>('panelTab') ?? 'layer');
-}
+  return select;
+})();
 
 /* ---------- 設定をブラウザに覚える(ファイルには書かない) ---------- */
 persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.brushPressure]);
@@ -83,8 +87,12 @@ persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.b
   for (const k of ['overlay', 'overlayAll', 'grid', 'fade', 'multi'] as const) if (typeof saved[k] === 'boolean') app.view[k] = saved[k] as boolean;
   if (!app.view.overlay) app.view.overlayAll = false;
   if (typeof saved.autoOverlay === 'boolean') app.autoOverlay = saved.autoOverlay;
+  if (typeof saved.autoOverlayOff === 'boolean') app.autoOverlayOff = saved.autoOverlayOff;
+  const popMax = prefs.get<number>('popMax');
+  if (typeof popMax === 'number') app.popMax = clampPopMax(popMax);
+  app.overlayAutoShown = app.view.overlay && app.autoOverlay && saved.overlayAuto === true;
   app.syncView();
-  app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, overlayAll: v.overlayAll, grid: v.grid, fade: v.fade, multi: v.multi, autoOverlay: app.autoOverlay }); });
+  app.on('view', () => { const v = app.view; prefs.set('view', { overlay: v.overlay, overlayAll: v.overlayAll, grid: v.grid, fade: v.fade, multi: v.multi, autoOverlay: app.autoOverlay, autoOverlayOff: app.autoOverlayOff, overlayAuto: app.overlayAutoShown }); });
 }
 {
   const t = prefs.get<string>('tool');
@@ -138,6 +146,8 @@ bindActions(app, {
   openExport: () => exportDialog.open(),
   openBlur: () => blurDialog.open(),
   openSettings: () => settingsDialog.open(),
+  // キーフレームの重ね表示は「アニメーション」タブを開いている間だけ出るので、左のツールバーなどで入れたらタブを開く
+  showKeyFrames: () => { app.setPanelClosed(false); selectPanelTab('anim'); },
   togglePerf,
 });
 bindMenus();

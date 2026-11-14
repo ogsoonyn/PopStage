@@ -4,7 +4,7 @@ import { profileAt, inflateShape, type InflateParams } from '../../src/paint/inf
 import { diffTiles, WeightEdit, InsertLayer } from '../../src/commands/commands';
 import { Store, createDocument, createProject, createLayer, LIMITS } from '../../src/model/project';
 import { History } from '../../src/commands/history';
-import { popToSlider, sliderToPop, POP_SLIDER_MAX } from '../../src/ui/popSlider';
+import { clampPopMax, popSliderRange, popToSlider, sliderToPop, POP_MAX_SETTING } from '../../src/ui/popSlider';
 
 const params = (p: Partial<InflateParams> = {}): InflateParams => ({ level: 1, softness: 1, profile: 'dome', blend: 'max', ...p });
 const at = (wm: WeightMap, x: number, y: number) => wm.data[y * wm.width + x];
@@ -119,19 +119,37 @@ describe('高さがポップ量を超えるとき(新しいレイヤーに作る
 });
 
 describe('ポップ量のスライダーの目盛り', () => {
-  it('前半は 1 目盛り 1px、後半は 2px。端は 0 と最大', () => {
-    expect(sliderToPop(0)).toBe(0);
-    expect(sliderToPop(140)).toBe(140);
-    expect(sliderToPop(500)).toBe(500);
-    expect(sliderToPop(501)).toBe(502);
-    expect(sliderToPop(POP_SLIDER_MAX)).toBe(LIMITS.pop.max);
-    expect(popToSlider(LIMITS.pop.max)).toBe(POP_SLIDER_MAX);
+  it('最大値が 1000px 以下なら 1 目盛り 1px で、右端が最大値', () => {
+    expect(popSliderRange(500)).toBe(500);
+    expect(sliderToPop(140, 500)).toBe(140);
+    expect(sliderToPop(500, 500)).toBe(500);
+    expect(popToSlider(800, 500)).toBe(500); // 最大値より高いポップ量は右端に止まる
+    expect(popSliderRange(1000)).toBe(1000);
+    expect(sliderToPop(1000, 1000)).toBe(1000);
+  });
+
+  it('最大値が 1000px より大きいと、前半は 1 目盛り 1px、後半は粗く。端は 0 と最大値', () => {
+    expect(popSliderRange(1500)).toBe(1000);
+    expect(sliderToPop(0, 1500)).toBe(0);
+    expect(sliderToPop(500, 1500)).toBe(500);
+    expect(sliderToPop(501, 1500)).toBe(502);
+    expect(sliderToPop(1000, 1500)).toBe(LIMITS.pop.max);
+    expect(popToSlider(LIMITS.pop.max, 1500)).toBe(1000);
+    expect(sliderToPop(1000, 1200)).toBe(1200);
+  });
+
+  it('最大値は 100〜1500px に収め、変な値は既定値', () => {
+    expect(clampPopMax(10)).toBe(100);
+    expect(clampPopMax(9999)).toBe(1500);
+    expect(clampPopMax(NaN)).toBe(POP_MAX_SETTING.def);
   });
 
   it('目盛りを 1 つ動かすと必ずポップ量が変わり、往復しても元の目盛りに戻る', () => {
-    for (let s = 0; s < POP_SLIDER_MAX; s++) {
-      expect(sliderToPop(s + 1)).toBeGreaterThan(sliderToPop(s));
-      expect(popToSlider(sliderToPop(s))).toBe(s);
+    for (const max of [100, 500, 1000, 1050, 1500]) {
+      for (let s = 0; s < popSliderRange(max); s++) {
+        expect(sliderToPop(s + 1, max)).toBeGreaterThan(sliderToPop(s, max));
+        expect(popToSlider(sliderToPop(s, max), max)).toBe(s);
+      }
     }
   });
 });

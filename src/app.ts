@@ -11,7 +11,7 @@ import { captureFavorite, copyPhysics, sameLayer, nextFavoriteName, applyView, F
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld, PHYSICS_DT } from './physics/world';
 import { MotionRecorder, applySample, type RecordSample } from './physics/recorder';
-import { finalizeTake, takeFromKeys, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, KEY_SECONDS, MAX_KEYS, type ViewKey, type KeyFrame } from './physics/take';
+import { finalizeTake, takeFromKeys, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, KEY_SECONDS, MAX_KEYS, normalizeKeys, type ViewKey, type KeyFrame } from './physics/take';
 import { Stroke, type PaintMode } from './paint/stroke';
 import { inflateShape, type InflateProfile, type InflateBlend } from './paint/inflate';
 import { serializeProject, serializeProjectBlob, deserializeProject, FILE_EXTENSION, type PngCacheEntry } from './storage/popstage';
@@ -22,6 +22,7 @@ import { runExport, type ExportSettings } from './export/exporter';
 import { Emitter } from './util/emitter';
 import { decodeForDisplay, canvasAlpha, browserDecodeGray, fileToAsset, rgbaToPng, isProjectFile, isImageFile } from './ui/imageio';
 import { createSampleDocument } from './ui/sample';
+import { POP_MAX_SETTING, clampPopMax } from './ui/popSlider';
 import { ask, saveFile, setBusy, toast } from './ui/dom';
 
 export type Tool = 'brush' | 'erase' | 'smooth' | 'inflate' | 'grab' | 'shake' | 'view' | 'pan';
@@ -130,6 +131,12 @@ export class App extends Emitter<AppEvents> {
   uiHidden = false;
   /** 塗るツール(ブラシ・消しゴム・ぼかし・膨らみ)や「全体をぼかす」を使い始めたら、重ね表示を自動で入れる。ブラウザに覚える設定 */
   autoOverlay = true;
+  /** 自動で入れた重ね表示を、塗るツールから離れたり「全体をぼかす」を閉じたりしたときに切る。ブラウザに覚える設定 */
+  autoOverlayOff = true;
+  /** ポップ量・膨らませる高さのスライダーの右端(px)。ブラウザに覚える設定(ui/popSlider.ts) */
+  popMax: number = POP_MAX_SETTING.def;
+  /** 今の重ね表示を自動で入れたか。重ね表示を手で変えたら false にし、手で入れた表示は自動で切らない。開き直しても続くよう prefs に覚える */
+  overlayAutoShown = false;
   /**
    * 「揺らす」ツールで画像を振った量(ワールド座標)。カメラは画像に付いて動くので画面上の位置は
    * 変わらないが、物理には平行移動と同じ動きとして伝える。画面だけの値で保存しない
@@ -184,6 +191,13 @@ export class App extends Emitter<AppEvents> {
    * 記録が差し替わったら(開く・アンドゥなど)その記録のキーフレームに合わせる
    */
   keyDraft: KeyFrame[] = [];
+  /** キーフレームの重ね表示(経路・ゴースト)。ブラウザに覚える(ui/keyPath.ts) */
+  keyOverlay = { path: true, ghost: false };
+  setKeyOverlay(key: 'path' | 'ghost', on: boolean): void {
+    if (this.keyOverlay[key] === on) return;
+    this.keyOverlay = { ...this.keyOverlay, [key]: on };
+    this.emit('view', undefined);
+  }
 
   private loading = false;
   private autosaveTimer = 0;
@@ -322,20 +336,38 @@ export class App extends Emitter<AppEvents> {
 
   /* ---------- 状態の切り替え ---------- */
 
-  /** auto を false にすると、塗るツールでも重ね表示を自動で入れない(起動時に前回のツールを戻すとき) */
+  /** auto を false にすると、重ね表示を自動で入れも切りもしない(起動時に前回のツールを戻すとき、スマホと PC の幅を行き来するとき) */
   setTool(t: Tool, auto = true): void {
     const changed = t !== this.tool;
     this.tool = t;
     this.emit('tool', t);
+    // auto が false(起動時の復元・スマホの幅に入るとき)は切らない。PC の幅に戻ってブラシにしたとき、表示が消えたままになるため
+    if (auto && changed && !PAINT_TOOLS.includes(t)) this.autoHideOverlay();
     // 選び直しでは入れない(手で切った重ね表示を戻さない)。受け手が別のツールに戻したときも入れない(スマホで画像を開いたとき)
     if (auto && changed && this.tool === t && PAINT_TOOLS.includes(t)) this.autoShowOverlay();
   }
 
-  setAutoOverlay(on: boolean): void { this.autoOverlay = on; this.emit('view', undefined); }
+  setAutoOverlay(on: boolean): void {
+    this.autoOverlay = on;
+    if (!on) this.overlayAutoShown = false; // 自動でONを切ったら、OFFの設定も効かない(画面でも押せなくなる)
+    this.emit('view', undefined);
+  }
+  setAutoOverlayOff(on: boolean): void { this.autoOverlayOff = on; this.emit('view', undefined); }
+  setPopMax(v: number): void { this.popMax = clampPopMax(v); this.emit('view', undefined); if (this.inflateState) this.emit('inflate', 'change'); }
 
-  /** 塗りが見えるよう重ね表示を入れる。塗るツールから離れても切らない */
+  /** 塗りが見えるよう重ね表示を入れる。入れたことを覚え、塗り終えたら autoHideOverlay で切る */
   private autoShowOverlay(): void {
-    if (this.autoOverlay && !this.view.overlay) this.setOverlayMode('selected');
+    if (!this.autoOverlay || this.view.overlay) return;
+    this.setOverlayMode('selected');
+    this.overlayAutoShown = true;
+    this.emit('view', undefined); // 自動で入れたことも覚える
+  }
+
+  /** 自動で入れた重ね表示を切る。塗るツールのままか「全体をぼかす」の途中なら、まだ切らない */
+  private autoHideOverlay(): void {
+    if (!this.overlayAutoShown || PAINT_TOOLS.includes(this.tool) || this.blurPreview) return;
+    this.overlayAutoShown = false;
+    if (this.autoOverlayOff) this.setOverlayMode('off');
   }
 
   /** そのレイヤーだけを選ぶ */
@@ -367,6 +399,7 @@ export class App extends Emitter<AppEvents> {
   }
 
   setOverlayMode(mode: OverlayMode): void {
+    this.overlayAutoShown = false; // 手で変えた表示は自動では切らない(自動で入れるときは、この後で立て直す)
     this.view.overlay = mode !== 'off';
     this.view.overlayAll = mode === 'all';
     this.syncView();
@@ -380,6 +413,7 @@ export class App extends Emitter<AppEvents> {
 
   setViewOption(key: keyof ViewOptions, on: boolean): void {
     this.view[key] = on;
+    if (key === 'overlay' || key === 'fade') this.overlayAutoShown = false;
     // 画像を薄くするのは塗りを見るためなので、重ね表示も合わせて入れる
     if (key === 'fade' && on) this.view.overlay = true;
     // 重ね表示を切ったら、次に入れたときは「選択中」から
@@ -390,6 +424,7 @@ export class App extends Emitter<AppEvents> {
   /** 見栄えの確認用に、編集のための表示(重ね表示・画像を薄く・ポップ一時OFF・揺れ一時停止・グリッド)をまとめて切る */
   clearEditView(): void {
     Object.assign(this.view, { overlay: false, overlayAll: false, fade: false, flat: false, grid: false });
+    this.overlayAutoShown = false;
     this.syncView();
     if (this.paused) this.setPaused(false);
   }
@@ -400,6 +435,14 @@ export class App extends Emitter<AppEvents> {
     this.paused = on;
     this.world.paused = on;
     if (on) this.world.reset();
+    this.emit('view', undefined);
+  }
+
+  /** 右パネルを閉じて3Dビューを広げているか(PC の幅だけ。ui/sidePanel.ts)。ブラウザに覚える */
+  panelClosed = false;
+  setPanelClosed(on: boolean): void {
+    if (this.panelClosed === on) return;
+    this.panelClosed = on;
     this.emit('view', undefined);
   }
 
@@ -414,6 +457,16 @@ export class App extends Emitter<AppEvents> {
   resetView(): void {
     this.project.camera = frontCamera(this.project.camera.fov);
     this.world.cutView(); // 視点が飛ぶだけなので揺らさない
+    this.cameraChanged();
+  }
+
+  /** 向きだけを正面に戻す。ズームと平行移動(画面の上下左右の位置)は保つ */
+  resetRotation(): void {
+    const c = this.project.camera;
+    if (c.yaw === 0 && c.pitch === 0 && c.target.z === 0) return;
+    // 回した視点で平行移動すると奥行き(z)にもずれるので、正面から見て同じに見えるよう 0 に戻す
+    this.project.camera = { ...c, yaw: 0, pitch: 0, target: { ...c.target, z: 0 } };
+    this.world.cutView();
     this.cameraChanged();
   }
 
@@ -765,7 +818,7 @@ export class App extends Emitter<AppEvents> {
   endBlurPreview(apply: boolean, radius: number): void {
     const p = this.blurPreview; if (!p) return;
     this.blurPreview = null;
-    try { this.finishBlur(p, apply, radius); } finally { this.emit('blur', 'end'); }
+    try { this.finishBlur(p, apply, radius); } finally { this.emit('blur', 'end'); this.autoHideOverlay(); }
   }
 
   private finishBlur(p: NonNullable<App['blurPreview']>, apply: boolean, radius: number): void {
@@ -1353,6 +1406,23 @@ export class App extends Emitter<AppEvents> {
     if (patch.seconds !== undefined) k.seconds = Math.max(KEY_SECONDS.min, Math.min(KEY_SECONDS.max, Math.round(patch.seconds * 10) / 10));
     if (patch.mode) k.mode = patch.mode;
     this.emit('take', this.takeState);
+  }
+
+  /**
+   * キーフレームの動きを再生できるか(2つ以上で1周が短すぎず、止まっているとき)。
+   * 手で記録した操作があるときは、黙ってキーフレームの記録に入れ替えないよう使えなくする(右パネルの「再生」で入れ替える)
+   */
+  get canPlayKeys(): boolean {
+    const n = this.keyDraft.length, total = this.keyDraft.reduce((a, k) => a + k.seconds, 0), take = this.project.take;
+    return n >= 2 && total >= TAKE_MIN_SECONDS - 1e-9 && !!this.doc && !this.exporting && this.takeState === 'idle' && (!take || !!take.keys);
+  }
+
+  /** キーフレームの動きを再生する。一覧が今の記録と同じならそのまま再生し、違えば作り直す(元に戻せる) */
+  playKeys(): void {
+    if (!this.canPlayKeys) return;
+    const take = this.project.take;
+    if (take?.keys && JSON.stringify(take.keys) === JSON.stringify(normalizeKeys(this.keyDraft))) this.playTake();
+    else this.makeKeyTake();
   }
 
   /** キーフレームを順に通ってくり返す記録を作り(今の記録と入れ替え、アンドゥできる)、ループ再生する */

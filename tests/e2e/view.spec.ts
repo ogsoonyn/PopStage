@@ -488,3 +488,21 @@ test('Ctrl か Shift を押しながらだと、回転・平行移動・ズー�
   f0 = await free(); await cellDrag('free', 'Control', 'left'); const rFine = (await free()).yaw - f0.yaw;
   expect(rFine / rFull).toBeCloseTo(0.2, 1);
 });
+
+test('回転だけリセット(Ctrl+Home・左のツールバー)は、ズームと位置を保って向きだけ正面に戻す。正面(Home)はすべて戻す', async ({ page }) => {
+  await boot(page);
+  const cam = () => page.evaluate(() => (window as any).popstage.project.camera);
+  await page.evaluate(() => {
+    const a = (window as any).popstage;
+    a.project.camera = { ...a.project.camera, yaw: 0.6, pitch: -0.3, zoom: 2.2, target: { x: 40, y: -25, z: 12 } };
+  });
+  await page.locator('#view').focus();
+  await page.keyboard.press('Control+Home');
+  expect(await cam()).toMatchObject({ yaw: 0, pitch: 0, zoom: 2.2, target: { x: 40, y: -25, z: 0 } });
+  // 左のツールバーのボタンからも
+  await page.evaluate(() => { const a = (window as any).popstage; a.project.camera = { ...a.project.camera, yaw: 0.4 }; });
+  await page.locator('#toolNav [data-cmd=resetRotation]').click();
+  expect(await cam()).toMatchObject({ yaw: 0, zoom: 2.2 });
+  await page.locator('#toolNav [data-cmd=resetView]').click();
+  expect(await cam()).toMatchObject({ yaw: 0, pitch: 0, zoom: 1, target: { x: 0, y: 0, z: 0 } });
+});
