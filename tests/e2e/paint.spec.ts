@@ -424,4 +424,3 @@ test('アルファから生成: 不透明な画素を含むメッシュのマス
   expect(r.bad).toBe(0);
   expect(r.far).toBe(0);
 });
-
