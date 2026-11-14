@@ -78,7 +78,7 @@ function defineActions(app: App, d: ActionDeps) {
     toggleGrid: { label: 'グリッド', keys: ['Shift+G'], run: () => app.setViewOption('grid', !app.view.grid), duringPreview: true },
     toggleTransparent: {
       label: '背景を透過', desc: '3Dビューと書き出しの背景を透過にする・背景色で塗る(色は右パネルの「カメラと背景」で選ぶ)',
-      run: () => app.setBackgroundTransparent(app.project.background !== null),
+      run: () => app.setBackgroundTransparent(app.project.background !== null), duringPreview: true, // ウェイトに触れないので、右パネルと同じくプレビュー中も使える
     },
     cleanView: {
       label: '編集表示クリア', keys: ['C'], run: () => app.clearEditView(), duringPreview: true, helpLabel: '表示クリア(編集用の表示をまとめて切る)',
@@ -136,7 +136,7 @@ function defineActions(app: App, d: ActionDeps) {
 
 type CommandName = keyof ReturnType<typeof defineActions>;
 
-/** 表示の切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す) */
+/** 切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す)。transparent だけはファイルに入る背景の設定 */
 type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'transparent';
 
 /**

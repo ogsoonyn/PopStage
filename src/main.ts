@@ -92,8 +92,10 @@ persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.b
 }
 // 背景・自動揺らし・画角は、変えたら「新しい画像を開いたときの既定」として覚える。透過にしても背景色は残す(bgColor)
 {
-  const c = prefs.get<Record<string, unknown>>('newImage')?.bgColor;
-  if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) app.bgColor = c;
+  // bgColor を覚える前の版では、透過でないときの background だけが色を持っていた
+  const d = prefs.get<Record<string, unknown>>('newImage') ?? {};
+  const c = [d.bgColor, d.background].find(v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v));
+  if (c) app.bgColor = c as string;
 }
 app.store.on('project', ({ keys }) => {
   if (!keys.some(k => k === 'background' || k === 'autoSwing' || k === 'camera')) return;

@@ -357,7 +357,9 @@ test('全体をぼかす: プレビュー中も視点は回せる。塗る・ツ
   await expect(page.locator('#blurDialog')).toHaveJSProperty('open', true);
   expect(await page.evaluate(() => document.querySelector('#blurDialog')!.matches(':modal'))).toBe(false);
   await page.locator('#blurRadiusN').fill('60');
+  // プレビューは次のフレームで計算する。描画が遅い環境では 150ms では済まないことがあるので、フレームを待つ
   await page.waitForTimeout(150);
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   const previewed = await weightSum(page);
   expect(previewed).not.toBe(original);
   // 右ドラッグで視点が回る

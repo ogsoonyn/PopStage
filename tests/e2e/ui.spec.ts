@@ -630,6 +630,25 @@ test('左のツールバー: 背景を透過は、入・切をボタン・メニ
   await app(a => a.history.undo());
   expect(await app(a => a.project.background)).toBeNull();
   await expect(btn).toHaveAttribute('aria-pressed', 'true');
+  await app(a => a.history.redo());
+  expect(await app(a => a.project.background)).toBe('#336699');
+  await expect(btn).toHaveAttribute('aria-pressed', 'false');
+  // 透過にしても色は覚えておき、開き直したあとも、切るとその色で塗る(色の値は確かめてから使う)
+  await btn.click();
+  await page.reload();
+  await page.waitForFunction(() => (window as any).popstage?.doc);
+  expect(await app(a => [a.project.background, a.bgColor])).toEqual([null, '#336699']);
+  await page.waitForTimeout(400); // 設定の書き込みは間引かれるので、済んでから書き換える
+  await page.evaluate(() => { const k = 'popstage.prefs.v1', p = JSON.parse(localStorage.getItem(k)!); p.newImage = { background: null, bgColor: 'red' }; localStorage.setItem(k, JSON.stringify(p)); });
+  await page.reload();
+  await page.waitForFunction(() => (window as any).popstage?.doc);
+  expect(await app(a => a.bgColor)).toBe('#ffffff');
+  // bgColor を覚える前の版の設定(透過でない背景色だけ)からも引き継ぐ
+  await page.waitForTimeout(400); // 設定の書き込みは間引かれるので、済んでから書き換える
+  await page.evaluate(() => { const k = 'popstage.prefs.v1', p = JSON.parse(localStorage.getItem(k)!); p.newImage = { background: '#224466' }; localStorage.setItem(k, JSON.stringify(p)); });
+  await page.reload();
+  await page.waitForFunction(() => (window as any).popstage?.doc);
+  expect(await app(a => a.bgColor)).toBe('#224466');
 });
 
 test('ツールオプションの欄は選択中のツールの設定だけを出す。膨らみは描く前に形や断面を選べる', async ({ page }) => {
