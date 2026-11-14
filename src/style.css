@@ -89,11 +89,11 @@ html.mobile #blurDialog { left: 50%; right: auto; transform: translateX(-50%); b
 @media (max-height: 900px) {
   #toolNav .nav-act .nav-ico { display: none; }
   /* アイコンが無いと名前が右上のキーと同じ高さに来るので、キーの分だけ右を空ける */
-  #toolNav .nav-act { padding-left: 2px; padding-right: 12px; }
+  #toolNav .nav-act { padding-left: 2px; padding-right: 12px; padding-top: 2px; padding-bottom: 2px; }
   /* ⇧W のような2文字のキーは名前と重なるので出さない(ツールチップとヘルプには出る) */
   #toolNav .nav-act.key-wide .tool-key { display: none; }
   #toolNav .nav-act.key-wide { padding-right: 2px; }
-  /* ツールのボタンの上下も少し詰める(864px の画面で最後のボタンまで入るように) */
+  /* ツールと操作のボタンの上下も少し詰める(864px の画面で最後のボタンまで入るように) */
   #toolNav > .tool { padding-top: 1px; padding-bottom: 1px; }
 }
 @media (max-height: 720px) {
@@ -291,3 +291,17 @@ html.ui-hidden #uiRestore, html.ui-hidden #playBar { transition: opacity .2s; }
 html.ui-hidden:not(.mobile):not(.ui-peek) #uiRestore:not(:focus-visible),
 html.ui-hidden:not(.mobile):not(.ui-peek) #playBar:not(:has(:focus-visible)) { opacity: 0; pointer-events: none; }
 html.mobile.ui-hidden #uiRestore { opacity: .75; }
+
+/* ---------- 右パネルの開閉(ui/sidePanel.ts)。3Dビューの右端の真ん中に細いつまみを出す ---------- */
+#panelToggle {
+  position: absolute; top: 50%; left: 0; z-index: 25; transform: translateY(-50%);
+  width: .75rem; height: 3.5rem; padding: 0; border-radius: 0 .375rem .375rem 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1rem; line-height: 1;
+  background: color-mix(in oklab, var(--color-base-100) 85%, transparent); color: var(--color-base-content);
+  border: 1px solid var(--color-base-300); border-left: 0; opacity: .7; cursor: pointer;
+}
+/* 閉じたら3Dビューの右端(画面の右端)に、左向きの形で出す */
+html.panel-closed #panelToggle { left: auto; right: 0; border-radius: .375rem 0 0 .375rem; border-left: 1px solid var(--color-base-300); border-right: 0; }
+#panelToggle:hover, #panelToggle:focus-visible { opacity: 1; width: 1rem; }
+html.panel-closed body > main > aside { display: none; }
+html.mobile #panelToggleWrap, html.ui-hidden #panelToggleWrap { display: none; }

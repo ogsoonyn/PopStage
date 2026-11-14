@@ -83,7 +83,17 @@ function defineActions(app: App, d: ActionDeps) {
       label: '編集表示クリア', keys: ['C'], run: () => app.clearEditView(), duringPreview: true, helpLabel: '表示クリア(編集用の表示をまとめて切る)',
       desc: '見栄えを確かめるため、編集用の表示をまとめて切る(ウェイトの重ね表示・画像を薄く・ポップを一時OFF・揺れを一時停止・グリッド)。押すたびに切るだけで、元には戻さない',
     },
-    resetView: { label: '視点リセット(正面)', keys: ['Home'], run: () => app.resetView(), duringPreview: true },
+    resetView: { label: '視点リセット(正面)', keys: ['Home'], run: () => app.resetView(), duringPreview: true, desc: '向き・ズーム・位置をすべて正面の初めの視点に戻す' },
+    togglePanel: {
+      label: '右パネル', helpLabel: '右パネルを開く・閉じる', keys: ['Shift+P'], desc: '右のパネル(レイヤー・アニメーション・画像と表示)を閉じて3Dビューを広げる。3Dビューの右端のつまみでも開閉できる',
+      run: () => app.setPanelClosed(!app.panelClosed), duringPreview: true,
+      // スマホと UIを隠している間は右パネルが見えないので、気付かないうちに閉じた状態を覚えないよう止める
+      enabled: () => !document.documentElement.classList.contains('mobile') && !app.uiHidden,
+    },
+    resetRotation: {
+      label: '回転だけリセット', keys: ['Ctrl+Home'], run: () => app.resetRotation(), duringPreview: true,
+      desc: 'ズームと位置はそのままで、向きだけを正面に戻す',
+    },
     toggleUi: {
       label: 'UIを隠す', helpLabel: 'UIを隠す・戻す(Esc でも戻る)', keys: ['Tab'], desc: '3Dビューのほかを隠して、画面いっぱいに見せる。もう一度押すか Esc で戻す',
       run: () => app.setUiHidden(!app.uiHidden), duringPreview: true,
@@ -136,7 +146,7 @@ function defineActions(app: App, d: ActionDeps) {
 type CommandName = keyof ReturnType<typeof defineActions>;
 
 /** 切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す)。transparent だけはファイルに入る背景の設定 */
-type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'transparent';
+type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'transparent' | 'panel';
 
 /**
  * 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く)。
@@ -168,6 +178,8 @@ const NAV_ACTIONS: readonly NavGroup[] = [
       { cmd: 'toggleGrid', icon: 'grid', text: 'グリッド', check: 'grid' },
       { cmd: 'toggleTransparent', icon: 'transparent', text: '透過', check: 'transparent', name: '背景を透過' },
       { cmd: 'cleanView', icon: 'cleanView', text: '表示クリア' },
+      { cmd: 'resetView', icon: 'resetView', text: '正面', name: '視点リセット(正面)' },
+      { cmd: 'resetRotation', icon: 'resetRotation', text: '回転リセット', name: '回転だけリセット' },
     ],
   },
   {
@@ -357,7 +369,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   window.addEventListener('keydown', e => {
     // 膨らませるのパネルを開いている間も、表示の切り替えなどは効かせる(できない操作は enabled で止める)
     if (isTyping(e) || modalOpen()) return;
-    if (e.target instanceof HTMLInputElement && e.target.type === 'range' && SLIDER_KEYS.has(e.key)) return;
+    if (e.target instanceof HTMLInputElement && e.target.type === 'range' && SLIDER_KEYS.has(e.key) && !e.ctrlKey && !e.metaKey) return;
     if (e.key === 'Tab' && keyboardFocus()) return;
     const name = byKey.get(keyString(e));
     if (!name) return;
@@ -376,7 +388,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
     for (const b of cmdButtons) { const off = !enabled(b.dataset.cmd!); if (b.disabled !== off) b.disabled = off; }
     setText(undoLabel, app.history.undoLabel ? `(${app.history.undoLabel})` : '');
     setText(redoLabel, app.history.redoLabel ? `(${app.history.redoLabel})` : '');
-    const on: Record<ViewCheck, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused, transparent: app.project.background === null };
+    const on: Record<ViewCheck, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused, transparent: app.project.background === null, panel: !app.panelClosed };
     // 重ね表示は3つの状態なので、メニューには今の状態を書き、左のツールバーには全レイヤーのときだけ印を付ける
     const mode = app.overlayMode;
     for (const el of checks) setText(el, el.dataset.check === 'overlay' ? (mode === 'off' ? '' : mode === 'all' ? '全レイヤー' : '選択中') : on[el.dataset.check as ViewCheck] ? '✓' : '');
