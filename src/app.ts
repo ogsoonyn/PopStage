@@ -124,6 +124,8 @@ export class App extends Emitter<AppEvents> {
   /** 3面図の正面・右から・下からの拡大率と平行移動(3つで共有。画面だけの設定で保存しない) */
   multiOrtho: OrthoView = defaultOrthoView();
   paused = false;
+  /** 背景を透過しないときに塗る色(最後に使った背景色)。透過にしても忘れず、新しい画像の既定と一緒にブラウザに覚える(main.ts) */
+  bgColor = '#ffffff';
   /** UIを隠して3Dビューを画面いっぱいに出しているか(ui/hideUi.ts)。画面だけの状態で、覚えない */
   uiHidden = false;
   /** 塗るツール(ブラシ・消しゴム・ぼかし・膨らみ)や「全体をぼかす」を使い始めたら、重ね表示を自動で入れる。ブラウザに覚える設定 */
@@ -288,8 +290,17 @@ export class App extends Emitter<AppEvents> {
     this.emit('status', undefined);
   }
 
+  /**
+   * 背景を透過する・しない。しないときは最後に使った背景色(bgColor)で塗る。1手として記録する
+   */
+  setBackgroundTransparent(on: boolean): void {
+    if ((this.project.background === null) === on) return;
+    this.history.execute(PatchProject.from(this.store, { background: on ? null : this.bgColor }, on ? '背景を透過' : '背景を塗る'));
+  }
+
   private applyBackground(): void {
     const bg = this.project.background;
+    if (bg) this.bgColor = bg;
     this.stage.setBackground(bg);
     const el = this.stage.canvas.parentElement!;
     el.classList.toggle('solid', !!bg);

@@ -92,11 +92,17 @@ persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.b
   if (isTool(t)) app.setTool(t, false);
   app.on('tool', t => prefs.set('tool', t));
 }
-// 背景・自動揺らし・画角は、変えたら「新しい画像を開いたときの既定」として覚える
+// 背景・自動揺らし・画角は、変えたら「新しい画像を開いたときの既定」として覚える。透過にしても背景色は残す(bgColor)
+{
+  // bgColor を覚える前の版では、透過でないときの background だけが色を持っていた
+  const d = prefs.get<Record<string, unknown>>('newImage') ?? {};
+  const c = [d.bgColor, d.background].find(v => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v));
+  if (c) app.bgColor = c as string;
+}
 app.store.on('project', ({ keys }) => {
   if (!keys.some(k => k === 'background' || k === 'autoSwing' || k === 'camera')) return;
   const p = app.project;
-  prefs.set('newImage', { background: p.background, autoSwing: { ...p.autoSwing }, fov: p.camera.fov });
+  prefs.set('newImage', { background: p.background, bgColor: app.bgColor, autoSwing: { ...p.autoSwing }, fov: p.camera.fov });
 });
 const exportDialog = bindExportDialog(app);
 const blurDialog = bindBlurDialog(app);
@@ -107,8 +113,7 @@ bindToolOptions(app);
 
 /* ---------- ファイルを開く ---------- */
 
-const { fileImage, fileProject } = ui;
-fileImage.addEventListener('change', () => { const f = fileImage.files?.[0]; fileImage.value = ''; if (f) void app.openFile(f); });
+const { fileProject } = ui;
 fileProject.addEventListener('change', () => { const f = fileProject.files?.[0]; fileProject.value = ''; if (f) void app.openFile(f); });
 
 const IMAGE_ACCEPT = { 'image/*': ['.png', '.jpg', '.jpeg', '.webp'] };
@@ -128,7 +133,6 @@ async function pickAndOpen(types: FilePickerAcceptType[], fallback: HTMLInputEle
 /* ---------- コマンド(メニュー・ボタン・ショートカット共通。定義は ui/actions.ts) ---------- */
 // メニューやボタンを結び付けるので、data-cmd の部品をスマホのシートへ移す前に呼ぶ(移しても結び付けは残る)
 bindActions(app, {
-  openImage: () => pickAndOpen([{ description: '画像', accept: IMAGE_ACCEPT }], fileImage),
   openProject: () => pickAndOpen([{ description: 'PukuPop プロジェクト / 画像', accept: { 'application/zip': [FILE_EXTENSION, LEGACY_FILE_EXTENSION], ...IMAGE_ACCEPT } }], fileProject),
   openRecent: () => recentDialog.open(),
   openExport: () => exportDialog.open(),

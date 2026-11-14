@@ -34,7 +34,6 @@ export interface Action {
 
 /** 画面の部品のうち、コマンドから開くもの */
 export interface ActionDeps {
-  openImage: () => unknown;
   openProject: () => unknown;
   openRecent: () => unknown;
   openExport: () => unknown;
@@ -52,8 +51,8 @@ function defineActions(app: App, d: ActionDeps) {
   };
   return {
     // ファイル
-    openImage: { label: '画像を開く', keys: ['Ctrl+Shift+O'], run: d.openImage },
-    open: { label: 'プロジェクトを開く', keys: ['Ctrl+O'], run: d.openProject },
+    // プロジェクト(.pukupop)も画像も同じ「開く」で開く(中身で見分ける)。Ctrl+Shift+O は前の「画像を開く」のキー
+    open: { label: '開く', desc: 'プロジェクト(.pukupop)か画像を開く', keys: ['Ctrl+O', 'Ctrl+Shift+O'], run: d.openProject },
     recent: { label: '最近開いたファイル', run: d.openRecent },
     save: { label: '保存', keys: ['Ctrl+S'], run: () => app.save(false), enabled: () => !!app.doc },
     saveAs: { label: '名前を付けて保存', keys: ['Ctrl+Shift+S'], run: () => app.save(true), enabled: () => !!app.doc },
@@ -76,6 +75,10 @@ function defineActions(app: App, d: ActionDeps) {
     togglePause: { label: '揺れを一時停止', keys: ['P'], run: () => app.setPaused(!app.paused), duringPreview: true },
     toggleMulti: { label: '3面図', keys: ['M'], run: () => app.setViewOption('multi', !app.view.multi), duringPreview: true },
     toggleGrid: { label: 'グリッド', keys: ['Shift+G'], run: () => app.setViewOption('grid', !app.view.grid), duringPreview: true },
+    toggleTransparent: {
+      label: '背景を透過', desc: '3Dビューと書き出しの背景を透過にする・背景色で塗る(色は右パネルの「カメラと背景」で選ぶ)',
+      run: () => app.setBackgroundTransparent(app.project.background !== null), duringPreview: true, // ウェイトに触れないので、右パネルと同じくプレビュー中も使える
+    },
     cleanView: {
       label: '編集表示クリア', keys: ['C'], run: () => app.clearEditView(), duringPreview: true, helpLabel: '表示クリア(編集用の表示をまとめて切る)',
       desc: '見栄えを確かめるため、編集用の表示をまとめて切る(ウェイトの重ね表示・画像を薄く・ポップを一時OFF・揺れを一時停止・グリッド)。押すたびに切るだけで、元には戻さない',
@@ -132,18 +135,27 @@ function defineActions(app: App, d: ActionDeps) {
 
 type CommandName = keyof ReturnType<typeof defineActions>;
 
-/** 表示の切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す) */
-type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause';
+/** 切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す)。transparent だけはファイルに入る背景の設定 */
+type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'transparent';
 
 /**
  * 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く)。
  * check を持つものは切り替えで、入・切を aria-pressed で示す。name は、ボタンの文言を幅に合わせて縮めたときの読み上げ用の名前
  */
-type NavGroup = { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string; check?: ViewCheck; name?: string }[] };
+type NavGroup = { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string; check?: ViewCheck; name?: string; defaultHidden?: boolean }[] };
 
 /** ツールの上に置く、ファイルの操作(作業を始めるときにすぐ開き直せるように) */
 const NAV_TOP: readonly NavGroup[] = [
-  { label: 'ファイル', title: 'ファイルの操作', items: [{ cmd: 'recent', icon: 'recent', text: '最近', name: '最近開いたファイル' }] },
+  // 開く・保存・書き出しはメニューとショートカットでも使えるので、既定では隠す(設定で出せる。出すと低い画面ではツールバーがスクロールする)
+  {
+    label: 'ファイル', title: 'ファイルの操作',
+    items: [
+      { cmd: 'open', icon: 'open', text: '開く', defaultHidden: true },
+      { cmd: 'recent', icon: 'recent', text: '最近', name: '最近開いたファイル' },
+      { cmd: 'save', icon: 'save', text: '保存', defaultHidden: true },
+      { cmd: 'export', icon: 'export', text: '書き出し', defaultHidden: true },
+    ],
+  },
 ];
 
 const NAV_ACTIONS: readonly NavGroup[] = [
@@ -154,6 +166,7 @@ const NAV_ACTIONS: readonly NavGroup[] = [
       { cmd: 'toggleOverlay', icon: 'overlay', text: 'ウェイト', check: 'overlay', name: 'ウェイトの重ね表示' },
       { cmd: 'toggleFade', icon: 'fade', text: '画像を薄く', check: 'fade' },
       { cmd: 'toggleGrid', icon: 'grid', text: 'グリッド', check: 'grid' },
+      { cmd: 'toggleTransparent', icon: 'transparent', text: '透過', check: 'transparent', name: '背景を透過' },
       { cmd: 'cleanView', icon: 'cleanView', text: '表示クリア' },
     ],
   },
@@ -169,10 +182,10 @@ const NAV_ACTIONS: readonly NavGroup[] = [
  * 左のツールバーのボタンの一覧(並びのとおり)。設定で出す・隠すを選ぶのに使う。
  * id はボタンの data-nav と同じ(ツールはツールの id、操作はコマンドの名前)
  */
-export const TOOLBAR_ITEMS: readonly { group: string; items: readonly { id: string; label: string }[] }[] = [
-  ...NAV_TOP.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text })) })),
+export const TOOLBAR_ITEMS: readonly { group: string; items: readonly { id: string; label: string; defaultHidden?: boolean }[] }[] = [
+  ...NAV_TOP.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text, defaultHidden: it.defaultHidden })) })),
   { group: 'ツール', items: TOOL_GROUPS.flat().map(t => ({ id: t.id as string, label: t.name ?? t.label })) },
-  ...NAV_ACTIONS.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text })) })),
+  ...NAV_ACTIONS.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text, defaultHidden: it.defaultHidden })) })),
 ];
 {
   // ツールの id とコマンドの名前は同じ data-nav に入るので、重なると1つのチェックで2つのボタンが隠れる
@@ -297,9 +310,9 @@ export function bindActions(app: App, deps: ActionDeps): void {
     if (a.keys) {
       b.setAttribute('aria-keyshortcuts', ariaKeys(a.keys));
       const tk = b.querySelector('kbd.tool-key');
-      // ボタンの右上は狭いので、Shift は ⇧ と短く書く
+      // ボタンの右上は狭いので、Shift は ⇧ と短く書き、Ctrl の付くキーは出さない(ツールチップには出る)
       if (tk) {
-        tk.textContent = a.keys[0].replace('Shift+', '⇧');
+        tk.textContent = a.keys[0].includes('Ctrl+') ? '' : a.keys[0].replace('Shift+', '⇧');
         // 2文字以上の表記は、低い画面で名前と重なるので隠す(style.css)
         b.classList.toggle('key-wide', tk.textContent.length > 1);
       }
@@ -363,7 +376,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
     for (const b of cmdButtons) { const off = !enabled(b.dataset.cmd!); if (b.disabled !== off) b.disabled = off; }
     setText(undoLabel, app.history.undoLabel ? `(${app.history.undoLabel})` : '');
     setText(redoLabel, app.history.redoLabel ? `(${app.history.redoLabel})` : '');
-    const on: Record<ViewCheck, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused };
+    const on: Record<ViewCheck, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused, transparent: app.project.background === null };
     // 重ね表示は3つの状態なので、メニューには今の状態を書き、左のツールバーには全レイヤーのときだけ印を付ける
     const mode = app.overlayMode;
     for (const el of checks) setText(el, el.dataset.check === 'overlay' ? (mode === 'off' ? '' : mode === 'all' ? '全レイヤー' : '選択中') : on[el.dataset.check as ViewCheck] ? '✓' : '');
@@ -387,7 +400,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   app.on('status', refresh); // 書き出しの始まり・終わりなど(fps の更新は別のイベントなので、ここでは拾わない)
   app.store.on('layers', refresh);
   app.store.on('replace', refresh);
-  app.store.on('project', ({ keys }) => { if (keys.includes('take')) refresh(); });
+  app.store.on('project', ({ keys }) => { if (keys.includes('take') || keys.includes('background')) refresh(); });
 
   /* ---------- ツールの表示(ツールオプションの欄は ui/toolOptions.ts) ---------- */
   const toolButtons = [...ui.toolNav.querySelectorAll<HTMLButtonElement>('.tool')];

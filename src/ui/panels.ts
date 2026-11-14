@@ -229,7 +229,7 @@ export function bindPanels(app: App): { refresh: () => void } {
   });
   bindRange(ui.pPeriod, ui.pPeriodO, { target: 'project', keys: ['autoSwing'], label: '自動揺らしの周期', toPatch: v => ({ autoSwing: { ...app.project.autoSwing, period: v / 10 } }), fmt: v => `${(v / 10).toFixed(1)}秒` });
   bindRange(ui.pAutoStr, ui.pAutoStrO, { target: 'project', keys: ['autoSwing'], label: '自動揺らしの強さ', toPatch: v => ({ autoSwing: { ...app.project.autoSwing, strength: v / 100 } }), fmt: pct });
-  ui.pBgTransparent.addEventListener('change', () => exec('project', '背景', { background: ui.pBgTransparent.checked ? null : ui.pBgColor.value }));
+  ui.pBgTransparent.addEventListener('change', () => app.setBackgroundTransparent(ui.pBgTransparent.checked));
   bindLive(ui.pBgColor, {
     begin: () => snapshot('project', ['background']),
     input: v => patchNow('project', { background: v }),
@@ -272,6 +272,8 @@ export function bindPanels(app: App): { refresh: () => void } {
     const doc = app.doc;
     // 作り直してもキーボードのフォーカスを失わないよう、一覧にフォーカスがあったかを覚えておく
     const hadFocus = list.contains(document.activeElement) && document.activeElement?.tagName === 'LI';
+    // 重ね方のボタンにあったフォーカスは、作り直したあと同じ行のボタンへ戻す(続けて押せるように)
+    const blendFocus = list.contains(document.activeElement) && document.activeElement?.classList.contains('blend-btn') ? document.activeElement.closest('li')?.dataset.id : undefined;
     list.replaceChildren();
     thumbs.clear();
     if (!doc) { updateSelection(); return; }
@@ -306,9 +308,21 @@ export function bindPanels(app: App): { refresh: () => void } {
       const info = document.createElement('span');
       info.className = 'layer-info text-xs opacity-70 tabular-nums flex items-center gap-1';
       info.dataset.blend = layer.blend;
-      info.innerHTML = blendIcon(layer.blend);
-      info.append(String(layer.pop));
-      info.title = `重ね方: ${BLENDS[layer.blend].label} / ポップ量 ${layer.pop}px`;
+      // 重ね方のアイコンは押すと次の重ね方に切り替える(表示のチェックと同じく、押した1行だけに効かせる)
+      const blendBtn = document.createElement('button');
+      blendBtn.type = 'button'; blendBtn.className = 'blend-btn';
+      blendBtn.innerHTML = blendIcon(layer.blend);
+      const next = BLEND_ORDER[(BLEND_ORDER.indexOf(layer.blend) + 1) % BLEND_ORDER.length];
+      blendBtn.title = `重ね方: ${BLENDS[layer.blend].label}(押すと「${BLENDS[next].label}」に切り替え)`;
+      blendBtn.setAttribute('aria-label', `重ね方: ${BLENDS[layer.blend].label}`);
+      blendBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        if (pressed === layer.id) { pressed = null; return; } // 長押しで選択モードに入った直後のクリックでは切り替えない
+        history.execute(PatchLayer.from(store, layer.id, { blend: next }, `重ね方を${BLENDS[next].label}に`));
+      });
+      const popNum = document.createElement('span');
+      popNum.textContent = String(layer.pop); popNum.title = `ポップ量 ${layer.pop}px`;
+      info.append(blendBtn, popNum);
 
       li.append(eye, swatch, th, name, info);
       li.addEventListener('click', e => onRowClick(layer.id, e));
@@ -321,6 +335,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     });
     updateSelection();
     if (hadFocus) list.querySelector<HTMLElement>('li.is-primary-focus')?.focus();
+    if (blendFocus) list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(blendFocus)}"] .blend-btn`)?.focus();
   }
 
   /** 一覧の下から順の id(Shift の範囲選択用) */
@@ -512,7 +527,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     }
     setRange(ui.pFov, ui.pFovO, p.camera.fov, `${p.camera.fov}°`);
     ui.pBgTransparent.checked = p.background === null;
-    if (p.background) ui.pBgColor.value = p.background;
+    ui.pBgColor.value = p.background ?? app.bgColor;
     ui.pAuto.checked = ui.tAuto.checked = p.autoSwing.enabled;
     setRange(ui.pPeriod, ui.pPeriodO, Math.round(p.autoSwing.period * 10), `${p.autoSwing.period.toFixed(1)}秒`);
     setRange(ui.pAutoStr, ui.pAutoStrO, Math.round(p.autoSwing.strength * 100), pct(p.autoSwing.strength * 100));

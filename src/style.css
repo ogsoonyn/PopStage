@@ -93,6 +93,8 @@ html.mobile #blurDialog { left: 50%; right: auto; transform: translateX(-50%); b
   /* ⇧W のような2文字のキーは名前と重なるので出さない(ツールチップとヘルプには出る) */
   #toolNav .nav-act.key-wide .tool-key { display: none; }
   #toolNav .nav-act.key-wide { padding-right: 2px; }
+  /* ツールのボタンの上下も少し詰める(864px の画面で最後のボタンまで入るように) */
+  #toolNav > .tool { padding-top: 1px; padding-bottom: 1px; }
 }
 @media (max-height: 720px) {
   #toolNav .nav-ico { display: none; }
@@ -223,6 +225,12 @@ html.mobile #mPanes .btn-xs.btn-square { width: 2.25rem; height: 2.25rem; }
 #layerList li.is-primary { box-shadow: inset 4px 0 0 var(--color-primary); }
 #layerList li { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .layer-color { width: .5rem; height: .5rem; border-radius: 999px; flex-shrink: 0; }
+/* 一覧の重ね方のアイコン(押すと切り替え) */
+.blend-btn { display: inline-grid; place-items: center; padding: 1px 2px; border-radius: 4px; cursor: pointer; }
+.blend-btn:hover { background: color-mix(in oklab, var(--color-base-content) 15%, transparent); }
+/* スマホでは指で押せるよう、押せる範囲を広げる */
+html.mobile .blend-btn { min-width: 2.25rem; min-height: 2.25rem; }
+.blend-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 .blend-ico { flex-shrink: 0; }
 /* 選んだレイヤーで値が揃っていない */
 output.is-mixed { font-size: .7rem; opacity: .8; }

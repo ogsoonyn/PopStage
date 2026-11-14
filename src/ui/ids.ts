@@ -35,7 +35,7 @@ export const UI_IDS = {
   mModeBar: 'div', mTools: 'nav', mPaintDone: 'button',
   // ステータスバー
   sFps: 'span', sVerts: 'span', sZoom: 'span', sImage: 'span', sRec: 'span', sSave: 'span',
-  fileImage: 'input', fileProject: 'input',
+  fileProject: 'input',
   // 書き出し
   exportDialog: 'dialog', exFormat: 'select', exW: 'input', exH: 'input', exSizePreset: 'select', exDur: 'input', exLoop: 'input',
   exBgColor: 'input', exBgAlphaLabel: 'label', exRecLen: 'span', exTakeLen: 'span', exNote: 'p', exProgress: 'progress',

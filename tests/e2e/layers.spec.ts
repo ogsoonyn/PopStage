@@ -98,6 +98,25 @@ test('ポップ量は一番高いレイヤーの値を出し、比率で伸び�
   expect(await app(page, a => a.doc.layers.map((l: any) => l.pop))).toEqual([100, 200, 0]);
 });
 
+test('一覧の重ね方のアイコンを押すと、その行だけ重ね方が切り替わる。選択は変えない', async ({ page }) => {
+  await threeLayers(page);
+  await row(page, 'A').click();
+  const before = await app(page, a => a.doc.layers.map((l: any) => l.blend));
+  const btn = row(page, 'C').locator('.blend-btn');
+  const idx = await app(page, a => a.doc.layers.findIndex((l: any) => l.name === 'C'));
+  const blends = ['add', 'max']; // 重ね方の並び(model/project.ts の BLEND_ORDER)。押すと次へ進み、最後の次は最初に戻る
+  const other = blends[(blends.indexOf(before[idx]) + 1) % blends.length];
+  await btn.click();
+  await expect(row(page, 'C').locator('.layer-info')).toHaveAttribute('data-blend', other);
+  const after = await app(page, a => a.doc.layers.map((l: any) => l.blend));
+  expect(after).toEqual(before.map((b: string, i: number) => (i === idx ? other : b)));
+  expect(await app(page, a => a.activeLayer.name)).toBe('A');
+  await row(page, 'C').locator('.blend-btn').click();
+  expect(await app(page, a => a.doc.layers.map((l: any) => l.blend))).toEqual(before);
+  await app(page, a => a.history.undo());
+  expect(await app(page, a => a.doc.layers.map((l: any) => l.blend))).toEqual(after);
+});
+
 test('揺れ・プリセット・ウェイトの一括処理・複製・削除は選んだ全部に効く。表示のチェックは押した1行だけ', async ({ page }) => {
   await threeLayers(page);
   await openTab(page, 'layer');

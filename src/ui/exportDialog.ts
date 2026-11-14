@@ -181,7 +181,7 @@ export function bindExportDialog(app: App): { open: () => void } {
       }
       if (!W.value) { const [w, h] = viewSize(); W.value = String(w); H.value = String(h); }
       if (!dur.value) dur.value = String(+(app.project.autoSwing.period * 2).toFixed(2));
-      bgColor.value = app.project.background ?? '#ffffff';
+      bgColor.value = app.project.background ?? app.bgColor;
       setRadio('exBg', app.project.background === null && FORMAT_INFO[fmt.value as ExportFormat].alpha ? 'alpha' : 'color');
       status.textContent = '';
       progress.value = 0;
