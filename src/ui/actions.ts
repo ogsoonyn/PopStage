@@ -155,6 +155,11 @@ function defineActions(app: App, d: ActionDeps) {
     layerUp: { label: '上へ', run: () => app.moveLayer(1), enabled: () => !app.multiSelected && app.activeIndex >= 0 && app.activeIndex < (app.doc?.layers.length ?? 0) - 1 },
     layerDown: { label: '下へ', run: () => app.moveLayer(-1), enabled: () => !app.multiSelected && app.activeIndex > 0 },
     selectAllLayers: { label: 'すべてのレイヤーを選ぶ', keys: ['Ctrl+A'], run: () => app.selectAllLayers(), enabled: () => (app.doc?.layers.length ?? 0) > 1 },
+    // Esc はほかの役(ダイアログ・膨らませる/ぼかすの途中・UIを隠す・メニュー・文字の入力)を先にする。使えないときは Esc を横取りしない
+    selectOneLayer: {
+      label: '選択を1枚に戻す', keys: ['Esc'], desc: '複数選んだレイヤーを、塗りの先の1枚だけにする',
+      run: () => { if (app.activeLayerId) app.setActiveLayer(app.activeLayerId); }, enabled: () => app.multiSelected && !app.uiHidden,
+    },
     // お気に入り
     addFavorite: {
       label: 'お気に入りに追加', keys: ['K'], desc: '今の揺れと動きの組み合わせをお気に入りに追加する(画像とウェイトは入れない)',
@@ -255,6 +260,7 @@ export function keyString(e: KeyboardEvent): string {
   // 日本語入力がオンのときは key が 'Process'、Mac の Option は別の文字になるので、キーの位置(code)から読む
   let k = (e.key === 'Process' || e.altKey) && /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : e.key;
   if (k.length === 1) k = k.toUpperCase();
+  if (k === 'Escape') k = 'Esc';
   return [(e.ctrlKey || e.metaKey) && 'Ctrl', e.shiftKey && 'Shift', e.altKey && 'Alt', k].filter(Boolean).join('+');
 }
 
@@ -281,7 +287,7 @@ function keyboardFocus(): boolean {
   return el.matches(':focus-visible');
 }
 
-const ariaKeys = (keys: string[]) => keys.map(k => k.replace(/\bCtrl\b/g, 'Control')).join(' ');
+const ariaKeys = (keys: string[]) => keys.map(k => k.replace(/\bCtrl\b/g, 'Control').replace(/\bEsc\b/g, 'Escape')).join(' ');
 
 const TOOL_BTN = 'tool relative btn btn-sm w-[4.5rem] flex-col h-auto py-1 gap-0.5 whitespace-nowrap';
 const ACT_BTN = 'nav-act relative btn btn-xs btn-ghost w-[4.5rem] flex-col h-auto py-1 gap-0.5 whitespace-nowrap font-normal';
@@ -425,6 +431,8 @@ export function bindActions(app: App, deps: ActionDeps): void {
     if (e.key === 'Tab' && keyboardFocus()) return;
     const name = byKey.get(keyString(e));
     if (!name) return;
+    // Esc はほかの部品も使うので、すでに使われたときと、いま使えないときは触らない
+    if (e.key === 'Escape' && (e.defaultPrevented || !enabled(name))) return;
     e.preventDefault();
     run(name);
   });

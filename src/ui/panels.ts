@@ -295,6 +295,8 @@ export function bindPanels(app: App): { refresh: () => void } {
     const doc = app.doc;
     // 作り直してもキーボードのフォーカスを失わないよう、一覧にフォーカスがあったかを覚えておく
     const hadFocus = list.contains(document.activeElement) && document.activeElement?.tagName === 'LI';
+    // Ctrl+↑↓ で塗りの先と別の行へ移っていることがあるので、フォーカスのあった行を覚えておく
+    const focusRow = hadFocus ? (document.activeElement as HTMLElement).dataset.id : undefined;
     // 重ね方・揺れのボタンにあったフォーカスは、作り直したあと同じ行のボタンへ戻す(続けて押せるように)
     const focusBtn = list.contains(document.activeElement) ? ['blend-btn', 'swing-btn'].find(c => document.activeElement?.classList.contains(c)) : undefined;
     const btnFocus = focusBtn ? document.activeElement?.closest('li')?.dataset.id : undefined;
@@ -323,7 +325,7 @@ export function bindPanels(app: App): { refresh: () => void } {
 
       const th = document.createElement('canvas');
       th.width = 44; th.height = 33; th.className = 'shrink-0';
-      drawWeightThumb(th, layer.weights.data, layer.weights.width, layer.weights.height);
+      drawWeightThumb(th, layer.weights.data, layer.weights.width, layer.weights.height, layerColor(index));
       thumbs.set(layer.id, th);
 
       const name = document.createElement('span');
@@ -373,7 +375,10 @@ export function bindPanels(app: App): { refresh: () => void } {
       list.prepend(li);
     });
     updateSelection();
-    if (hadFocus) list.querySelector<HTMLElement>('li.is-primary-focus')?.focus();
+    if (hadFocus) {
+      const li = (focusRow && list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(focusRow)}"]`)) || list.querySelector<HTMLElement>('li.is-primary-focus');
+      if (li) { for (const x of list.querySelectorAll<HTMLElement>('li')) x.tabIndex = x === li ? 0 : -1; li.focus(); }
+    }
     if (btnFocus) list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(btnFocus)}"] .${focusBtn}`)?.focus();
   }
 
@@ -389,7 +394,6 @@ export function bindPanels(app: App): { refresh: () => void } {
   }
   function rowClick(id: string, e: MouseEvent): void {
     if (pressed === id) { pressed = null; return; } // 長押しで選択モードに入った直後のクリックは無視する
-    const ids = app.selectedLayerIds;
     if (e.shiftKey) {
       const anchor = rangeAnchor();
       const o = order(), a = o.indexOf(anchor), b = o.indexOf(id);
@@ -397,14 +401,21 @@ export function bindPanels(app: App): { refresh: () => void } {
       return;
     }
     anchor = id;
-    if (e.ctrlKey || e.metaKey || selectMode) {
+    if (e.ctrlKey || e.metaKey || selectMode) { toggleLayer(id); return; }
+    if (id !== app.activeLayerId || app.multiSelected) app.setActiveLayer(id);
+  }
+  /** そのレイヤーを選択に足す・外す(Ctrl+クリック・選択モードのタップ・Ctrl+Space)。最後の1枚は外さない */
+  function toggleLayer(id: string): void {
+    const ids = app.selectedLayerIds;
+    anchor = id;
+    const was = fromList;
+    fromList = true;
+    try {
       if (!ids.has(id)) { app.selectLayers([...ids, id], id); return; }
-      if (ids.size === 1) return; // 最後の1枚は外さない
+      if (ids.size === 1) return;
       const rest = [...ids].filter(x => x !== id);
       app.selectLayers(rest, id === app.activeLayerId ? rest[rest.length - 1] : app.activeLayerId!);
-      return;
-    }
-    if (id !== app.activeLayerId || app.multiSelected) app.setActiveLayer(id);
+    } finally { fromList = was; }
   }
 
   // スマホ: 長押しで選択モードに入り、そのレイヤーを足す
@@ -440,8 +451,25 @@ export function bindPanels(app: App): { refresh: () => void } {
     }
     const items = [...list.querySelectorAll<HTMLElement>('li')];
     const i = items.indexOf(e.target as HTMLElement);
+    const ctrl = e.ctrlKey || e.metaKey;
+    // Ctrl+Space: フォーカスしている行を足す・外す(クリックの Ctrl と同じ)。3Dビューの平行移動(Space)に回さない
+    if (ctrl && e.code === 'Space' && !e.shiftKey && !e.altKey) {
+      e.preventDefault(); e.stopPropagation();
+      if (e.repeat) return; // 押し続けても足す・外すを繰り返さない
+      const id = (e.target as HTMLElement).dataset.id;
+      if (id && !app.previewing) toggleLayer(id);
+      return;
+    }
+    // Ctrl+↑↓: 選択は変えずにフォーカスだけ移す(離れた行へ移ってから Ctrl+Space で足すため)
+    if (ctrl && !e.shiftKey && !e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+      e.preventDefault(); e.stopPropagation();
+      const next = items[Math.max(0, Math.min(items.length - 1, i + (e.key === 'ArrowUp' ? -1 : 1)))];
+      for (const li of items) li.tabIndex = li === next ? 0 : -1;
+      next.focus();
+      return;
+    }
     const j = e.key === 'ArrowUp' ? i - 1 : e.key === 'ArrowDown' ? i + 1 : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : -2;
-    if (j === -2 || e.ctrlKey || e.metaKey) return; // Ctrl+Home などはコマンドに回す
+    if (j === -2 || ctrl) return; // Ctrl+Home などはコマンドに回す
     e.preventDefault(); e.stopPropagation();
     const next = items[Math.max(0, Math.min(items.length - 1, j))], id = next.dataset.id;
     if (id && e.shiftKey) {
@@ -449,6 +477,7 @@ export function bindPanels(app: App): { refresh: () => void } {
       const o = order(), a = o.indexOf(anchor), b = o.indexOf(id);
       app.selectLayers(o.slice(Math.min(a, b), Math.max(a, b) + 1), id);
     } else if (id) { anchor = id; if (id !== app.activeLayerId || app.multiSelected) app.setActiveLayer(id); }
+    for (const li of items) li.tabIndex = li === next ? 0 : -1;
     next.focus();
   });
 
@@ -459,6 +488,8 @@ export function bindPanels(app: App): { refresh: () => void } {
 
   function updateSelection(): void {
     const ids = app.selectedLayerIds;
+    // Ctrl+↑↓ で移った行にフォーカスがあるなら、Tab の止まる先もその行に残す
+    const focused = document.activeElement instanceof HTMLElement && document.activeElement.tagName === 'LI' && list.contains(document.activeElement) ? document.activeElement : null;
     list.querySelectorAll<HTMLElement>('li').forEach(li => {
       const on = ids.has(li.dataset.id!), primary = li.dataset.id === app.activeLayerId;
       li.setAttribute('aria-selected', String(on));
@@ -466,7 +497,7 @@ export function bindPanels(app: App): { refresh: () => void } {
       li.classList.toggle('is-primary', primary && ids.size > 1);
       li.classList.toggle('is-primary-focus', primary);
       // 一覧の中では最後に押した項目だけを Tab で止め、矢印キーで移る(roving tabindex)
-      li.tabIndex = primary ? 0 : -1;
+      li.tabIndex = (focused ? li === focused : primary) ? 0 : -1;
     });
     const n = ids.size;
     ui.layerSelBar.hidden = n < 2 && !selectMode;
@@ -504,8 +535,8 @@ export function bindPanels(app: App): { refresh: () => void } {
     thumbTimer = window.setTimeout(() => {
       thumbTimer = 0;
       for (const id of pendingThumbs) {
-        const c = thumbs.get(id), l = store.findLayer(id)?.layer;
-        if (c && l) drawWeightThumb(c, l.weights.data, l.weights.width, l.weights.height);
+        const c = thumbs.get(id), found = store.findLayer(id), l = found?.layer;
+        if (c && l) drawWeightThumb(c, l.weights.data, l.weights.width, l.weights.height, layerColor(found.index));
       }
       pendingThumbs.clear();
     }, 250);
