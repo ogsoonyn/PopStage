@@ -94,12 +94,17 @@ export function wrapAngle(deg: number): number {
 }
 
 /**
- * 中心のまわりで start から p へ回したときの角度(度、-90〜90 の整数)。snap を指定すると、その刻みにそろえる(Shift で 15°)。
- * 画像の座標は y が上向きなので、画面上の時計回り(角度の正)は数学の向きの逆
+ * 中心のまわりで prev から p へ動かしたときの回転量(度、画面上の時計回りが正)。1回の動きは半周未満とみなす。
+ * 回すドラッグでは、これを足していって回り込む前の角度を求める(±90° を越えたかを、速く回しても見逃さないため)
  */
-export function rotateAngle(a: Area, angleDeg: number, start: Pt, p: Pt, snap = 0): number {
-  const a0 = Math.atan2(start.y - a.y, start.x - a.x), a1 = Math.atan2(p.y - a.y, p.x - a.x);
-  let d = angleDeg - (a1 - a0) * 180 / Math.PI;
-  if (snap > 0) d = Math.round(d / snap) * snap;
-  return wrapAngle(Math.round(d));
+export function turnBetween(a: Area, prev: Pt, p: Pt): number {
+  let d = Math.atan2(p.y - a.y, p.x - a.x) - Math.atan2(prev.y - a.y, prev.x - a.x);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d <= -Math.PI) d += Math.PI * 2;
+  return -d * 180 / Math.PI;
+}
+
+/** 回り込む前の角度で、形の上下が入れ替わっているか(-90〜90 から 180° の奇数倍ずれていれば入れ替わっている) */
+export function flippedAt(rawDeg: number): boolean {
+  return Math.abs(Math.round(Math.round(rawDeg) / 180 - (wrapAngle(Math.round(rawDeg)) / 180))) % 2 === 1;
 }

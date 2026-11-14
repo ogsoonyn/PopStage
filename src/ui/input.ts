@@ -16,8 +16,8 @@ import type { PaintMode } from '../paint/stroke';
 import { fineFactor, wheelFineFactor, wheelDelta, isPinchWheel, FINE, isFineLocked } from './fine';
 import { smoothZoom } from './smoothZoom';
 import { toast } from './dom';
-import { hitFrame, frameCursor, type FrameHit } from './inflateFrame';
-import { moveArea as shiftArea, resizeArea, roundArea, rotateAngle, type Area } from '../paint/areaEdit';
+import { hitFrame, frameCursor, setRotSide, type FrameHit } from './inflateFrame';
+import { moveArea as shiftArea, resizeArea, roundArea, turnBetween, flippedAt, wrapAngle, type Area } from '../paint/areaEdit';
 
 /** 主ビューの拡大率の範囲(ホイール・ピンチ共通) */
 const ZOOM_MIN = 0.05, ZOOM_MAX = 10;
@@ -31,7 +31,8 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   /** 膨らませる範囲を描き始めた点(元画像のローカル座標) */
   let areaStart: { x: number; y: number } | null = null;
   /** 膨らませるの枠のハンドルで範囲を直している間の、掴んだもの・掴んだ点(元画像のローカル座標)・掴んだときの範囲と角度 */
-  let frameDrag: { hit: FrameHit; start: { x: number; y: number }; area: Area; angle: number; cursor: string } | null = null;
+  /** 回すときは、前の点(prev)と、掴んでから回した量(turn、度、回り込む前)も持つ */
+  let frameDrag: { hit: FrameHit; start: { x: number; y: number }; area: Area; angle: number; cursor: string; prev: { x: number; y: number }; turn: number } | null = null;
   let space = false, alt = false, hover: { x: number; y: number; inside: boolean } | null = null;
   /** ポインタがキャンバスの上にあるか。Space の平行移動はフォーカスの場所ではなくこれで決める */
   let pointerInside = false;
@@ -305,7 +306,7 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
     if (!p) return;
     const s = app.inflateState, hit = s ? hitFrame(app, e.clientX, e.clientY, e.pointerType === 'touch') : null;
     if (s && hit) {
-      frameDrag = { hit, start: { x: p.x, y: p.y }, area: { ...s.area }, angle: s.settings.angle, cursor: frameCursor(app, hit, true) };
+      frameDrag = { hit, start: { x: p.x, y: p.y }, area: { ...s.area }, angle: s.settings.angle, cursor: frameCursor(app, hit, true), prev: { x: p.x, y: p.y }, turn: 0 };
       drag.mode = 'frame';
       app.holdImage(true);
       return;
@@ -335,7 +336,15 @@ export function bindStageInput(app: App, canvas: HTMLCanvasElement): { isSpaceDo
   function moveFrame(e: PointerEvent): void {
     const f = frameDrag, p = app.stage.pick(e.clientX, e.clientY);
     if (!f || !p || !app.previewingInflate) return;
-    if (f.hit.kind === 'rotate') app.updateInflate({ settings: { angle: rotateAngle(f.area, f.angle, f.start, p, e.shiftKey ? 15 : 0) } });
+    if (f.hit.kind === 'rotate') {
+      // 回した量を足していき、回り込む前の角度で、回す丸を付ける辺(形の上か下か)を決める
+      f.turn += turnBetween(f.area, f.prev, p); f.prev = { x: p.x, y: p.y };
+      let raw = f.angle + f.turn;
+      if (e.shiftKey) raw = Math.round(raw / 15) * 15;
+      const angle = wrapAngle(Math.round(raw));
+      setRotSide(flippedAt(raw) ? -1 : 1, angle);
+      app.updateInflate({ settings: { angle } });
+    }
     else if (f.hit.kind === 'move') app.updateInflate({ area: shiftArea(f.area, f.start, p) });
     else {
       const fromCenter = e.altKey || alt, h = f.hit.handle;

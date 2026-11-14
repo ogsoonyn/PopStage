@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { areaPoint, moveArea, resizeArea, roundArea, rotateAngle, toLocal, wrapAngle, MIN_SIZE } from '../../src/paint/areaEdit';
+import { areaPoint, moveArea, resizeArea, roundArea, turnBetween, flippedAt, toLocal, wrapAngle, MIN_SIZE } from '../../src/paint/areaEdit';
 
 const A = { x: 10, y: 20, w: 100, h: 60 };
 type P = { x?: number; y?: number; w?: number; h?: number };
@@ -75,15 +75,25 @@ describe('枠のハンドルで範囲を直す', () => {
     close(moveArea(A, { x: 0, y: 0 }, { x: 5, y: -7 }), { x: 15, y: 13, w: 100, h: 60 });
   });
 
-  it('回すハンドル: 画面上で時計回りに回すと角度が増える。Shift で 15° ごと', () => {
+  it('回す量: 画面上で時計回りが正。半周をまたいでも続けて足せる', () => {
     // 中心の真上(y が上)から真右へ回すのは、画面上で時計回りに 90°
-    const top = { x: A.x, y: A.y + 50 }, right = { x: A.x + 50, y: A.y };
-    expect(rotateAngle(A, 0, top, right)).toBe(90);
-    const p = { x: A.x + 50 * Math.sin(0.4), y: A.y + 50 * Math.cos(0.4) }; // 約 22.9°
-    expect(rotateAngle(A, 0, top, p)).toBe(23);
-    expect(rotateAngle(A, 0, top, p, 15)).toBe(30);
-    // 90° を越えたら -90〜90 に回り込む(180° 回すと同じ形)
-    expect(rotateAngle(A, 80, top, { x: A.x + 50 * Math.sin(0.5), y: A.y + 50 * Math.cos(0.5) })).toBe(wrapAngle(80 + 29));
+    const top = { x: A.x, y: A.y + 50 }, right = { x: A.x + 50, y: A.y }, bottom = { x: A.x, y: A.y - 50 }, left = { x: A.x - 50, y: A.y };
+    expect(turnBetween(A, top, right)).toBeCloseTo(90);
+    expect(turnBetween(A, right, top)).toBeCloseTo(-90);
+    // 1周を4回に分けて回すと 360°(atan2 の ±180° の継ぎ目をまたぐ)
+    const sum = [turnBetween(A, top, right), turnBetween(A, right, bottom), turnBetween(A, bottom, left), turnBetween(A, left, top)].reduce((s, v) => s + v);
+    expect(sum).toBeCloseTo(360);
+  });
+
+  it('回り込む前の角度で、形の上下が入れ替わったかが分かる', () => {
+    expect(flippedAt(0)).toBe(false);
+    expect(flippedAt(90)).toBe(false);
+    expect(flippedAt(-90)).toBe(false);
+    expect(flippedAt(100)).toBe(true);
+    expect(flippedAt(-100)).toBe(true);
+    expect(flippedAt(200)).toBe(true);
+    expect(flippedAt(280)).toBe(false);
+    expect(flippedAt(-280)).toBe(false);
   });
 
   it('wrapAngle は -90〜90 に収める', () => {
