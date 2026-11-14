@@ -272,6 +272,8 @@ export function bindPanels(app: App): { refresh: () => void } {
     const doc = app.doc;
     // 作り直してもキーボードのフォーカスを失わないよう、一覧にフォーカスがあったかを覚えておく
     const hadFocus = list.contains(document.activeElement) && document.activeElement?.tagName === 'LI';
+    // 重ね方のボタンにあったフォーカスは、作り直したあと同じ行のボタンへ戻す(続けて押せるように)
+    const blendFocus = list.contains(document.activeElement) && document.activeElement?.classList.contains('blend-btn') ? document.activeElement.closest('li')?.dataset.id : undefined;
     list.replaceChildren();
     thumbs.clear();
     if (!doc) { updateSelection(); return; }
@@ -315,6 +317,7 @@ export function bindPanels(app: App): { refresh: () => void } {
       blendBtn.setAttribute('aria-label', `重ね方: ${BLENDS[layer.blend].label}`);
       blendBtn.addEventListener('click', e => {
         e.stopPropagation();
+        if (pressed === layer.id) { pressed = null; return; } // 長押しで選択モードに入った直後のクリックでは切り替えない
         history.execute(PatchLayer.from(store, layer.id, { blend: next }, `重ね方を${BLENDS[next].label}に`));
       });
       const popNum = document.createElement('span');
@@ -332,6 +335,7 @@ export function bindPanels(app: App): { refresh: () => void } {
     });
     updateSelection();
     if (hadFocus) list.querySelector<HTMLElement>('li.is-primary-focus')?.focus();
+    if (blendFocus) list.querySelector<HTMLElement>(`li[data-id="${CSS.escape(blendFocus)}"] .blend-btn`)?.focus();
   }
 
   /** 一覧の下から順の id(Shift の範囲選択用) */

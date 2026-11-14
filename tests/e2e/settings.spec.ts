@@ -81,6 +81,14 @@ test('開く・保存・書き出しは、既定では隠し、設定で出せ�
   await expect(page.locator('#exportDialog')).toBeVisible();
 });
 
+test('前の版で隠したボタンを覚えている人にも、開く・保存・書き出しはいきなり出さない', async ({ page }) => {
+  await page.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('popstage.prefs.v1', JSON.stringify({ toolbarHidden: ['brush'] })); } });
+  await boot(page);
+  await expect(nav(page, 'brush')).toBeHidden();
+  for (const id of ['open', 'save', 'export']) await expect(nav(page, id)).toBeHidden();
+  await expect(nav(page, 'recent')).toBeVisible();
+});
+
 test('ファイルの操作とツールを全部隠しても、区切りが端に残らない', async ({ page }) => {
   await boot(page);
   await openSettings(page);

@@ -543,7 +543,7 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(14); // 開く・保存・書き出しは既定では隠す
+  await expect(acts).toHaveCount(14); // 開く・保存・書き出しは既定では隠しているが、DOM にはある
   await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(14);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
   // 最近開いたファイルは、ツールより上に置く

@@ -104,7 +104,8 @@ test('一覧の重ね方のアイコンを押すと、その行だけ重ね方�
   const before = await app(page, a => a.doc.layers.map((l: any) => l.blend));
   const btn = row(page, 'C').locator('.blend-btn');
   const idx = await app(page, a => a.doc.layers.findIndex((l: any) => l.name === 'C'));
-  const cur = before[idx], other = cur === 'add' ? 'max' : 'add';
+  const blends = ['add', 'max']; // 重ね方の並び(model/project.ts の BLEND_ORDER)。押すと次へ進み、最後の次は最初に戻る
+  const other = blends[(blends.indexOf(before[idx]) + 1) % blends.length];
   await btn.click();
   await expect(row(page, 'C').locator('.layer-info')).toHaveAttribute('data-blend', other);
   const after = await app(page, a => a.doc.layers.map((l: any) => l.blend));

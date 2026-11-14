@@ -228,6 +228,8 @@ html.mobile #mPanes .btn-xs.btn-square { width: 2.25rem; height: 2.25rem; }
 /* 一覧の重ね方のアイコン(押すと切り替え) */
 .blend-btn { display: inline-grid; place-items: center; padding: 1px 2px; border-radius: 4px; cursor: pointer; }
 .blend-btn:hover { background: color-mix(in oklab, var(--color-base-content) 15%, transparent); }
+/* スマホでは指で押せるよう、押せる範囲を広げる */
+html.mobile .blend-btn { min-width: 2.25rem; min-height: 2.25rem; }
 .blend-btn:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 .blend-ico { flex-shrink: 0; }
 /* 選んだレイヤーで値が揃っていない */
