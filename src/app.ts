@@ -11,7 +11,7 @@ import { captureFavorite, copyPhysics, sameLayer, nextFavoriteName, applyView, F
 import { Stage, type ViewOptions } from './stage/stage';
 import { PhysicsWorld, PHYSICS_DT } from './physics/world';
 import { MotionRecorder, applySample, type RecordSample } from './physics/recorder';
-import { finalizeTake, takeFromKeys, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, KEY_SECONDS, MAX_KEYS, type ViewKey, type KeyFrame } from './physics/take';
+import { finalizeTake, takeFromKeys, takeSeconds, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, KEY_SECONDS, MAX_KEYS, normalizeKeys, type ViewKey, type KeyFrame } from './physics/take';
 import { Stroke, type PaintMode } from './paint/stroke';
 import { inflateShape, type InflateProfile, type InflateBlend } from './paint/inflate';
 import { serializeProject, serializeProjectBlob, deserializeProject, FILE_EXTENSION, type PngCacheEntry } from './storage/popstage';
@@ -191,6 +191,13 @@ export class App extends Emitter<AppEvents> {
    * 記録が差し替わったら(開く・アンドゥなど)その記録のキーフレームに合わせる
    */
   keyDraft: KeyFrame[] = [];
+  /** キーフレームの重ね表示(経路・ゴースト)。ブラウザに覚える(ui/keyPath.ts) */
+  keyOverlay = { path: true, ghost: false };
+  setKeyOverlay(key: 'path' | 'ghost', on: boolean): void {
+    if (this.keyOverlay[key] === on) return;
+    this.keyOverlay = { ...this.keyOverlay, [key]: on };
+    this.emit('view', undefined);
+  }
 
   private loading = false;
   private autosaveTimer = 0;
@@ -1399,6 +1406,20 @@ export class App extends Emitter<AppEvents> {
     if (patch.seconds !== undefined) k.seconds = Math.max(KEY_SECONDS.min, Math.min(KEY_SECONDS.max, Math.round(patch.seconds * 10) / 10));
     if (patch.mode) k.mode = patch.mode;
     this.emit('take', this.takeState);
+  }
+
+  /** キーフレームの動きを再生できるか(2つ以上で1周が短すぎず、止まっているとき) */
+  get canPlayKeys(): boolean {
+    const n = this.keyDraft.length, total = this.keyDraft.reduce((a, k) => a + k.seconds, 0);
+    return n >= 2 && total >= TAKE_MIN_SECONDS - 1e-9 && !!this.doc && !this.exporting && this.takeState === 'idle';
+  }
+
+  /** キーフレームの動きを再生する。一覧が今の記録と同じならそのまま再生し、違えば作り直す(元に戻せる) */
+  playKeys(): void {
+    if (!this.canPlayKeys) return;
+    const take = this.project.take;
+    if (take?.keys && JSON.stringify(take.keys) === JSON.stringify(normalizeKeys(this.keyDraft))) this.playTake();
+    else this.makeKeyTake();
   }
 
   /** キーフレームを順に通ってくり返す記録を作り(今の記録と入れ替え、アンドゥできる)、ループ再生する */

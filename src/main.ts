@@ -65,7 +65,7 @@ bindInflateFrame(app);
 bindFavoriteControls(app);
 
 /* ---------- 右のパネルのタブ(レイヤー・アニメーション・画像と表示)。選んだタブはブラウザに覚える ---------- */
-{
+const selectPanelTab = (() => {
   const tabs = [...document.querySelectorAll<HTMLButtonElement>('#pTabs [data-ptab]')];
   const select = (t: string) => {
     if (!tabs.some(b => b.dataset.ptab === t)) t = 'layer'; // 知らない値(前の版の「編集」タブなど)は「レイヤー」で始める
@@ -75,7 +75,8 @@ bindFavoriteControls(app);
   };
   for (const b of tabs) b.addEventListener('click', () => select(b.dataset.ptab!));
   select(prefs.get<string>('panelTab') ?? 'layer');
-}
+  return select;
+})();
 
 /* ---------- 設定をブラウザに覚える(ファイルには書かない) ---------- */
 persistControls('brush', [ui.brushSize, ui.brushStrength, ui.brushHardness, ui.brushPressure]);
@@ -145,6 +146,8 @@ bindActions(app, {
   openExport: () => exportDialog.open(),
   openBlur: () => blurDialog.open(),
   openSettings: () => settingsDialog.open(),
+  // キーフレームの重ね表示は「アニメーション」タブを開いている間だけ出るので、左のツールバーなどで入れたらタブを開く
+  showKeyFrames: () => { app.setPanelClosed(false); selectPanelTab('anim'); },
   togglePerf,
 });
 bindMenus();

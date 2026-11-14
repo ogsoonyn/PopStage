@@ -11,6 +11,7 @@ import type { InflateBlend, InflateProfile } from '../paint/inflate';
 import { prefs } from '../storage/prefs';
 import { ui } from './ids';
 import { toolDef } from './tools';
+import { hintHtml, hintText } from './mouseHint';
 
 const PAINT_TOOLS = new Set(['brush', 'erase', 'smooth']);
 
@@ -81,7 +82,10 @@ export function bindToolOptions(app: App): void {
     const paint = PAINT_TOOLS.has(app.tool);
     for (const el of brushOpts) el.hidden = !paint;
     for (const el of inflateOpts) el.hidden = app.tool !== 'inflate';
-    ui.toolHint.textContent = toolDef(app.tool).hint;
+    const hint = toolDef(app.tool).hint;
+    ui.toolHint.innerHTML = hintHtml(hint);
+    // 幅が足りずに隠れた操作も、ツールチップで読めるようにする
+    ui.toolHint.title = hintText(hint);
   }
   app.on('tool', refresh);
   refresh();

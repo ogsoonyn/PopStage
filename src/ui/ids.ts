@@ -51,7 +51,7 @@ export const UI_IDS = {
   settingsDialog: 'dialog', setToolbarList: 'div', setToolbarReset: 'button', setHideFull: 'input', setHideFullRow: 'section',
   // 最近開いたファイル・ヘルプ・このアプリについて
   recentDialog: 'dialog', recentEmpty: 'p', recentList: 'ul', recentClear: 'button',
-  helpDialog: 'dialog', helpKeys: 'div', aboutDialog: 'dialog', aboutVersion: 'p',
+  helpDialog: 'dialog', helpOps: 'div', helpKeys: 'div', aboutDialog: 'dialog', aboutVersion: 'p',
   toasts: 'div',
 } as const satisfies Record<string, keyof HTMLElementTagNameMap>;
 
