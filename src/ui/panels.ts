@@ -358,8 +358,9 @@ export function bindPanels(app: App): { refresh: () => void } {
       swingBtns.set(layer.id, swingBtn);
       syncSwingBtn(layer.id);
       const popNum = document.createElement('span');
+      popNum.className = 'pop-num';
       popNum.textContent = String(layer.pop); popNum.title = `ポップ量 ${layer.pop}px`;
-      info.append(swingBtn, blendBtn, popNum);
+      info.append(popNum, blendBtn, swingBtn);
 
       li.append(eye, swatch, th, name, info);
       li.addEventListener('click', e => onRowClick(layer.id, e));

@@ -96,7 +96,7 @@ function defineActions(app: App, d: ActionDeps) {
     },
     resetView: { label: '視点リセット(正面)', helpLabel: '視点を正面に戻す', keys: ['Home'], run: () => app.resetView(), duringPreview: true, desc: '向き・ズーム・位置をすべて正面の初めの視点に戻す' },
     togglePanel: {
-      label: '右パネル', helpLabel: '右パネルを開く・閉じる', keys: ['Shift+P'], desc: '右のパネル(レイヤー・アニメーション・画像と表示)を閉じて3Dビューを広げる。3Dビューの右端のつまみでも開閉できる',
+      label: '右パネル', helpLabel: '右パネルを開く・閉じる', keys: ['Shift+P'], desc: '右のパネル(レイヤー・アニメーション・画像と表示)を閉じて3Dビューを広げる。3Dビューの右上のボタンでも開閉できる',
       run: () => app.setPanelClosed(!app.panelClosed), duringPreview: true,
       // スマホと UIを隠している間は右パネルが見えないので、気付かないうちに閉じた状態を覚えないよう止める
       enabled: () => !document.documentElement.classList.contains('mobile') && !app.uiHidden,
@@ -291,7 +291,8 @@ export function bindActions(app: App, deps: ActionDeps): void {
   for (const t of TOOLS) {
     table[`tool.${t.id}`] = {
       label: t.name ?? t.label, keys: [t.key], desc: t.desc, run: () => app.setTool(t.id),
-      helpRow: 'ツールを選ぶ',
+      // ツールのキーはボタンに書いてあるので、ヘルプのキー一覧には出さない
+      hidden: true,
     };
   }
 

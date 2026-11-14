@@ -533,7 +533,11 @@ test('コマンドの表から、メニューのキー表記・ボタンのツ�
   // キーはマウスの操作と同じキーの札で出す(1つのキーごとに札を並べる)
   await expect(keys.locator('.mh[title="Ctrl+Shift+Z"] kbd')).toHaveText(['Ctrl', 'Shift', 'Z']);
   await expect(keys.locator('.mh[title="Ctrl+Y"]')).toHaveCount(1);
-  for (const k of ['B', 'E', 'S', 'I', 'G', 'Y', 'V', 'H']) await expect(keys.locator(`.mh[title="${k}"]`)).toHaveCount(1);
+  // ツールのキーはツールのボタンに書いてあるので、一覧には出さない
+  for (const k of ['B', 'E', 'S', 'I', 'G', 'Y', 'V', 'H']) await expect(keys.locator(`.mh[title="${k}"]`)).toHaveCount(0);
+  await expect(page.locator('#helpOps')).not.toContainText('浮いているパネル');
+  await expect(page.locator('#helpOps')).toContainText('3面図の視点を戻す');
+  await expect(page.locator('#helpOps')).not.toContainText('3面図の自由角度');
   // ヘルプには、カッコの補足を書かない。マウスの操作は絵で出す
   expect(await page.locator('#helpDialog').evaluate(d => /[()()]/.test(d.textContent!))).toBe(false);
   await expect(page.locator('#helpOps .mh-mouse[aria-label=右ドラッグ]').first()).toBeAttached();
@@ -949,9 +953,15 @@ test('ポップ量のスライダーの最大値は設定で変えられ(既定 
   expect(await page.evaluate(() => (window as any).popstage.popMax)).toBe(1500);
 });
 
-test('右パネルは3Dビューの右端のつまみ・Shift+P・表示メニューで開閉でき、開閉を覚える', async ({ page }) => {
+test('右パネルは3Dビューの右上のボタン・Shift+P・表示メニューで開閉でき、開閉を覚える', async ({ page }) => {
   await boot(page);
   const aside = page.locator('#sidePanel'), tab = page.locator('#panelToggle');
+  // ボタンは3Dビューの右上(開いても閉じても同じ所)
+  const corner = async () => {
+    const [b, v] = await Promise.all([tab.boundingBox(), page.locator('#stageWrap').boundingBox()]);
+    return Math.abs(b!.y - v!.y) < 20 && Math.abs(b!.x + b!.width - (v!.x + v!.width)) < 20;
+  };
+  await expect.poll(corner).toBe(true);
   const canvasWidth = () => page.locator('#view').evaluate(el => el.getBoundingClientRect().width);
   await expect(aside).toBeVisible();
   await expect(tab).toHaveAttribute('aria-expanded', 'true');
@@ -961,6 +971,7 @@ test('右パネルは3Dビューの右端のつまみ・Shift+P・表示メニ�
   await expect(tab).toHaveAttribute('aria-expanded', 'false');
   await expect.poll(canvasWidth).toBeGreaterThan(w0 + 200); // 3Dビューが広がる
   await expect(page.locator('#menubar [data-check=panel]')).toHaveText('');
+  await expect.poll(corner).toBe(true);
   // 開き直しても閉じたまま
   await page.waitForTimeout(300);
   await page.goto('/?e2e');
@@ -971,7 +982,7 @@ test('右パネルは3Dビューの右端のつまみ・Shift+P・表示メニ�
   await page.keyboard.press('Shift+P');
   await expect(aside).toBeVisible();
   await expect(page.locator('#menubar [data-check=panel]')).toHaveText('✓');
-  // UIを隠すとつまみも隠れる
+  // UIを隠すと開閉のボタンも隠れる
   await page.evaluate(() => (window as any).popstage.setUiHidden(true));
   await expect(tab).toBeHidden();
 });

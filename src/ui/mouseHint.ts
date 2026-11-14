@@ -63,7 +63,10 @@ export function hintText(parts: readonly HintPart[]): string {
   return parts.map(p => [[p.mods, p.mouse && MOUSE_NAME[p.mouse]].filter(Boolean).join(' + '), p.text].filter(Boolean).join(' ')).join(' / ');
 }
 
-/** ヘルプの操作方法(PC)。ツールごとの操作は上の欄に出すので、ここにはツールを問わない操作と、見つけにくい操作だけを書く */
+/**
+ * ヘルプの操作方法(PC)。ツールごとの操作は上の欄に出すので、ここにはツールを問わない操作と、見つけにくい操作だけを書く。
+ * 3面図は視点を戻す操作だけ(ほかは主ビューと同じなので書かない)。浮いているパネルの動かし方も書かない(ユーザーの判断)
+ */
 export const HELP_OPS: readonly { label: string; parts: readonly HintPart[] }[] = [
   { label: '回転', parts: [{ mouse: 'rdrag' }] },
   { label: '平行移動', parts: [{ mouse: 'mdrag' }, { mods: 'Space', mouse: 'drag' }] },
@@ -72,10 +75,7 @@ export const HELP_OPS: readonly { label: string; parts: readonly HintPart[] }[] 
   { label: 'Space+ドラッグ・自由角度を 1/5 に', parts: [{ mods: 'Ctrl' }] },
   { label: 'ブラシ中に消しゴム', parts: [{ mods: 'Alt', mouse: 'drag' }] },
   { label: '膨らみを正円・正方形に', parts: [{ mods: 'Shift', mouse: 'drag' }] },
-  { label: '3面図の正面・右・下', parts: [{ mouse: 'drag', text: '平行移動' }, { mouse: 'wheel', text: 'ズーム' }] },
-  { label: '3面図の自由角度', parts: [{ mouse: 'drag', text: '回転' }, { mouse: 'mdrag', text: '平行移動' }, { mods: 'Shift', mouse: 'drag', text: '平行移動' }, { mouse: 'wheel', text: 'ズーム' }] },
   { label: '3面図の視点を戻す', parts: [{ mouse: 'dbl' }] },
-  { label: '浮いているパネルを動かす', parts: [{ mouse: 'drag', text: '見出しで移動' }, { mouse: 'dbl', text: '右下に戻す' }] },
   { label: '一覧でレイヤーを足す・外す', parts: [{ mods: 'Ctrl', mouse: 'click' }] },
   { label: '一覧でレイヤーを範囲で選ぶ', parts: [{ mods: 'Shift', mouse: 'click' }, { mods: 'Shift+↑↓' }] },
   { label: '一覧で選択を1枚に戻す', parts: [{ mods: 'Esc' }] },
