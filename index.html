@@ -22,7 +22,8 @@
 <header id="mTop" class="m-only" aria-label="スマホのメニュー">
   <button class="m-icon" data-cmd="undo" aria-label="元に戻す"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
   <button class="m-icon" data-cmd="redo" aria-label="やり直す"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></svg></button>
-  <span id="mTitle" class="flex-1 min-w-0 truncate text-center font-bold"></span>
+  <!-- 押すと開いている作業(タブ)の一覧を出す(ui/docTabs.ts) -->
+  <button id="mTitle" type="button" class="flex-1 min-w-0 font-bold" aria-haspopup="dialog"><span class="m-title-name"></span><span class="m-title-count"></span></button>
   <button id="mAuto" class="m-icon" aria-label="自動で揺らす" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/></svg></button>
   <div class="dropdown dropdown-end">
     <div tabindex="0" role="button" class="m-icon" aria-label="メニュー"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg></div>
@@ -49,6 +50,7 @@
       <li><button data-cmd="recent">最近開いたファイル…</button></li>
       <li><button data-cmd="save">保存</button></li>
       <li><button data-cmd="saveAs">名前を付けて保存…</button></li>
+      <li><button data-cmd="closeTab">タブを閉じる</button></li>
       <li class="menu-title pt-2">書き出し</li>
       <li><button data-cmd="export">動画 / GIF / 連番PNG…</button></li>
       <li class="menu-title pt-2">その他</li>
@@ -117,7 +119,8 @@
       <li><button data-cmd="about">PukuPop について</button></li>
     </ul>
   </div>
-  <span id="docTitle" class="ml-auto opacity-70 truncate px-2"></span>
+  <!-- 開いている作業のタブ(ui/docTabs.ts) -->
+  <div id="docTabs" class="doc-tabs ml-auto" role="tablist" aria-label="開いている作業"></div>
   <!-- 左のツールバーは高さが足りないので、UIを隠すボタンは歯車の隣に置く -->
   <button class="btn btn-ghost btn-sm btn-square" data-cmd="toggleUi" aria-label="UIを隠す"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5"/><path d="M20 9V4h-5"/><path d="M4 15v5h5"/><path d="M20 15v5h-5"/></svg></button>
   <button class="btn btn-ghost btn-sm btn-square" data-cmd="settings" aria-label="設定"><svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -547,6 +550,19 @@
 </dialog>
 
 <!-- 最近開いたファイル -->
+<!-- スマホで開いている作業(タブ)を選ぶ一覧(ui/docTabs.ts) -->
+<dialog id="tabDialog" class="modal">
+  <div class="modal-box w-[min(26rem,94vw)] p-4">
+    <h3 class="font-bold text-lg mb-3">開いている作業</h3>
+    <ul id="tabList" class="tab-list"></ul>
+    <div class="modal-action mt-3">
+      <button id="tabOpen" type="button" class="btn btn-sm btn-ghost mr-auto">開く…</button>
+      <form method="dialog"><button class="btn btn-sm">閉じる</button></form>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
 <dialog id="recentDialog" class="modal">
   <div class="modal-box max-w-3xl">
     <h3 class="font-bold text-lg mb-3">最近開いたファイル</h3>

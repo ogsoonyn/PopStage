@@ -15,6 +15,24 @@ export interface Command {
 
 export interface HistoryOptions { maxSteps: number; maxBytes: number }
 
+/** 裏のタブに預けておくアンドゥの積み(History.take で取り出し、restore で戻す) */
+export interface HistoryState { undo: Command[]; redo: Command[]; bytes: number }
+
+export const emptyHistory = (): HistoryState => ({ undo: [], redo: [], bytes: 0 });
+
+/**
+ * 預けてある積みを、古い手から捨てて bytes 以下にする(全部のタブの合計を上限に収めるため)。
+ * やり直しの積みは、やり直すまで最も遠いもの(積みの底)から捨てる。捨てた量を返す
+ */
+export function shrinkHistory(s: HistoryState, bytes: number): number {
+  let freed = 0;
+  while (s.bytes > bytes && (s.undo.length || s.redo.length)) {
+    const c = s.undo.length ? s.undo.shift()! : s.redo.shift()!;
+    s.bytes -= c.bytes; freed += c.bytes;
+  }
+  return freed;
+}
+
 export class History extends Emitter<{ change: void }> {
   private undoStack: Command[] = [];
   private redoStack: Command[] = [];
@@ -67,6 +85,19 @@ export class History extends Emitter<{ change: void }> {
     this.undoStack.push(cmd);
     this.emit('change', undefined);
     return true;
+  }
+
+  /** 積みを取り出して空にする(タブを裏へ回すとき)。変更の通知は restore でまとめて送る */
+  take(): HistoryState {
+    const s = { undo: this.undoStack, redo: this.redoStack, bytes: this.totalBytes };
+    this.undoStack = []; this.redoStack = []; this.totalBytes = 0;
+    return s;
+  }
+
+  /** 預けておいた積みに入れ替える(タブを表に出すとき) */
+  restore(s: HistoryState): void {
+    this.undoStack = s.undo; this.redoStack = s.redo; this.totalBytes = s.bytes;
+    this.emit('change', undefined);
   }
 
   clear(): void {

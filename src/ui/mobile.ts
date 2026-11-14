@@ -82,7 +82,7 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
     desktopTool = app.tool;
     if (PAINT_TOOLS.includes(app.tool)) app.setTool('grab', false);
     setPaintMode(false);
-    syncState(); syncTitle(); syncTool();
+    syncState(); syncTool();
     setSheet('closed', false);
   }
   function leave(): void {
@@ -173,8 +173,6 @@ export function bindMobileLayout(app: App): { readonly active: boolean } {
   /* ---------- 上のバー ---------- */
 
   ui.mAuto.addEventListener('click', () => app.setAutoSwing(!app.project.autoSwing.enabled));
-  const syncTitle = () => { ui.mTitle.textContent = ui.docTitle.textContent; };
-  new MutationObserver(syncTitle).observe(ui.docTitle, { childList: true, characterData: true, subtree: true });
 
   /** プリセットのボタンと自動揺らしのボタンを、今の状態(モデル)に合わせる */
   function syncState(): void {

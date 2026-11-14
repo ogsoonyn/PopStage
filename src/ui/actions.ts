@@ -60,7 +60,11 @@ function defineActions(app: App, d: ActionDeps) {
     save: { label: '保存', keys: ['Ctrl+S'], run: () => app.save(false), enabled: () => !!app.doc },
     saveAs: { label: '名前を付けて保存', keys: ['Ctrl+Shift+S'], run: () => app.save(true), enabled: () => !!app.doc },
     export: { label: '書き出し', keys: ['Ctrl+E'], run: d.openExport, enabled: () => !!app.doc },
-    sample: { label: 'サンプルを開く', run: async () => { if (await app.confirmDiscard()) await app.loadSample(); } },
+    sample: { label: 'サンプルを開く', run: () => app.whileOpening(() => app.loadSample()), enabled: () => !app.busy },
+    // タブ。Ctrl+W・Ctrl+Tab はブラウザが使うので Alt と組み合わせる
+    closeTab: { label: 'タブを閉じる', keys: ['Alt+W'], run: () => app.closeTab(), enabled: () => !app.busy },
+    nextTab: { label: '次のタブ', keys: ['Alt+PageDown'], run: () => app.stepTab(1), enabled: () => app.tabs.length > 1 && !app.busy, helpRow: '次のタブ・前のタブ' },
+    prevTab: { label: '前のタブ', keys: ['Alt+PageUp'], run: () => app.stepTab(-1), enabled: () => app.tabs.length > 1 && !app.busy, helpRow: '次のタブ・前のタブ' },
     // 編集
     undo: { label: '元に戻す', keys: ['Ctrl+Z'], run: () => app.history.undo(), enabled: () => app.history.canUndo && !app.stroking },
     redo: { label: 'やり直す', keys: ['Ctrl+Shift+Z', 'Ctrl+Y'], run: () => app.history.redo(), enabled: () => app.history.canRedo && !app.stroking },
@@ -451,6 +455,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   app.on('inflate', refresh);
   app.on('blur', refresh);
   app.on('take', refresh);
+  app.on('tabs', refresh);
   app.on('status', refresh); // 書き出しの始まり・終わりなど(fps の更新は別のイベントなので、ここでは拾わない)
   app.store.on('layers', refresh);
   app.store.on('replace', refresh);

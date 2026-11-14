@@ -5,9 +5,9 @@
  */
 export const UI_IDS = {
   // スマホの上のバー
-  mTop: 'header', mTitle: 'span', mAuto: 'button',
+  mTop: 'header', mTitle: 'button', mAuto: 'button',
   // メニューバー・ツールオプション
-  docTitle: 'span',
+  docTabs: 'div',
   brushSize: 'input', brushSizeO: 'output', brushStrength: 'input', brushStrengthO: 'output',
   brushHardness: 'input', brushHardnessO: 'output', brushPressure: 'select', toolHint: 'span',
   tInflKind: 'select', tInflProfile: 'select', tInflSoft: 'input', tInflSoftO: 'output', tInflAngle: 'input', tInflAngleO: 'output', tInflBlend: 'select',
@@ -51,6 +51,8 @@ export const UI_IDS = {
   settingsDialog: 'dialog', setToolbarList: 'div', setToolbarReset: 'button', setHideFull: 'input', setHideFullRow: 'section',
   // 最近開いたファイル・ヘルプ・このアプリについて
   recentDialog: 'dialog', recentEmpty: 'p', recentList: 'ul', recentClear: 'button',
+  // 開いている作業(タブ)の一覧(スマホ)
+  tabDialog: 'dialog', tabList: 'ul', tabOpen: 'button',
   helpDialog: 'dialog', helpOps: 'div', helpKeys: 'div', aboutDialog: 'dialog', aboutVersion: 'p',
   toasts: 'div',
 } as const satisfies Record<string, keyof HTMLElementTagNameMap>;
