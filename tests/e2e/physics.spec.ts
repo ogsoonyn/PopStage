@@ -89,7 +89,8 @@ test('右ドラッグで回しても、ホイールでズームしても揺れ�
   expect((await zooming).z).toBeGreaterThan(0.01);
 });
 
-test('「揺らす」ツール: 左ドラッグで画像は動かずに揺れ、視点も「未保存」も変わらない', async ({ page }) => {
+// @local: 揺らすは視点の注視点をずらして揺らすので、平行移動と同じく描画が遅いと揺れない。クラウド環境では流さない
+test('「揺らす」ツール: 左ドラッグで画像は動かずに揺れ、視点も「未保存」も変わらない', { tag: '@local' }, async ({ page }) => {
   await boot(page);
   await page.keyboard.press('p'); // 一時停止を解除
   await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: false } }); });
