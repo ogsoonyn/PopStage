@@ -58,6 +58,12 @@ export const watchSwingX = (page: Page, ms: number) => page.evaluate(ms => new P
   tick();
 }), ms);
 
+/** 描画を n フレーム進める(状態を変えた後、画面に映るのを待つ) */
+export const nextFrames = (page: Page, n = 2) => page.evaluate(n => new Promise<void>(r => {
+  const step = (k: number) => k ? requestAnimationFrame(() => step(k - 1)) : r();
+  step(n);
+}), n);
+
 /**
  * ホイールのズームが目標に着くまで待って、値を返す。寄せている間は毎フレーム値が変わるので、
  * 2フレーム進めても変わらなければ着いたとみなす(時間で待つと、描画が遅いときに途中の値を拾う)

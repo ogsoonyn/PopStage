@@ -1,6 +1,6 @@
 /** E2E: 揺れ(つかむ・揺らす・平行移動・回転・ズーム・プリセット・揺らし方) */
 import { test, expect } from '@playwright/test';
-import { watchGlErrors, boot, openTab, watchSwingX } from './helpers';
+import { watchGlErrors, boot, openTab, watchSwingX, nextFrames } from './helpers';
 
 watchGlErrors();
 
@@ -19,7 +19,8 @@ test('つかんでドラッグすると揺れる', async ({ page }) => {
   expect(during).toBeGreaterThan(0.01);
 });
 
-test('中ドラッグで平行移動すると揺れ、視点のリセットでは揺れない', async ({ page }) => {
+// @local: 描画が 0.1 秒より遅いと視点の飛びとみなして揺らさないので、GPU の無いクラウド環境では流さない(playwright.config.ts)
+test('中ドラッグで平行移動すると揺れ、視点のリセットでは揺れない', { tag: '@local' }, async ({ page }) => {
   await boot(page);
   await page.keyboard.press('p'); // 一時停止を解除
   await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: false } }); });
@@ -46,7 +47,8 @@ test('中ドラッグで平行移動すると揺れ、視点のリセットで�
   expect(Math.max(Math.abs(lo2 - before), Math.abs(hi2 - before))).toBeLessThan(0.005);
 });
 
-test('右ドラッグで回しても、ホイールでズームしても揺れる', async ({ page }) => {
+// @local: 上と同じ理由で、クラウド環境では流さない
+test('右ドラッグで回しても、ホイールでズームしても揺れる', { tag: '@local' }, async ({ page }) => {
   await boot(page);
   await page.keyboard.press('p'); // 一時停止を解除
   await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: false } }); });
@@ -87,7 +89,8 @@ test('右ドラッグで回しても、ホイールでズームしても揺れ�
   expect((await zooming).z).toBeGreaterThan(0.01);
 });
 
-test('「揺らす」ツール: 左ドラッグで画像は動かずに揺れ、視点も「未保存」も変わらない', async ({ page }) => {
+// @local: 揺らすは視点の注視点をずらして揺らすので、平行移動と同じく描画が遅いと揺れない。クラウド環境では流さない
+test('「揺らす」ツール: 左ドラッグで画像は動かずに揺れ、視点も「未保存」も変わらない', { tag: '@local' }, async ({ page }) => {
   await boot(page);
   await page.keyboard.press('p'); // 一時停止を解除
   await page.evaluate(() => { const a = (window as any).popstage; a.store.patchProject({ autoSwing: { ...a.project.autoSwing, enabled: false } }); });
@@ -201,17 +204,22 @@ test('揺らし方「ピストン」: 画像全体が上下に動き、塗った
   await expect(page.locator('#pPresetDesc')).toContainText('画像ごと');
   await page.locator('#view').focus();
   await page.keyboard.press('p'); // 一時停止を解除
-  await page.waitForTimeout(600); // 動き出しの飛びをならし終えるまで待つ
+  // 動き出しの飛びをならし終えるまで待つ。ならす量はフレームの dt(0.1 秒で打ち切り)で減るので、描画が遅いと時間では決まらない
+  await nextFrames(page); // 飛びは、解除した後のフレームで fix に入る
+  await expect.poll(() => page.evaluate(() => { const f = (window as any).popstage.base.fix; return f.x === 0 && f.y === 0 && f.z === 0; }), { timeout: 10000 }).toBe(true);
 
   type Sample = { g: number; s: number; mesh: number; pickY: number };
-  // 描画フレームごとに、画像全体の位置(正規化座標)・塗った所の画像に対する変位・メッシュの位置・画面中央の当たり判定を記録する
-  const sample = (seconds: number) => page.evaluate(sec => new Promise<Sample[]>(resolve => {
+  // 描画フレームごとに、画像全体の位置(正規化座標)・塗った所の画像に対する変位・メッシュの位置・画面中央の当たり判定を記録する。
+  // 長さは物理の時間で測る(1フレームの dt は 0.1 秒で打ち切るので、描画が遅いと物理は実時間より遅れて進む)。一時停止中は実時間で測る
+  const sample = (seconds: number) => page.evaluate(sec => new Promise<Sample[]>((resolve, reject) => {
     const a = (window as any).popstage, l = a.activeLayer, r = a.stage.canvas.getBoundingClientRect(), out: Sample[] = [];
-    const t0 = performance.now();
+    const t0 = performance.now(), w0 = a.world.time;
     const tick = () => {
       const q = a.stage.pick(r.left + r.width / 2, r.top + r.height / 2);
       out.push({ g: a.world.baseOffset(a.doc.layers).y, s: a.world.displacement(l.id).y, mesh: a.stage.mesh.position.y, pickY: q ? q.y : NaN });
-      if (performance.now() - t0 < sec * 1000) requestAnimationFrame(tick); else resolve(out);
+      const wall = (performance.now() - t0) / 1000, elapsed = a.paused ? wall : a.world.time - w0;
+      if (wall > sec * 20) reject(new Error('物理の時間が進まない'));
+      else if (elapsed < sec) requestAnimationFrame(tick); else resolve(out);
     };
     requestAnimationFrame(tick);
   }), seconds);
@@ -246,7 +254,8 @@ test('揺らし方「ピストン」: 画像全体が上下に動き、塗った
 
   // 揺れを一時停止すると、画像もなめらかに元の位置へ戻って止まる
   await page.keyboard.press('p');
-  await page.waitForTimeout(600);
+  // 戻りきるまでのフレーム数は決まっているので、描画が遅いと 0.6 秒では足りない。止まるまで待ってから確かめる
+  await expect.poll(async () => (await sample(0.1)).every(x => x.g === 0 && x.mesh === 0 && x.s === 0), { timeout: 10000 }).toBe(true);
   const paused = await sample(0.5);
   for (const x of paused) { expect(x.g).toBe(0); expect(x.mesh).toBe(0); expect(x.s).toBe(0); }
 });

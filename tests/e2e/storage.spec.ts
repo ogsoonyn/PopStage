@@ -373,7 +373,8 @@ test('最近開いたファイル: 未保存の確認でやめたら一覧に戻
   expect(await page.evaluate(() => (window as any).popstage.doc.name)).toBe('next.png');
 });
 
-test('最近開いたファイル: ファイルの場所を覚えて開き直し、保存も元のファイルへ。消えたファイルは一覧から外せる', async ({ page }) => {
+// @local: クラウド環境の Chrome for Testing では、IndexedDB にファイルハンドルを入れるとブラウザごと落ちる(アプリと関係なく再現する)ので流さない
+test('最近開いたファイル: ファイルの場所を覚えて開き直し、保存も元のファイルへ。消えたファイルは一覧から外せる', { tag: '@local' }, async ({ page }) => {
   await boot(page);
   // ブラウザ内のファイルシステム(OPFS)で、本物のファイルハンドルを作る
   await page.evaluate(async () => {

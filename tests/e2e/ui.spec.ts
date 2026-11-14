@@ -83,6 +83,8 @@ test('パフォーマンスのデバッグ表示は ?debug かショートカッ
   // メインスレッドを 400ms 止めると、「このページの処理」で止まったと記録される
   await page.evaluate(() => new Promise<void>(res => requestAnimationFrame(() => { const t = performance.now(); while (performance.now() - t < 400) { /* 止める */ } res(); })));
   await expect(page.locator('#perfOverlay')).toContainText('止まる → このページの処理', { timeout: 5000 });
+  // 描画が遅いと、ここまでに記録したフレームが少ない。書き出すフレームの確かめのため、溜まるまで待つ
+  await expect.poll(() => page.evaluate(() => (window as any).popstage.perf.frames().length)).toBeGreaterThan(10);
   // 「記録を保存」で書き出す JSON を横取りして確かめる
   await page.evaluate(() => {
     const orig = URL.createObjectURL;
@@ -91,10 +93,8 @@ test('パフォーマンスのデバッグ表示は ?debug かショートカッ
   await page.locator('#perfOverlay [data-act=save]').click();
   const data = JSON.parse(await page.evaluate(() => (window as any).__saved));
   expect(data.freezes.length).toBeGreaterThan(0);
-  // 起動直後の読み込みでも止まることがあるので、いちばん長い記録を見る
-  const worst = data.freezes.reduce((m: any, f: any) => (f.gap > m.gap ? f : m));
-  expect(worst.gap).toBeGreaterThan(350);
-  expect(worst.verdict).toBe('page');
+  // 起動直後の読み込みや、CPU が混んだときの描画でも止まることがあるので、止めた 400ms がどこかに「このページ」で残っていればよい
+  expect(data.freezes.some((f: any) => f.gap > 350 && f.verdict === 'page')).toBe(true);
   expect(data.frames.length).toBeGreaterThan(10);
   expect(data.document.layers).toBe(1);
 });

@@ -1,6 +1,6 @@
 /** E2E: 視点・表示の切り替え・3面図・細かく動かす・見た目の基準画像 */
 import { test, expect } from '@playwright/test';
-import { watchGlErrors, boot, openTab, weightSum, dragOnStage, watchSwingX, autosaveOp, settled } from './helpers';
+import { watchGlErrors, boot, openTab, weightSum, dragOnStage, watchSwingX, settled, nextFrames } from './helpers';
 
 watchGlErrors();
 
@@ -17,25 +17,25 @@ test('画像を薄く・ポップを一時OFF: 画面だけが変わり、書き
   await page.locator('#view').focus();
 
   await page.keyboard.press('f');
-  await page.waitForTimeout(100);
-  expect(await page.locator('#vFlat').isChecked()).toBe(true);
+  // CPU が混んでいるとキーの処理が遅れるので、時間で待たずに切り替わるまで待つ
+  await expect(page.locator('#vFlat')).toBeChecked();
   await expect(page.locator('#sRec')).toContainText('ポップOFF');
+  await nextFrames(page);
   const shotFlat = await stage.screenshot();
   expect(shotFlat.equals(shot0)).toBe(false);
   expect(await frame()).toBe(frame0);
 
   await page.keyboard.press('Shift+W');
-  await page.waitForTimeout(100);
-  expect(await page.locator('#vFade').isChecked()).toBe(true);
-  expect(await page.locator('#vOverlaySel').isChecked()).toBe(true);
+  await expect(page.locator('#vFade')).toBeChecked();
+  await expect(page.locator('#vOverlaySel')).toBeChecked();
+  await nextFrames(page);
   expect((await stage.screenshot()).equals(shotFlat)).toBe(false);
   expect(await frame()).toBe(frame0);
 
   await page.locator('#vFade').uncheck();
   await page.locator('#vFlat').uncheck();
   await page.mouse.move(1, 1);
-  await page.waitForTimeout(100);
-  expect((await stage.screenshot()).equals(shot0)).toBe(true);
+  await expect.poll(async () => (await stage.screenshot()).equals(shot0)).toBe(true);
 });
 
 test('3面図: 横に4つの図が出て、自由角度はドラッグで回り、主ビューの当たり判定はずれない', async ({ page }) => {
@@ -373,10 +373,12 @@ test('3面図の自由角度の視点はプロジェクトに保存し、「未�
   await page.mouse.up();
   await page.mouse.wheel(0, -300);
   await expect.poll(() => page.evaluate(() => (window as any).popstage.dirty)).toBe(true);
+  // ホイールのズームは数フレームかけて寄るので、止まってから視点を控える(描画が遅いと 1.5 秒では寄り切らない)
+  await settled(page, () => page.evaluate(() => (window as any).popstage.multiCam.zoom));
   const cam = await page.evaluate(() => JSON.stringify((window as any).popstage.multiCam));
-  // 自動保存から復元すると、同じ視点に戻る
-  await expect.poll(() => autosaveOp(page, 'get'), { timeout: 10000 }).not.toBeNull();
-  await page.waitForTimeout(1500);
+  const t = await page.evaluate(() => Date.now());
+  // 自動保存から復元すると、同じ視点に戻る。止まった後の視点が書き込まれるまで待つ
+  await expect.poll(() => page.evaluate(t => ((window as any).popstage.lastAutosave?.getTime() ?? 0) > t, t), { timeout: 15000 }).toBe(true);
   await page.goto('/?e2e&restore');
   await expect(page.locator('#askTitle')).toHaveText('前回の作業を復元しますか?');
   await page.locator('#askYes').click();
