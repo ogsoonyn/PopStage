@@ -91,6 +91,11 @@
       <li><button data-cmd="toggleRecording">操作の記録(開始・停止)</button></li>
       <li><button data-cmd="togglePlay">ループ再生(開始・停止)</button></li>
       <li><button data-cmd="clearTake">記録を消す</button></li>
+      <li class="menu-title pt-2">キーフレーム</li>
+      <li><button data-cmd="toggleKeyPlay">再生・停止</button></li>
+      <li><button data-cmd="toggleKeyPath">経路を重ねる <span data-check="keyPath" class="ml-auto"></span></button></li>
+      <li><button data-cmd="toggleKeyGhost">ゴーストを重ねる <span data-check="keyGhost" class="ml-auto"></span></button></li>
+      <li class="menu-title pt-2">その他</li>
       <li><button data-cmd="addFavorite">お気に入りに残す</button></li>
     </ul>
   </div>
@@ -150,7 +155,7 @@
     <output id="tInflAngleO" class="w-10 tabular-nums"></output></label>
   <label class="flex items-center gap-2" data-inflate-opt hidden>重ね方
     <select id="tInflBlend" class="select select-xs w-32"><option value="max">重ねる(高い方)</option><option value="add">足す</option><option value="replace">置き換える</option></select></label>
-  <span id="toolHint" class="opacity-70 hidden md:inline flex-1 min-w-0 truncate"></span>
+  <span id="toolHint" class="tool-hint hidden md:flex flex-1 min-w-0"></span>
   <div class="ml-auto flex items-center gap-4 shrink-0" role="group" aria-label="揺れの切り替え">
     <label class="flex items-center gap-2" title="選択中のレイヤーを揺らすか(右のパネルの「揺れ」と同じ)">レイヤーの揺れ <input id="tSwing" type="checkbox" class="toggle toggle-sm"></label>
     <label class="flex items-center gap-2" title="周期的に自動で揺らすか(右のパネルの「自動で揺らす」と同じ)">自動で揺らす <input id="tAuto" type="checkbox" class="toggle toggle-sm"></label>
@@ -595,46 +600,29 @@
   <div class="modal-box max-w-2xl">
     <h3 class="font-bold text-lg mb-2">操作方法</h3>
     <div class="m-only grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm mb-4">
-      <span class="font-bold">1本指</span><span>下で選んだツール(つかむ・揺らす・移動・視点)</span>
-      <span class="font-bold">画像の外</span><span>1本指でなぞると回転、ダブルタップで視点を戻す</span>
-      <span class="font-bold">2本指</span><span>動かすと平行移動(揺れる)、つまむとズーム</span>
-      <span class="font-bold">2本指タップ</span><span>元に戻す(3本指タップでやり直す)</span>
-      <span class="font-bold">微調整</span><span>右上のボタンでオンにしている間は、動きが 1/5 になる</span>
-      <span class="font-bold">レイヤーを複数選ぶ</span><span>一覧で長押しすると選択モード。タップで足す・外し、「完了」で抜ける</span>
+      <span class="font-bold">1本指</span><span>下で選んだツールで操作</span>
+      <span class="font-bold">画像の外</span><span>なぞると回転、ダブルタップで視点を戻す</span>
+      <span class="font-bold">2本指</span><span>動かすと平行移動、つまむとズーム</span>
+      <span class="font-bold">2本指タップ</span><span>元に戻す</span>
+      <span class="font-bold">3本指タップ</span><span>やり直す</span>
+      <span class="font-bold">微調整</span><span>右上のボタンでオンにすると、動きが 1/5 になる</span>
+      <span class="font-bold">レイヤーを複数選ぶ</span><span>一覧で長押しして、タップで足す・外す</span>
       <span class="font-bold">膨らみ・塗る・消す</span><span>シートの「レイヤー」→「塗って直す」</span>
-      <span class="font-bold">操作の記録</span><span>シートの「アニメ」→「操作の記録」で記録・ループ再生。画面を触ると再生が止まる</span>
+      <span class="font-bold">操作の記録</span><span>シートの「アニメ」→「操作の記録」</span>
       <span class="font-bold">設定</span><span>右上の「…」→「設定…」</span>
     </div>
     <ol class="d-only list-decimal pl-5 leading-relaxed mb-3">
-      <li>画像をウィンドウへドロップする(PNG / JPEG / WebP)。</li>
-      <li>ブラシで動かしたい所を塗る。塗った所がその場で持ち上がる。</li>
-      <li>右ドラッグで視点を回し、ポップ量を調整する。</li>
-      <li>「つかむ」で画像をドラッグして揺らし、プリセットを選ぶ。</li>
-      <li>ファイル → 書き出しで、形式と長さを決めて保存する。</li>
+      <li>画像をウィンドウへドロップする</li>
+      <li>ブラシで動かしたい所を塗る</li>
+      <li>視点を回して、ポップ量を調整する</li>
+      <li>「つかむ」で揺らし、プリセットを選ぶ</li>
+      <li>ファイル → 書き出しで保存する</li>
     </ol>
-    <div class="d-only grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-      <span>回転(オービット)</span><span>右ドラッグ</span>
-      <span>平行移動(揺れる)</span><span>中ドラッグ / Space + 左ドラッグ</span>
-      <span>ズーム</span><span>ホイール</span>
-      <span>細かく動かす(回転・平行移動・ズーム・つかむ・揺らす・3面図)</span><span>Ctrl(Mac は ⌘)か Shift を押しながら(動きが 1/5)。Space+ドラッグと自由角度では Shift の代わりに Ctrl / ⌘</span>
-      <span>揺らす(カメラ固定で振る)</span><span>「揺らす」で左ドラッグ</span>
-      <span>塗った範囲ごと横にも膨らませる</span><span>揺らし方「ためて膨らむ2」「ふわっと膨らむ」「一瞬膨らむ」(プリセット「ぷっくり」「ぽふん」「ぽんっ」)</span>
-      <span>画像ごと上下に動かす</span><span>揺らし方「ピストン」(プリセット「ずんずん」)</span>
-      <span>膨らませる範囲を正円・正方形に</span><span>膨らみで Shift + ドラッグ</span>
-      <span>一時的に消しゴム</span><span>ブラシ中に Alt</span>
-      <span>最近開いたファイル</span><span>左のツールバーの「最近」/ ファイル → 最近開いたファイル…</span>
-      <span>左のツールバーに出すボタンを選ぶ</span><span>右上の歯車(設定)</span>
-      <span>3面図の正面・右から・下から</span><span>ドラッグで平行移動 / ホイールでズーム(3つ共通)</span>
-      <span>3面図の自由角度</span><span>ドラッグで回転 / 中ドラッグ・Shift+ドラッグで平行移動 / ホイールでズーム</span>
-      <span>3面図の視点を戻す</span><span>その図をダブルクリック</span>
-      <span>膨らませる・ぼかすのパネルを動かす</span><span>見出しをドラッグ / ダブルクリックで右下に戻す</span>
-      <span>レイヤーを足して選ぶ・外す</span><span>一覧で Ctrl(Mac は ⌘)+クリック</span>
-      <span>レイヤーを範囲で選ぶ</span><span>一覧で Shift+クリック / Shift+↑↓</span>
-      <span>選んだレイヤーを1枚に戻す</span><span>一覧で Esc / 「1枚に戻す」</span>
-    </div>
+    <!-- ui/mouseHint.ts の HELP_OPS から作る -->
+    <div id="helpOps" class="d-only help-ops grid grid-cols-[minmax(auto,15rem)_1fr] gap-x-6 gap-y-1 text-sm"></div>
     <h4 class="d-only font-bold mt-4 mb-1">キーボード</h4>
     <!-- ui/actions.ts がコマンドの表から作る -->
-    <div id="helpKeys" class="d-only grid grid-cols-2 gap-x-6 gap-y-1 text-sm"></div>
+    <div id="helpKeys" class="d-only help-ops grid grid-cols-[minmax(auto,15rem)_1fr] gap-x-6 gap-y-1 text-sm"></div>
     <div class="modal-action"><form method="dialog"><button class="btn btn-sm">閉じる</button></form></div>
   </div>
   <form method="dialog" class="modal-backdrop"><button>close</button></form>

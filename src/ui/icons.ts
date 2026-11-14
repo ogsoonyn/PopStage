@@ -34,6 +34,13 @@ export const ICONS = {
   invert: '<path d="M7 4v16"/><path d="m3 8 4-4 4 4"/><path d="M17 20V4"/><path d="m13 16 4 4 4-4"/>',
   // キーフレームを今の視点で上書きする(カメラ)
   keySet: '<path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  // キーフレームの再生・停止
+  play: '<path d="M7 4.5v15l12-7.5z"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="1"/>',
+  // キーフレームの経路: 2つの枠を結ぶ点線の矢印
+  keyPath: '<rect x="3" y="14" width="6" height="6" rx="1"/><rect x="15" y="4" width="6" height="6" rx="1"/><path d="M8 13c1-4 3-6 6-7" stroke-dasharray="2 2.2"/><path d="m11.5 5 2.8 1-1.4 2.6"/>',
+  // キーフレームのゴースト: ずれて重なった画像(後ろは点線)
+  keyGhost: '<rect x="3" y="3" width="12" height="12" rx="1.5" stroke-dasharray="2.5 2"/><rect x="9" y="9" width="12" height="12" rx="1.5"/>',
   // お気に入りに残す(星)
   favorite: '<path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
   // お気に入りを今の状態で上書きする(下向きの矢印を受け皿へ)

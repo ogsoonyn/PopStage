@@ -12,12 +12,11 @@ const dividersOk = (page: Page) => page.locator('#toolNav').evaluate(n => {
   return shown.every((el, i) => !el.classList.contains('divider') || (i > 0 && i < shown.length - 1 && !shown[i + 1].classList.contains('divider')));
 });
 
-test('左のツールバーのいちばん上の「最近」で、最近開いたファイルの一覧が開く', async ({ page }) => {
+test('左のツールバーの「最近」で、最近開いたファイルの一覧が開く', async ({ page }) => {
   await boot(page);
-  const first = page.locator('#toolNav [data-nav]:visible').first();
-  await expect(first).toHaveAttribute('data-nav', 'recent');
-  await expect(first).toHaveAccessibleName('最近開いたファイル');
-  await first.click();
+  const recent = nav(page, 'recent');
+  await expect(recent).toHaveAccessibleName('最近開いたファイル');
+  await recent.click();
   await expect(page.locator('#recentDialog')).toBeVisible();
 });
 
@@ -67,7 +66,8 @@ test('開く・保存・書き出しは、既定では隠し、設定で出せ�
   await box(page, 'open').check();
   await box(page, 'export').check();
   await page.keyboard.press('Escape');
-  await expect(page.locator('#toolNav [data-nav]').first()).toHaveAttribute('data-nav', 'open');
+  // ファイルのまとまりの先頭に出る
+  await expect(page.locator('#toolNav .nav-group[aria-label=ファイルの操作] [data-nav]:visible').first()).toHaveAttribute('data-nav', 'open');
   await expect(nav(page, 'open')).toHaveAccessibleName(/開く/);
   await expect(nav(page, 'open')).toHaveAttribute('title', /Ctrl\+O/);
   await page.waitForTimeout(400);

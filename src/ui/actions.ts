@@ -10,8 +10,9 @@ import { ui } from './ids';
 import { toast } from './dom';
 import { isTyping } from './input';
 import { TOOL_GROUPS, TOOLS } from './tools';
-import { icon, type IconName } from './icons';
+import { icon, ICONS, type IconName } from './icons';
 import { LIMITS } from '../model/project';
+import { HELP_OPS, hintHtml } from './mouseHint';
 
 export interface Action {
   /** ツールチップ・ヘルプでの名前 */
@@ -39,6 +40,8 @@ export interface ActionDeps {
   openExport: () => unknown;
   openBlur: () => unknown;
   openSettings: () => unknown;
+  /** キーフレームの部品(右パネルの「アニメーション」タブ)を出す */
+  showKeyFrames: () => unknown;
   togglePerf: () => unknown;
 }
 
@@ -66,8 +69,8 @@ function defineActions(app: App, d: ActionDeps) {
     invert: { label: '反転', desc: '選んでいるレイヤーのウェイトを反転', run: () => app.weightOp('反転', wm => wm.invert()), enabled: layer },
     fromAlpha: { label: 'アルファから生成', run: () => app.fromAlpha(), enabled: layer },
     clearWeights: { label: '全消去', run: () => app.weightOp('全消去', wm => wm.clear()), enabled: layer },
-    brushSmaller: { label: 'ブラシを小さく', keys: ['['], run: brushStep(-1), duringPreview: true, helpRow: 'ブラシサイズ(小さく / 大きく)' },
-    brushLarger: { label: 'ブラシを大きく', keys: [']'], run: brushStep(1), duringPreview: true, helpRow: 'ブラシサイズ(小さく / 大きく)' },
+    brushSmaller: { label: 'ブラシを小さく', keys: ['['], run: brushStep(-1), duringPreview: true, helpRow: 'ブラシを小さく・大きく' },
+    brushLarger: { label: 'ブラシを大きく', keys: [']'], run: brushStep(1), duringPreview: true, helpRow: 'ブラシを小さく・大きく' },
     // 表示
     toggleOverlay: { label: 'ウェイトの重ね表示', keys: ['W'], desc: '押すたびに OFF → 選択中 → 全レイヤー', run: () => app.cycleOverlay(), duringPreview: true },
     toggleFade: { label: '画像を薄く', keys: ['Shift+W'], run: () => app.setViewOption('fade', !app.view.fade), duringPreview: true },
@@ -80,10 +83,10 @@ function defineActions(app: App, d: ActionDeps) {
       run: () => app.setBackgroundTransparent(app.project.background !== null), duringPreview: true, // ウェイトに触れないので、右パネルと同じくプレビュー中も使える
     },
     cleanView: {
-      label: '編集表示クリア', keys: ['C'], run: () => app.clearEditView(), duringPreview: true, helpLabel: '表示クリア(編集用の表示をまとめて切る)',
+      label: '編集表示クリア', keys: ['C'], run: () => app.clearEditView(), duringPreview: true, helpLabel: '表示クリア',
       desc: '見栄えを確かめるため、編集用の表示をまとめて切る(ウェイトの重ね表示・画像を薄く・ポップを一時OFF・揺れを一時停止・グリッド)。押すたびに切るだけで、元には戻さない',
     },
-    resetView: { label: '視点リセット(正面)', keys: ['Home'], run: () => app.resetView(), duringPreview: true, desc: '向き・ズーム・位置をすべて正面の初めの視点に戻す' },
+    resetView: { label: '視点リセット(正面)', helpLabel: '視点を正面に戻す', keys: ['Home'], run: () => app.resetView(), duringPreview: true, desc: '向き・ズーム・位置をすべて正面の初めの視点に戻す' },
     togglePanel: {
       label: '右パネル', helpLabel: '右パネルを開く・閉じる', keys: ['Shift+P'], desc: '右のパネル(レイヤー・アニメーション・画像と表示)を閉じて3Dビューを広げる。3Dビューの右端のつまみでも開閉できる',
       run: () => app.setPanelClosed(!app.panelClosed), duringPreview: true,
@@ -95,29 +98,42 @@ function defineActions(app: App, d: ActionDeps) {
       desc: 'ズームと位置はそのままで、向きだけを正面に戻す',
     },
     toggleUi: {
-      label: 'UIを隠す', helpLabel: 'UIを隠す・戻す(Esc でも戻る)', keys: ['Tab'], desc: '3Dビューのほかを隠して、画面いっぱいに見せる。もう一度押すか Esc で戻す',
+      label: 'UIを隠す', helpLabel: 'UIを隠す・戻す', keys: ['Tab'], desc: '3Dビューのほかを隠して、画面いっぱいに見せる。もう一度押すか Esc で戻す',
       run: () => app.setUiHidden(!app.uiHidden), duringPreview: true,
       // スマホでは膨らませるのパネルが下のシートの中にあり、隠すと適用・キャンセルを押せなくなる
       enabled: () => !(app.previewing && document.documentElement.classList.contains('mobile')),
     },
     // アニメーション
     toggleRecording: {
-      label: '操作の記録', helpLabel: '操作の記録(開始・停止)', keys: ['R'], desc: 'つかむ・揺らす・移動・視点の操作を覚える(最長 60 秒)',
+      label: '操作の記録', helpLabel: '記録の開始・停止', keys: ['R'], desc: 'つかむ・揺らす・移動・視点の操作を覚える(最長 60 秒)',
       run: () => app.toggleRecording(), enabled: () => !!app.doc && !app.exporting,
     },
     togglePlay: {
-      label: 'ループ再生', helpLabel: 'ループ再生(開始・停止。再生中は画面を触っても止まる)', keys: ['L'], desc: '画面を触ると止まる',
+      label: 'ループ再生', helpLabel: 'ループ再生・停止', keys: ['L'], desc: '画面を触ると止まる',
       run: () => app.togglePlay(), enabled: () => !!app.project.take && app.takeState !== 'recording' && !app.exporting,
     },
     resetPlayView: {
-      label: 'カメラを戻す', helpLabel: 'カメラを戻す(ループ再生中に動かした視点を戻す)', keys: ['Shift+Home'], desc: 'ループ再生中に動かした視点を、再生を始めた視点(記録の初めの視点。キーフレームなら1番の視点)へ戻す。再生は続ける',
+      label: 'カメラを戻す', helpLabel: '再生中のカメラを戻す', keys: ['Shift+Home'], desc: 'ループ再生中に動かした視点を、再生を始めた視点(記録の初めの視点。キーフレームなら1番の視点)へ戻す。再生は続ける',
       run: () => app.resetPlayView(), enabled: () => app.takeState === 'playing',
     },
     togglePlayPause: {
-      label: '一時停止', helpLabel: 'ループ再生の一時停止(続ける)', keys: ['Shift+L'], desc: 'ループ再生を一時停止する・続ける(揺れはそのまま落ち着いていく)',
+      label: '一時停止', helpLabel: '再生の一時停止・再開', keys: ['Shift+L'], desc: 'ループ再生を一時停止する・続ける(揺れはそのまま落ち着いていく)',
       run: () => app.setPlayPaused(!app.playPaused), enabled: () => app.takeState === 'playing',
     },
     stopPlay: { label: '停止', helpLabel: 'ループ再生を止める', desc: 'ループ再生を止める', run: () => app.stopTake(), enabled: () => app.takeState === 'playing' },
+    toggleKeyPlay: {
+      label: 'キーフレームの再生・停止', desc: 'キーフレームの動きをループ再生する。再生中は止める(手で記録した操作の再生も止める)',
+      run: () => { if (app.takeState === 'playing') app.stopTake(); else app.playKeys(); },
+      enabled: () => (app.takeState === 'playing' && !app.exporting) || app.canPlayKeys,
+    },
+    toggleKeyPath: {
+      label: 'キーフレームの経路', desc: '各フレームの枠と経路を3Dビューに重ねる',
+      run: () => { const on = !app.keyOverlay.path; app.setKeyOverlay('path', on); if (on) d.showKeyFrames(); }, duringPreview: true,
+    },
+    toggleKeyGhost: {
+      label: 'キーフレームのゴースト', desc: '各フレームの画像を半透明で重ねる',
+      run: () => { const on = !app.keyOverlay.ghost; app.setKeyOverlay('ghost', on); if (on) d.showKeyFrames(); }, duringPreview: true,
+    },
     clearTake: { label: '記録を消す', desc: '元に戻せる', run: () => app.clearTake(), enabled: () => !!app.project.take && app.takeState !== 'recording' },
     // レイヤー
     addLayer: { label: '新規レイヤー', run: () => app.addLayer(), enabled: () => !!app.doc },
@@ -146,7 +162,7 @@ function defineActions(app: App, d: ActionDeps) {
 type CommandName = keyof ReturnType<typeof defineActions>;
 
 /** 切り替えの入・切(メニューの data-check と、左のツールバーの aria-pressed に映す)。transparent だけはファイルに入る背景の設定 */
-type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'transparent' | 'panel';
+type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'transparent' | 'panel' | 'keyPath' | 'keyGhost';
 
 /**
  * 左のツールバーの、その場で効く操作のまとまり(よく使うものを、いちばん押しやすい所にも置く)。
@@ -154,8 +170,10 @@ type ViewCheck = 'overlay' | 'grid' | 'fade' | 'flat' | 'multi' | 'pause' | 'tra
  */
 type NavGroup = { label: string; title: string; items: readonly { cmd: CommandName; icon: IconName; text: string; check?: ViewCheck; name?: string; defaultHidden?: boolean }[] };
 
-/** ツールの上に置く、ファイルの操作(作業を始めるときにすぐ開き直せるように) */
-const NAV_TOP: readonly NavGroup[] = [
+/**
+ * ツールの下に置く、その場で効く操作のまとまり。まとまりの並びと中の並びは、上のメニュー(ファイル・編集・表示・アニメーション)に合わせる
+ */
+const NAV_ACTIONS: readonly NavGroup[] = [
   // 開く・保存・書き出しはメニューとショートカットでも使えるので、既定では隠す(設定で出せる。出すと低い画面ではツールバーがスクロールする)
   {
     label: 'ファイル', title: 'ファイルの操作',
@@ -166,15 +184,16 @@ const NAV_TOP: readonly NavGroup[] = [
       { cmd: 'export', icon: 'export', text: '書き出し', defaultHidden: true },
     ],
   },
-];
-
-const NAV_ACTIONS: readonly NavGroup[] = [
+  {
+    label: '編集', title: '選んでいるレイヤーに効く操作',
+    items: [{ cmd: 'smoothAll', icon: 'smoothAll', text: '全体ぼかし…' }, { cmd: 'normalize', icon: 'normalize', text: '正規化' }, { cmd: 'invert', icon: 'invert', text: '反転' }],
+  },
   {
     label: '表示', title: '表示に効く操作',
     items: [
-      { cmd: 'toggleMulti', icon: 'multi', text: '3面図', check: 'multi' },
       { cmd: 'toggleOverlay', icon: 'overlay', text: 'ウェイト', check: 'overlay', name: 'ウェイトの重ね表示' },
       { cmd: 'toggleFade', icon: 'fade', text: '画像を薄く', check: 'fade' },
+      { cmd: 'toggleMulti', icon: 'multi', text: '3面図', check: 'multi' },
       { cmd: 'toggleGrid', icon: 'grid', text: 'グリッド', check: 'grid' },
       { cmd: 'toggleTransparent', icon: 'transparent', text: '透過', check: 'transparent', name: '背景を透過' },
       { cmd: 'cleanView', icon: 'cleanView', text: '表示クリア' },
@@ -183,11 +202,16 @@ const NAV_ACTIONS: readonly NavGroup[] = [
     ],
   },
   {
-    label: 'レイヤー', title: '選んでいるレイヤーに効く操作',
-    items: [{ cmd: 'smoothAll', icon: 'smoothAll', text: '全体ぼかし…' }, { cmd: 'normalize', icon: 'normalize', text: '正規化' }, { cmd: 'invert', icon: 'invert', text: '反転' }],
+    label: 'アニメ', title: 'アニメーションの操作',
+    items: [
+      // 再生中は「停止」に変わる(下の refresh)
+      { cmd: 'toggleKeyPlay', icon: 'play', text: '再生', name: 'キーフレームを再生' },
+      { cmd: 'toggleKeyPath', icon: 'keyPath', text: '経路', check: 'keyPath', name: 'キーフレームの経路' },
+      { cmd: 'toggleKeyGhost', icon: 'keyGhost', text: 'ゴースト', check: 'keyGhost', name: 'キーフレームのゴースト' },
+      // 揺らしながら試している最中に、いい動きをすぐ残せるように
+      { cmd: 'addFavorite', icon: 'favorite', text: 'お気に入り' },
+    ],
   },
-  // 揺らしながら試している最中に、いい動きをすぐ残せるように
-  { label: 'アニメ', title: '揺れと動きの組み合わせに効く操作', items: [{ cmd: 'addFavorite', icon: 'favorite', text: 'お気に入り' }] },
 ];
 
 /**
@@ -195,7 +219,6 @@ const NAV_ACTIONS: readonly NavGroup[] = [
  * id はボタンの data-nav と同じ(ツールはツールの id、操作はコマンドの名前)
  */
 export const TOOLBAR_ITEMS: readonly { group: string; items: readonly { id: string; label: string; defaultHidden?: boolean }[] }[] = [
-  ...NAV_TOP.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text, defaultHidden: it.defaultHidden })) })),
   { group: 'ツール', items: TOOL_GROUPS.flat().map(t => ({ id: t.id as string, label: t.name ?? t.label })) },
   ...NAV_ACTIONS.map(g => ({ group: g.label, items: g.items.map(it => ({ id: it.cmd as string, label: it.name ?? it.text, defaultHidden: it.defaultHidden })) })),
 ];
@@ -246,7 +269,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   for (const t of TOOLS) {
     table[`tool.${t.id}`] = {
       label: t.name ?? t.label, keys: [t.key], desc: t.desc, run: () => app.setTool(t.id),
-      helpRow: `ツール(${TOOLS.map(d => d.label).join(' / ')})`,
+      helpRow: 'ツールを選ぶ',
     };
   }
 
@@ -263,7 +286,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   /** ツールチップ: 「名前 (キー補足): 説明」 */
   const tooltip = (a: Action, keyNote = '') => `${a.label}${a.keys ? ` (${a.keys[0]}${keyNote})` : ''}${a.desc ? `: ${a.desc}` : ''}`;
 
-  /* ---------- 左のツールバーを作る(ファイルの操作 → 区切り → ツール → 区切り → その場で効く操作のまとまり) ---------- */
+  /* ---------- 左のツールバーを作る(ツール → 区切り → その場で効く操作のまとまり) ---------- */
   const navItems: Node[] = [];
   const divider = () => Object.assign(document.createElement('div'), { className: 'divider my-0' });
   /** アイコン・名前・キーの3段のボタン */
@@ -297,8 +320,6 @@ export function bindActions(app: App, deps: ActionDeps): void {
     }
     return box;
   };
-  for (const g of NAV_TOP) navItems.push(actionGroup(g));
-  navItems.push(divider());
   for (const group of TOOL_GROUPS) {
     for (const t of group) {
       const b = navButton(TOOL_BTN, t.id, t.label, t.key);
@@ -346,15 +367,23 @@ export function bindActions(app: App, deps: ActionDeps): void {
     });
   }
 
-  /* ---------- ヘルプのショートカット一覧 ---------- */
+  /* ---------- ヘルプのマウス操作とショートカットの一覧 ---------- */
   {
+    ui.helpOps.replaceChildren(...HELP_OPS.flatMap(r => {
+      const op = Object.assign(document.createElement('span'), { className: 'help-op', innerHTML: hintHtml(r.parts) });
+      return [Object.assign(document.createElement('span'), { textContent: r.label }), op];
+    }));
     const rows = new Map<string, string[]>();
     for (const a of Object.values(table)) {
       if (!a.keys || a.hidden) continue;
       const row = a.helpRow ?? a.helpLabel ?? a.label;
       rows.set(row, [...(rows.get(row) ?? []), ...a.keys]);
     }
-    ui.helpKeys.replaceChildren(...[...rows].flatMap(([label, keys]) => [label, keys.join(' / ')].map(text => Object.assign(document.createElement('span'), { textContent: text }))));
+    // キーもマウスの操作と同じ書き方(キーの札)で出す
+    ui.helpKeys.replaceChildren(...[...rows].flatMap(([label, keys]) => [
+      Object.assign(document.createElement('span'), { textContent: label }),
+      Object.assign(document.createElement('span'), { className: 'help-op', innerHTML: hintHtml(keys.map(k => ({ mods: k }))) }),
+    ]));
   }
 
   /* ---------- キー ---------- */
@@ -381,6 +410,7 @@ export function bindActions(app: App, deps: ActionDeps): void {
   const undoLabel = document.querySelector('[data-label=undo]')!, redoLabel = document.querySelector('[data-label=redo]')!;
   const checks = [...document.querySelectorAll<HTMLElement>('[data-check]')];
   const pressables = [...ui.toolNav.querySelectorAll<HTMLElement>('[data-pressed]')];
+  const keyPlayButtons = [...ui.toolNav.querySelectorAll<HTMLElement>('[data-cmd=toggleKeyPlay]')];
   const overlayBadges = [...ui.toolNav.querySelectorAll<HTMLElement>('[data-pressed=overlay] .nav-badge')];
   /** 'status' でも呼ぶ(0.5 秒ごと)ので、変わったときだけ書く */
   const setText = (el: Element, text: string) => { if (el.textContent !== text) el.textContent = text; };
@@ -388,7 +418,10 @@ export function bindActions(app: App, deps: ActionDeps): void {
     for (const b of cmdButtons) { const off = !enabled(b.dataset.cmd!); if (b.disabled !== off) b.disabled = off; }
     setText(undoLabel, app.history.undoLabel ? `(${app.history.undoLabel})` : '');
     setText(redoLabel, app.history.redoLabel ? `(${app.history.redoLabel})` : '');
-    const on: Record<ViewCheck, boolean> = { overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused, transparent: app.project.background === null, panel: !app.panelClosed };
+    const on: Record<ViewCheck, boolean> = {
+      overlay: app.view.overlay, grid: app.view.grid, fade: app.view.fade, flat: app.view.flat, multi: app.view.multi, pause: app.paused,
+      transparent: app.project.background === null, panel: !app.panelClosed, keyPath: app.keyOverlay.path, keyGhost: app.keyOverlay.ghost,
+    };
     // 重ね表示は3つの状態なので、メニューには今の状態を書き、左のツールバーには全レイヤーのときだけ印を付ける
     const mode = app.overlayMode;
     for (const el of checks) setText(el, el.dataset.check === 'overlay' ? (mode === 'off' ? '' : mode === 'all' ? '全レイヤー' : '選択中') : on[el.dataset.check as ViewCheck] ? '✓' : '');
@@ -397,6 +430,15 @@ export function bindActions(app: App, deps: ActionDeps): void {
       // 読み上げでも3つの状態を区別できるようにする
       const b = el.parentElement!, name = mode === 'all' ? 'ウェイトの重ね表示(全レイヤー)' : 'ウェイトの重ね表示';
       if (b.getAttribute('aria-label') !== name) b.setAttribute('aria-label', name);
+    }
+    // キーフレームの再生ボタンは、再生中は停止のボタンにする
+    const playing = app.takeState === 'playing';
+    for (const b of keyPlayButtons) {
+      if (b.dataset.playing === String(playing)) continue;
+      b.dataset.playing = String(playing);
+      b.querySelector('svg')!.innerHTML = ICONS[playing ? 'stop' : 'play'];
+      b.querySelector('.nav-label')!.textContent = playing ? '停止' : '再生';
+      b.setAttribute('aria-label', playing ? '再生を止める' : 'キーフレームを再生');
     }
     for (const el of pressables) {
       const v = String(on[el.dataset.pressed as ViewCheck]);

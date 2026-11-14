@@ -508,9 +508,14 @@ test('コマンドの表から、メニューのキー表記・ボタンのツ�
   // ヘルプのキー一覧
   const keys = page.locator('#helpKeys');
   await expect(keys).toContainText('やり直す');
-  await expect(keys).toContainText('Ctrl+Shift+Z / Ctrl+Y');
-  await expect(keys).toContainText('B / E / S / I / G / Y / V / H');
-  await expect(keys).not.toContainText('Ctrl+Shift+Alt+P'); // デバッグ用は出さない
+  // キーはマウスの操作と同じキーの札で出す(1つのキーごとに札を並べる)
+  await expect(keys.locator('.mh[title="Ctrl+Shift+Z"] kbd')).toHaveText(['Ctrl', 'Shift', 'Z']);
+  await expect(keys.locator('.mh[title="Ctrl+Y"]')).toHaveCount(1);
+  for (const k of ['B', 'E', 'S', 'I', 'G', 'Y', 'V', 'H']) await expect(keys.locator(`.mh[title="${k}"]`)).toHaveCount(1);
+  // ヘルプには、カッコの補足を書かない。マウスの操作は絵で出す
+  expect(await page.locator('#helpDialog').evaluate(d => /[()()]/.test(d.textContent!))).toBe(false);
+  await expect(page.locator('#helpOps .mh-mouse[aria-label=右ドラッグ]').first()).toBeAttached();
+  await expect(keys.locator('.mh[title="Ctrl+Shift+Alt+P"]')).toHaveCount(0); // デバッグ用は出さない
 
   // アニメーションのメニューから記録を始めて止め、再生する。記録中は再生と消すを押せない
   await app(a => a.setPaused(false));
@@ -591,11 +596,12 @@ test('右パネルのタブは効く範囲で分ける。説明は「?」で開�
   await expect(page.locator('#toolNav > .tool')).toHaveCount(8);
   await expect(page.locator('#toolNav .tool svg')).toHaveCount(8);
   const acts = page.locator('#toolNav [role=group] .nav-act');
-  await expect(acts).toHaveCount(16); // 開く・保存・書き出しは既定では隠しているが、DOM にはある
-  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(16);
+  await expect(acts).toHaveCount(19); // 開く・保存・書き出しは既定では隠しているが、DOM にはある
+  await expect(page.locator('#toolNav [role=group] .nav-act svg')).toHaveCount(19);
   await expect(page.locator('#toolNav [role=group] .tool')).toHaveCount(0);
-  // 最近開いたファイルは、ツールより上に置く
-  await expect(page.locator('#toolNav [role=group]')).toHaveText([/ファイル/, /表示/, /レイヤー/, /アニメ/]);
+  // ツールをいちばん上に置き、まとまりは上のメニューと同じ順に並べる
+  await expect(page.locator('#toolNav > *').first()).toHaveAttribute('data-tool', 'brush');
+  await expect(page.locator('#toolNav [role=group] .nav-group-label')).toHaveText(['ファイル', '編集', '表示', 'アニメ']);
   await page.locator('#toolNav [data-cmd=cleanView]').click();
   await expect(page.locator('#toolNav [data-cmd=cleanView]')).not.toHaveAttribute('aria-pressed', /.*/);
 
@@ -646,7 +652,7 @@ test('左のツールバー: 表示の切り替えは、入・切を aria-presse
   // 表示クリアで切れたものは、ボタンも切に戻る(3面図は切らない)
   await app(a => { Object.assign(a.view, { overlay: true, fade: true, grid: true, multi: true }); a.syncView(); });
   await btn('cleanView').click();
-  await expect(page.locator('#toolNav .nav-act[aria-pressed=true]')).toHaveText([/3面図/, /透過/]); // 背景の透過は編集用の表示ではないので切らない
+  await expect(page.locator('#toolNav .nav-group[aria-label=表示に効く操作] .nav-act[aria-pressed=true]')).toHaveText([/3面図/, /透過/]); // 背景の透過は編集用の表示ではないので切らない
 });
 
 test('左のツールバー: 背景を透過は、入・切をボタン・メニュー・右パネルに映し、切ると背景色(既定は白)で塗る', async ({ page }) => {
@@ -713,6 +719,7 @@ test('ツールオプションの欄は選択中のツールの設定だけを�
   await expect(page.locator('#brushSize')).toBeHidden();
   await expect(page.locator('#tInflProfile')).toBeHidden();
   await expect(page.locator('#toolHint')).toContainText('引っ張って');
+  await expect(page.locator('#toolHint .mh-mouse[aria-label=左ドラッグ]')).toHaveCount(1);
   // 膨らみ: 次に描くときの設定を選び、描くとその設定で始まる
   await page.keyboard.press('i');
   await expect(page.locator('#tInflProfile')).toBeVisible();

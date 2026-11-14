@@ -13,7 +13,7 @@
  * - 書き出し中は出さない(画面の部品なので、書き出した絵には入らない)。
  */
 import type { App } from '../app';
-import { keyCurve, normalizeKeys, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, TAKE_STEP_MULTIPLE, type KeyCurve, type KeyFrame } from '../physics/take';
+import { keyCurve, TAKE_MAX_SECONDS, TAKE_MIN_SECONDS, TAKE_STEP_MULTIPLE, type KeyCurve } from '../physics/take';
 import { PHYSICS_DT } from '../physics/world';
 import { prefs } from '../storage/prefs';
 import { ui } from './ids';
@@ -33,8 +33,6 @@ const DRAG_SLOP = 6;
 /** 止まっている間もバーを出すか(ブラウザに覚える) */
 const PREF = 'playBarIdle';
 
-/** 記録のキーフレームと一覧が同じか(記録のほうは丸めてあるので、一覧も同じように丸めて比べる) */
-const sameKeys = (a: readonly KeyFrame[] | undefined, b: readonly KeyFrame[]) => !!a && JSON.stringify(a) === JSON.stringify(normalizeKeys(b));
 /** 1周の秒数を、記録にしたときの長さにそろえる(刻み数を TAKE_STEP_MULTIPLE の倍数に丸める。takeFromKeys と同じ) */
 const takeSecondsOf = (total: number) => Math.max(TAKE_STEP_MULTIPLE, Math.round(total / PHYSICS_DT / TAKE_STEP_MULTIPLE) * TAKE_STEP_MULTIPLE) * PHYSICS_DT;
 
@@ -76,8 +74,7 @@ export function bindPlayBar(app: App): void {
   function begin(): boolean {
     if (app.takeState === 'playing') return true;
     if (app.takeState !== 'idle' || !app.doc || app.exporting) return false;
-    if (sameKeys(app.project.take?.keys, app.keyDraft)) app.playTake();
-    else app.makeKeyTake();
+    app.playKeys();
     return (app.takeState as string) === 'playing';
   }
 

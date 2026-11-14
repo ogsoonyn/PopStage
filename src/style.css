@@ -95,6 +95,7 @@ html.mobile #blurDialog { left: 50%; right: auto; transform: translateX(-50%); b
   #toolNav .nav-act.key-wide { padding-right: 2px; }
   /* ツールと操作のボタンの上下も少し詰める(864px の画面で最後のボタンまで入るように) */
   #toolNav > .tool { padding-top: 1px; padding-bottom: 1px; }
+  #toolNav { row-gap: 2px; }
 }
 @media (max-height: 720px) {
   #toolNav .nav-ico { display: none; }
@@ -102,6 +103,17 @@ html.mobile #blurDialog { left: 50%; right: auto; transform: translateX(-50%); b
   #toolNav > .tool { padding-left: 2px; padding-right: 12px; }
   #toolNav > .divider { margin: 0; height: 8px; }
 }
+
+/* マウス操作の書き方(ui/mouseHint.ts)。上の欄のツールのヒントと、ヘルプの操作方法 */
+.tool-hint { align-items: center; gap: 0 .75rem; opacity: .8; }
+/* 入りきらない操作は途中で切らず、次の行(見えない所)へ送って丸ごと隠す */
+.tool-hint { flex-wrap: wrap; align-content: flex-start; height: 1.5rem; line-height: 1.5rem; overflow: hidden; white-space: nowrap; }
+.mh { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.mh-mouse { display: inline-flex; }
+.mouse-ico { height: 1.35rem; width: auto; }
+.mh-plus { opacity: .6; font-size: .75em; }
+.help-op { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .9rem; }
+.help-ops > span { padding: 1px 0; }
 
 /* 項目の説明は並べず、「?」で開く(ui/help.ts) */
 /* 長い項目名は折り返し、「?」は縮めずに名前の後ろに置く(1列目からはみ出してスライダーに重ならないように) */
