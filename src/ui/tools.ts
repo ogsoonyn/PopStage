@@ -28,7 +28,7 @@ export const TOOL_GROUPS: readonly (readonly ToolDef[])[] = [
     { id: 'smooth', key: 'S', label: 'ぼかし', hint: 'ドラッグで段差をならす' },
     {
       id: 'inflate', key: 'I', label: '膨らみ', name: '膨らませる', desc: '範囲をドラッグして、指定した高さと断面で一括して膨らませる',
-      hint: 'ドラッグした範囲を一括で膨らませる(Shift で正円・正方形)/ 高さや断面は下のパネルで調整',
+      hint: 'ドラッグした範囲を一括で膨らませる(Shift で正円・正方形)/ 枠の辺・角で大きさ、中で移動、上の丸で回す / 高さや断面は下のパネルで調整',
     },
     { id: 'grab', key: 'G', label: 'つかむ', hint: 'ドラッグで引っ張って離すと揺れる' },
     {

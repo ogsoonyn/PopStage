@@ -18,6 +18,7 @@ import { bindTakeControls } from './ui/take';
 import { bindPlayBar } from './ui/playBar';
 import { bindHideUi } from './ui/hideUi';
 import { bindKeyPath } from './ui/keyPath';
+import { bindInflateFrame } from './ui/inflateFrame';
 import { bindFavoriteControls } from './ui/favorites';
 import { isTool } from './ui/tools';
 import { bindHelp } from './ui/help';
@@ -57,6 +58,7 @@ bindTakeControls(app);
 bindPlayBar(app);
 bindHideUi(app);
 bindKeyPath(app);
+bindInflateFrame(app);
 bindFavoriteControls(app);
 
 /* ---------- 右のパネルのタブ(レイヤー・アニメーション・画像と表示)。選んだタブはブラウザに覚える ---------- */

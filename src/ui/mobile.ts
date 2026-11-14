@@ -37,7 +37,7 @@ export const MOBILE_SLOTS: readonly { slot: string; tab: Tab; prepend?: boolean 
 /** 「塗って直す」の中で使うツール。ブラシの設定を出すのは塗りの3つだけ */
 const BRUSH_TOOLS: Tool[] = ['brush', 'erase', 'smooth'];
 const TOOL_DESC: Record<Tool, string> = {
-  inflate: '画像の上をドラッグして範囲を描くと、ここで高さや断面を決めて適用できます。2本目の指を置くと描くのをやめます。',
+  inflate: '画像の上をドラッグして範囲を描くと、ここで高さや断面を決めて適用できます。描いた範囲は枠の辺・角・中・上の丸で直せます。2本目の指を置くと描くのをやめます。',
   grab: 'つかむ: 画像を引っぱって離すと揺れます。',
   shake: '揺らす: 指で振ると、画像は動かずに揺れだけが出ます。',
   view: '視点: 画像の上でも1本指で回転します。',

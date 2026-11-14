@@ -236,6 +236,15 @@ output.is-mixed { font-size: .7rem; opacity: .8; }
 .set-group legend { font-size: .75rem; opacity: .7; padding: 0 .25rem; }
 .set-group label { display: flex; align-items: center; gap: .5rem; cursor: pointer; }
 
+/* 膨らませるの範囲の枠とハンドル(ui/inflateFrame.ts)。線の下に暗い太い線(if-halo)を敷き、画像の明暗どちらの上でも見えるようにする */
+#inflateFrame { z-index: 4; overflow: hidden; }
+#inflateFrame[hidden] { display: none; }
+#inflateFrame .inflate-frame { width: 100%; height: 100%; --if: #38bdf8; }
+.inflate-frame .if-box, .inflate-frame .if-stem { fill: none; stroke: var(--if); stroke-width: 1.5; }
+.inflate-frame .if-shape { fill: none; stroke: var(--if); stroke-width: 1; stroke-dasharray: 5 4; }
+.inflate-frame .if-halo { stroke: rgb(0 0 0 / .4); stroke-width: 3; stroke-dasharray: none; }
+.inflate-frame .if-handle { fill: #fff; stroke: #0369a1; stroke-width: 1.5; }
+
 /* キーフレームの枠と経路(ui/keyPath.ts)。画像の明暗どちらの上でも読めるよう、線の下に暗い太い線(kp-halo)を敷く。主ビューの外へははみ出させない */
 /* 止まっている間の再生のバー(z-index 5)より上にして、バーの所に来た番号も押せるようにする(線や枠はポインタを通す) */
 #keyPath { z-index: 6; overflow: hidden; }
